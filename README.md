@@ -1,6 +1,6 @@
 # 资源查询插件 (astrbot_plugin_resource_query)
 
-多平台资源查询 AstrBot 插件，支持小米 MiMo 用量查询、华数广电流量/话费查询等。
+多平台资源查询 AstrBot 插件，采用模块化架构设计。
 
 ## 支持平台
 
@@ -8,6 +8,33 @@
 |------|------|------|
 | 小米 MiMo | 余额、Token 用量、费用、限额查询 | ✅ 已支持 |
 | 华数广电 | 流量、通话、余额查询 | ✅ 已支持 |
+| JMComic | 漫画下载（仅私聊） | ✅ 已支持 |
+
+## 架构设计
+
+本插件采用**模块化架构**，各功能模块独立管理自己的配置和逻辑。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    main.py (总管理模块)                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │  MiMo模块   │  │  华数模块   │  │  JM模块     │        │
+│  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+│         │                │                │                │
+│         └────────────────┼────────────────┘                │
+│                          │                                 │
+│                    ┌─────┴─────┐                           │
+│                    │ 模块注册中心 │                          │
+│                    └───────────┘                           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 设计原则
+
+1. **分模块**：不同功能分模块添加，总管理模块管理不同模块与 AstrBot 之间的通信
+2. **模块管理**：每个模块有自己的管理模块，和总管理模块对接
+3. **模块自治**：各模块自己管理自己的内容（配置保存读取、下载等）
+4. **模块隔离**：模块之间互不干扰，需要联系通过总管理模块联系
 
 ## 功能特性
 
@@ -60,6 +87,13 @@
 | `/wasu <序号或名称>` | 查询指定华数账号 |
 | `/wasu ls` | 列出所有华数账号 |
 | `/wasu del <序号或名称>` | 删除指定华数账号 |
+
+### JMComic 指令
+
+| 指令 | 说明 |
+|------|------|
+| `/jm <ID>` | 下载 JMComic 漫画 |
+| `/jm <ID> redownload` | 强制重新下载 |
 
 ## 首次使用
 
@@ -142,23 +176,24 @@ cp -r astrbot_plugin_resource_query /path/to/AstrBot/data/plugins/
 
 本插件采用模块化设计，添加新平台只需：
 
-1. 继承 `BasePlatform` 基类
-2. 实现 `query()` 方法
-3. 在 `main.py` 中注册新平台
+1. 在 `modules/` 目录下创建新模块目录
+2. 继承 `ModuleBase` 基类
+3. 实现必要的抽象方法
+4. 在 `main.py` 中注册新模块
 
 ```python
-from .base import BasePlatform, QueryResult
+from ..core.module import ModuleBase
 
-class NewPlatform(BasePlatform):
+class NewModule(ModuleBase):
     @property
-    def platform_name(self) -> str:
-        return "新平台"
+    def module_name(self) -> str:
+        return "new_platform"
 
     @property
-    def platform_icon(self) -> str:
+    def module_icon(self) -> str:
         return "🆕"
 
-    async def query(self, account: dict) -> QueryResult:
+    async def query(self, account: dict) -> dict:
         # 实现查询逻辑
         pass
 ```
@@ -167,7 +202,7 @@ class NewPlatform(BasePlatform):
 
 ```
 astrbot_plugin_resource_query/
-├── main.py                  # 插件主入口
+├── main.py                  # 插件主入口（总管理模块）
 ├── base.py                  # 基类定义
 ├── http_utils.py            # HTTP 工具函数
 ├── updater.py               # 更新模块
@@ -179,43 +214,40 @@ astrbot_plugin_resource_query/
 ├── logo.png                 # 插件图标
 ├── .gitignore               # Git 忽略规则
 ├── _conf_schema.json        # AstrBot 配置模式
-├── common/                  # 通用模块
+├── core/                    # 核心框架层
+│   ├── __init__.py          # 核心模块导出
+│   ├── module.py            # 模块基类
+│   ├── registry.py          # 模块注册中心
+│   └── manager.py           # 总管理器基类
+├── common/                  # 通用工具模块
 │   ├── __init__.py          # 模块导出
-│   ├── account.py           # 账号管理器
 │   └── utils.py             # 通用工具函数
-├── mimo/                    # MiMo 平台模块
+├── modules/                 # 功能模块层
 │   ├── __init__.py          # 模块导出
-│   ├── account.py           # 小米账号登录（参考 MiService）
-│   ├── manager.py           # MiMo 管理器
-│   ├── query.py             # 查询逻辑
-│   ├── result.py            # 查询结果格式化
-│   ├── exceptions.py        # 异常类定义
-│   ├── constants.py         # 常量定义
-│   ├── utils.py             # 工具函数
-│   ├── config.json          # MiMo 配置文件
-│   └── default_template.txt # 默认模板
-├── wasu/                    # 华数广电平台模块
-│   ├── __init__.py          # 模块导出
-│   ├── manager.py           # 华数管理器
-│   ├── result.py            # 查询结果格式化
-│   ├── constants.py         # 常量定义
-│   ├── utils.py             # 工具函数
-│   └── default_template.txt # 默认模板
-├── jm/                      # JMComic 下载模块
-│   ├── __init__.py          # 模块导出
-│   ├── downloader.py        # 下载管理器（适配器）
-│   ├── constants.py         # 常量定义
-│   ├── utils.py             # 工具函数
-│   └── core/                # 下载器核心
-│       ├── __init__.py      # 核心模块导出
-│       ├── manager.py       # JM 管理器
-│       ├── models.py        # 数据模型
-│       ├── config.py        # 配置管理
-│       ├── utils.py         # 核心工具函数
-│       ├── README.md        # 核心模块说明
-│       ├── cache/           # 缓存管理
-│       ├── converters/      # PDF 转换器
-│       └── downloaders/     # 下载器实现
+│   ├── mimo/                # MiMo 平台模块
+│   │   ├── __init__.py      # 模块导出
+│   │   ├── module.py        # 模块入口（继承 ModuleBase）
+│   │   ├── manager.py       # 内部管理器
+│   │   ├── account.py       # 小米账号登录
+│   │   ├── query.py         # 查询逻辑
+│   │   ├── result.py        # 查询结果格式化
+│   │   ├── exceptions.py    # 异常类定义
+│   │   ├── constants.py     # 常量定义
+│   │   ├── utils.py         # 工具函数
+│   │   ├── config.json      # 配置文件
+│   │   └── default_template.txt # 默认模板
+│   ├── wasu/                # 华数广电模块
+│   │   ├── __init__.py      # 模块导出
+│   │   ├── module.py        # 模块入口
+│   │   ├── result.py        # 查询结果格式化
+│   │   ├── constants.py     # 常量定义
+│   │   └── utils.py         # 工具函数
+│   └── jm/                  # JMComic 下载模块
+│       ├── __init__.py      # 模块导出
+│       ├── module.py        # 模块入口
+│       ├── downloader.py    # 下载管理器（适配器）
+│       ├── utils.py         # 工具函数
+│       └── core/            # 下载器核心（引用原有实现）
 └── pages/                   # WebUI Pages
     └── template-editor/
         └── index.html       # 配置管理界面
@@ -263,3 +295,4 @@ MiMo 登录参考 [MiService](https://github.com/Yonsm/MiService) 的 `miaccount
 
 - 2025-01: 网络连接测试提交
 - 2025-08: 重构 MiMo 登录模块，参考 MiService 实现 OTP 验证流程
+- 2025-09: 重构为模块化架构，各功能模块独立管理

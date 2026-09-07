@@ -1,5 +1,5 @@
 """
-资源查询 AstrBot 插件（多平台支持）
+资源查询 AstrBot 插件（模块化架构）
 
 支持平台：
   - MiMo：小米 MiMo 平台用量查询
@@ -18,6 +18,23 @@
   /wasu del <序号或名称>    — 删除华数账号
   /query update             — 更新插件
   /jm <ID>                  — 下载 JMComic 漫画 PDF（仅私聊）
+
+架构设计：
+  本插件采用模块化架构，各功能模块独立管理自己的配置和逻辑。
+  总管理模块（PluginManager）负责协调模块与 AstrBot 之间的通信。
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    main.py (总管理模块)                      │
+  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+  │  │  MiMo模块   │  │  华数模块   │  │  JM模块     │        │
+  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+  │         │                │                │                │
+  │         └────────────────┼────────────────┘                │
+  │                          │                                 │
+  │                    ┌─────┴─────┐                           │
+  │                    │ 模块注册中心 │                          │
+  │                    └───────────┘                           │
+  └─────────────────────────────────────────────────────────────┘
 """
 
 import asyncio
@@ -29,47 +46,54 @@ from astrbot.api import AstrBotConfig
 from astrbot.api.event import AstrMessageEvent, MessageChain, filter
 from astrbot.api.message_components import File
 from astrbot.api.star import Context, Star
-from astrbot.core.utils.session_waiter import SessionController, session_waiter
 
-from .common import AccountManager
-from .jm import JMDownloader, normalize_album_id
-from .mimo import (
-    LoginError,
-    MimoManager,
-    MimoResult,
-    OtpRequired,
-    PassTokenExpired,
-    StsError,
-)
+from .core.manager import PluginManager
+from .modules.mimo import MimoModule, MimoResult
+from .modules.wasu import WasuModule
+from .modules.jm import JMModule, normalize_album_id
 from .updater import check_update, do_update, reload_plugin
-from .wasu import WasuManager, WasuResult
 
 _PLUGIN_NAME = "astrbot_plugin_resource_query"
 
-# 默认设备标识和 User-Agent
-_DEFAULT_DEVICE_ID = os.getenv("MIMO_DEVICE_ID", "wb_MIQUERY000001")
-_DEFAULT_UA = os.getenv(
-    "MIMO_UA",
-    "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1",
-)
-
 
 class ResourceQueryPlugin(Star):
+    """资源查询插件主类
+
+    采用模块化架构，各功能模块独立管理自己的配置和逻辑。
+    总管理模块负责协调模块与 AstrBot 之间的通信。
+    """
+
     def __init__(self, context: Context, config: AstrBotConfig | None = None):
         super().__init__(context)
         self.config = config or {}
         self._plugin_dir = Path(__file__).parent
 
-        # 初始化管理器和平台模块
-        self._accounts = AccountManager(_PLUGIN_NAME, self._plugin_dir)
-        self._mimo = MimoManager(self._plugin_dir)
-        self._wasu = WasuManager(self._plugin_dir)
-        self._jm = JMDownloader(self._accounts._get_jm_config_path())
+        # 初始化总管理器
+        self._manager = PluginManager(_PLUGIN_NAME, self._plugin_dir)
 
-        # 为现有账号填充默认 device_id 和 ua
-        self._fill_default_fields()
+        # 注册功能模块
+        self._register_modules()
 
         # 注册 Pages API
+        self._register_web_apis(context)
+
+    def _register_modules(self):
+        """注册所有功能模块"""
+        # 注册 MiMo 模块
+        mimo_module = MimoModule(self._plugin_dir, _PLUGIN_NAME)
+        self._manager.register_module(mimo_module)
+
+        # 注册华数广电模块
+        wasu_module = WasuModule(self._plugin_dir, _PLUGIN_NAME)
+        self._manager.register_module(wasu_module)
+
+        # 注册 JMComic 模块
+        jm_module = JMModule(self._plugin_dir, _PLUGIN_NAME)
+        self._manager.register_module(jm_module)
+
+    def _register_web_apis(self, context: Context):
+        """注册 Web API"""
+        # 注册全局配置 API
         context.register_web_api(
             f"/{_PLUGIN_NAME}/config", self.get_config, ["GET"], "获取插件配置"
         )
@@ -88,50 +112,48 @@ class ResourceQueryPlugin(Star):
         context.register_web_api(
             f"/{_PLUGIN_NAME}/template-vars", self.save_template_vars, ["POST"], "保存模板变量定义"
         )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/jm-config", self.get_jm_config, ["GET"], "获取 JM 下载配置"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/jm-config", self.save_jm_config, ["POST"], "保存 JM 下载配置"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/mimo/login", self.mimo_login, ["POST"], "MiMo 登录"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/mimo/test", self.mimo_test, ["POST"], "MiMo 测试查询"
-        )
 
-    def _fill_default_fields(self):
-        """为缺少 device_id 和 ua 的账号填充默认值"""
-        accounts = self._accounts.get_all_accounts()
-        changed = False
-        cfg = self.config if self.config else {}
-        default_device_id = cfg.get("device_id") or _DEFAULT_DEVICE_ID
-        default_ua = cfg.get("ua") or _DEFAULT_UA
-        for acc in accounts:
-            if acc.get("platform") == "mimo":
-                if not acc.get("device_id"):
-                    acc["device_id"] = default_device_id
-                    changed = True
-                if not acc.get("ua"):
-                    acc["ua"] = default_ua
-                    changed = True
-        if changed:
-            self._accounts.save_all_accounts(accounts)
+        # 注册模块特有的 Web API
+        for module in self._manager.get_all_modules():
+            module_apis = module.get_web_apis()
+            for api in module_apis:
+                path = api.get("path", "")
+                handler = api.get("handler")
+                methods = api.get("methods", ["GET"])
+                desc = api.get("desc", "")
 
-    # ── Pages API ──
+                # 添加模块前缀到路径
+                full_path = f"/{_PLUGIN_NAME}/{module.module_name}/{path}"
+                context.register_web_api(full_path, handler, methods, desc)
+
+    # ══════════════════════════════════════════
+    #  Pages API
+    # ══════════════════════════════════════════
 
     async def get_config(self):
         """获取配置"""
         from astrbot.api.web import json_response
-        return json_response({"accounts": self._accounts.get_all_accounts()})
+        return json_response({"accounts": self._manager.get_all_accounts()})
 
     async def save_config(self):
         """保存配置"""
         from astrbot.api.web import json_response, request
         payload = await request.json(default={})
         if "accounts" in payload:
-            self._accounts.save_all_accounts(payload["accounts"])
+            # 按平台分组保存
+            accounts_by_module = {}
+            for acc in payload["accounts"]:
+                module_name = acc.get("platform", "unknown")
+                if module_name not in accounts_by_module:
+                    accounts_by_module[module_name] = []
+                accounts_by_module[module_name].append(acc)
+
+            # 保存到各模块
+            for module_name, accounts in accounts_by_module.items():
+                module = self._manager.get_module(module_name)
+                if module:
+                    module.save_accounts(accounts)
+
         return json_response({"status": "ok"})
 
     async def delete_config(self):
@@ -146,14 +168,16 @@ class ResourceQueryPlugin(Star):
             index = int(index)
         except (TypeError, ValueError):
             return error_response("index 必须是整数")
-        deleted = self._accounts.delete_account(platform, index)
+
+        deleted = self._manager.delete_account(platform, index)
         if deleted is None:
             return error_response("账号不存在或删除失败")
+
         name = deleted.get("name") or deleted.get("account") or deleted.get("phone") or "未知"
         return json_response({"status": "ok", "deleted": name})
 
     async def get_templates(self):
-        """获取默认模板（从 templates/ 文件夹读取）"""
+        """获取默认模板"""
         from astrbot.api.web import json_response
         templates = {}
         templates_dir = self._plugin_dir / "templates"
@@ -167,11 +191,11 @@ class ResourceQueryPlugin(Star):
         return json_response(templates)
 
     async def get_template_vars(self):
-        """从模板文件中解析变量定义，优先使用用户自定义配置"""
+        """获取模板变量定义"""
         import re
         from astrbot.api.web import json_response
 
-        # 变量描述映射（默认值）
+        # 变量描述映射
         var_descriptions = {
             "label": "账号名称",
             "balance": "余额",
@@ -223,43 +247,42 @@ class ResourceQueryPlugin(Star):
                     vars_found = re.findall(r"\{(\w+)\}", content)
                     platform_defaults = var_defaults.get(platform, {})
 
-                    # 检查是否有用户自定义配置（存放在平台目录下）
-                    platform_config_path = self._accounts._get_platform_path(platform) / "var_config.json"
-                    user_vars = {}
-                    if platform_config_path.exists():
-                        try:
-                            user_config = json.loads(platform_config_path.read_text(encoding="utf-8"))
-                            if user_config and "variables" in user_config:
-                                # 构建用户配置的变量映射
-                                for v in user_config["variables"]:
-                                    user_vars[v["name"]] = v
-                        except (json.JSONDecodeError, OSError):
-                            pass
+                    # 检查是否有用户自定义配置
+                    module = self._manager.get_module(platform)
+                    if module:
+                        var_config_path = module.get_config_path() / "var_config.json"
+                        user_vars = {}
+                        if var_config_path.exists():
+                            try:
+                                user_config = json.loads(var_config_path.read_text(encoding="utf-8"))
+                                if user_config and "variables" in user_config:
+                                    for v in user_config["variables"]:
+                                        user_vars[v["name"]] = v
+                            except (json.JSONDecodeError, OSError):
+                                pass
 
-                    vars_list = []
-                    for v in dict.fromkeys(vars_found):  # 去重并保持顺序
-                        if v in user_vars:
-                            # 使用用户配置
-                            vars_list.append(user_vars[v])
-                        else:
-                            # 使用默认配置
-                            vars_list.append({
-                                "name": v,
-                                "desc": var_descriptions.get(v, v),
-                                "default": platform_defaults.get(v, ""),
-                                "show": True
-                            })
+                        vars_list = []
+                        for v in dict.fromkeys(vars_found):  # 去重并保持顺序
+                            if v in user_vars:
+                                vars_list.append(user_vars[v])
+                            else:
+                                vars_list.append({
+                                    "name": v,
+                                    "desc": var_descriptions.get(v, v),
+                                    "default": platform_defaults.get(v, ""),
+                                    "show": True
+                                })
 
-                    result[platform] = {
-                        "variables": vars_list
-                    }
+                        result[platform] = {
+                            "variables": vars_list
+                        }
                 except OSError:
                     pass
 
         return json_response(result)
 
     async def save_template_vars(self):
-        """保存模板变量配置（按平台分组存储）"""
+        """保存模板变量配置"""
         from astrbot.api.web import error_response, json_response, request
         payload = await request.json(default={})
         if not payload:
@@ -267,209 +290,22 @@ class ResourceQueryPlugin(Star):
 
         # 按平台分别保存到各自的目录
         for platform, config_data in payload.items():
-            if platform not in ("mimo", "wasu"):
-                continue
-            platform_config_path = self._accounts._get_platform_path(platform) / "var_config.json"
-            try:
-                platform_config_path.write_text(
-                    json.dumps(config_data, ensure_ascii=False, indent=2),
-                    encoding="utf-8"
-                )
-            except OSError as e:
-                return error_response(f"保存 {platform} 配置失败: {e}")
-
-        return json_response({"status": "ok"})
-
-    async def get_jm_config(self):
-        """获取 JM 下载配置"""
-        from astrbot.api.web import json_response
-
-        # 从 config/jm/config.json 读取配置
-        jm_config_path = self._accounts._get_jm_config_path() / "config.json"
-        default_config = {
-            "jm_enabled": True,
-            "jm_send_file": True,
-            "jm_max_file_size": 10,  # 文件大小限制（MB），0 表示不限制
-            "jm_cookies": "",
-            "jm_proxy": "",
-            "jm_timeout": 20,
-            "jm_retry_times": 3,
-            "jm_image_threads": 16,
-            "jm_photo_threads": 4,
-            "jm_max_concurrent": 1,
-        }
-
-        if jm_config_path.exists():
-            try:
-                saved_config = json.loads(jm_config_path.read_text(encoding="utf-8"))
-                default_config.update(saved_config)
-            except (json.JSONDecodeError, OSError):
-                pass
-        else:
-            # 兼容旧配置：从 AstrBot 配置文件迁移
-            cfg = self.config if self.config else {}
-            for key in default_config:
-                if key in cfg:
-                    default_config[key] = cfg[key]
-            # 保存到新位置
-            try:
-                jm_config_path.write_text(
-                    json.dumps(default_config, ensure_ascii=False, indent=2),
-                    encoding="utf-8"
-                )
-            except OSError:
-                pass
-
-        return json_response(default_config)
-
-    async def save_jm_config(self):
-        """保存 JM 下载配置"""
-        from astrbot.api.web import error_response, json_response, request
-        payload = await request.json(default={})
-        if not payload:
-            return error_response("缺少配置数据")
-
-        # 保存到 config/jm/config.json
-        jm_config_path = self._accounts._get_jm_config_path() / "config.json"
-        try:
-            # 读取现有配置并更新
-            existing = {}
-            if jm_config_path.exists():
+            module = self._manager.get_module(platform)
+            if module:
+                var_config_path = module.get_config_path() / "var_config.json"
                 try:
-                    existing = json.loads(jm_config_path.read_text(encoding="utf-8"))
-                except (json.JSONDecodeError, OSError):
-                    pass
-            existing.update(payload)
-            jm_config_path.write_text(
-                json.dumps(existing, ensure_ascii=False, indent=2),
-                encoding="utf-8"
-            )
-            # 重新加载 JM 配置
-            self._jm.reload_config()
-        except OSError as e:
-            return error_response(f"保存失败: {e}")
+                    var_config_path.write_text(
+                        json.dumps(config_data, ensure_ascii=False, indent=2),
+                        encoding="utf-8"
+                    )
+                except OSError as e:
+                    return error_response(f"保存 {platform} 配置失败: {e}")
 
         return json_response({"status": "ok"})
 
-    async def mimo_login(self):
-        """MiMo 登录"""
-        from astrbot.api.web import error_response, json_response, request
-        import asyncio
-        
-        payload = await request.json(default={})
-        index = payload.get("index")
-        account = payload.get("account", "").strip()
-        password = payload.get("password", "").strip()
-        otp_code = payload.get("otp_code", "").strip()
-        
-        if index is None:
-            return error_response("缺少 index 参数")
-        
-        try:
-            index = int(index)
-        except (TypeError, ValueError):
-            return error_response("index 必须是整数")
-        
-        # 获取账号列表
-        all_accounts = self._accounts.get_all_accounts()
-        mimo_accounts = [(i, acc) for i, acc in enumerate(all_accounts) if acc.get("platform") == "mimo"]
-        
-        if index < 0 or index >= len(mimo_accounts):
-            return error_response("账号索引无效")
-        
-        real_idx, acc = mimo_accounts[index]
-        
-        # 更新账号密码
-        if account:
-            acc["account"] = account
-        if password:
-            acc["password"] = password
-        
-        # 执行登录
-        loop = asyncio.get_event_loop()
-        
-        try:
-            result = await loop.run_in_executor(
-                None, 
-                lambda: self._mimo.login_account(acc, otp_code=otp_code if otp_code else None)
-            )
-            
-            # 更新账号信息
-            acc.update(result)
-            all_accounts[real_idx] = acc
-            self._accounts.save_all_accounts(all_accounts)
-            
-            return json_response({
-                "status": "ok",
-                "message": "登录成功",
-                "account": {
-                    "userId": acc.get("userId", ""),
-                    "serviceToken": acc.get("serviceToken", ""),
-                    "passToken": acc.get("passToken", "")
-                }
-            })
-        except Exception as e:
-            error_name = type(e).__name__
-            if error_name == "OtpRequired":
-                return json_response({
-                    "status": "otp_required",
-                    "message": "验证码已发送，请输入验证码"
-                })
-            elif error_name == "LoginError":
-                return json_response({
-                    "status": "error",
-                    "message": str(e)
-                })
-            else:
-                return json_response({
-                    "status": "error",
-                    "message": str(e)
-                })
-
-    async def mimo_test(self):
-        """MiMo 测试查询（仅查询余额）"""
-        from astrbot.api.web import json_response, request
-        from astrbot.api import logger
-        
-        payload = await request.json(default={})
-        account = payload
-        
-        if not account:
-            return json_response({
-                "status": "error",
-                "message": "缺少账号配置"
-            })
-        
-        try:
-            # 使用管理器查询
-            logger.info(f"[MiMo测试] 开始测试查询, 账号: {account.get('account', 'N/A')}")
-            result_data = await self._mimo.query_one(account)
-            
-            if "error" in result_data:
-                logger.warning(f"[MiMo测试] 查询返回错误: {result_data['error']}")
-                return json_response({
-                    "status": "error",
-                    "message": result_data["error"]
-                })
-            
-            logger.info(f"[MiMo测试] 查询成功")
-            return json_response({
-                "status": "ok",
-                "message": "测试成功",
-                "credentials": {
-                    "userId": account.get("userId", ""),
-                    "passToken": account.get("passToken", ""),
-                    "serviceToken": account.get("serviceToken", "")
-                }
-            })
-        except Exception as e:
-            logger.error(f"[MiMo测试] 异常: {type(e).__name__}: {e}")
-            return json_response({
-                "status": "error",
-                "message": f"{type(e).__name__}: {e}"
-            })
-
-    # ================== 主指令 ==================
+    # ══════════════════════════════════════════
+    #  主指令
+    # ══════════════════════════════════════════
 
     @filter.command("query")
     async def query_cmd(self, event: AstrMessageEvent):
@@ -477,38 +313,41 @@ class ResourceQueryPlugin(Star):
         args = event.get_message_str().strip().split()
 
         if len(args) == 1:
-            yield event.plain_result(
-                "📊 资源查询插件 v3.19.0\n"
-                "────────────────\n"
-                "用法:\n"
-                "  /mimo — 查询所有 MiMo 用量\n"
-                "  /mimo <序号或名称> — 查询指定账号\n"
-                "  /mimo ls — 列出所有 MiMo 账号\n"
-                "  /mimo del <序号或名称> — 删除 MiMo 账号\n"
-                "  /wasu — 查询所有华数账号\n"
-                "  /wasu <序号或名称> — 查询指定华数账号\n"
-                "  /wasu ls — 列出所有华数账号\n"
-                "  /wasu del <序号或名称> — 删除华数账号\n"
-                "  /query update — 更新插件\n"
-                "  /jm <ID> — 下载 JMComic 漫画"
-            )
+            # 显示帮助信息
+            help_text = "📊 资源查询插件 v4.0.0（模块化架构）\n"
+            help_text += "────────────────\n"
+            help_text += "用法:\n"
+
+            # 动态生成各模块的帮助信息
+            for module in self._manager.get_all_modules():
+                commands = module.get_commands()
+                for cmd in commands:
+                    help_text += f"  /{cmd['name']} — {cmd['desc']}\n"
+
+            help_text += "  /query update — 更新插件"
+            yield event.plain_result(help_text)
             return
 
         platform = args[1].lower()
-        if platform == "mimo":
-            async for r in self._handle_mimo(event, args[2:]):
-                yield r
-        elif platform == "wasu":
-            async for r in self._handle_wasu(event, args[2:]):
-                yield r
-        elif platform == "update":
+
+        if platform == "update":
             yield event.plain_result("正在检查更新...")
             async for r in self._handle_update(event):
                 yield r
         else:
-            yield event.plain_result(f"❌ 未知平台: {platform}\n支持: mimo, wasu")
+            # 检查是否有对应的模块
+            module = self._manager.get_module(platform)
+            if module:
+                # 委托给模块处理
+                async for result in module.handle_command(platform, args[2:], event):
+                    yield result
+            else:
+                supported = ", ".join(self._manager.get_module_names())
+                yield event.plain_result(f"❌ 未知平台: {platform}\n支持: {supported}")
 
-    # ================== MiMo 指令 ==================
+    # ══════════════════════════════════════════
+    #  MiMo 指令
+    # ══════════════════════════════════════════
 
     @filter.command("mimo")
     async def mimo_cmd(self, event: AstrMessageEvent):
@@ -517,11 +356,18 @@ class ResourceQueryPlugin(Star):
         # 移除指令名本身
         if args and args[0].lower() == "mimo":
             args = args[1:]
-        
-        async for r in self._handle_mimo(event, args):
-            yield r
 
-    # ================== 华数指令 ==================
+        # 委托给 MiMo 模块处理
+        mimo_module = self._manager.get_module("mimo")
+        if mimo_module:
+            async for result in mimo_module.handle_command("mimo", args, event):
+                yield result
+        else:
+            yield event.plain_result("❌ MiMo 模块未加载")
+
+    # ══════════════════════════════════════════
+    #  华数指令
+    # ══════════════════════════════════════════
 
     @filter.command("wasu")
     async def wasu_cmd(self, event: AstrMessageEvent):
@@ -530,242 +376,38 @@ class ResourceQueryPlugin(Star):
         # 移除指令名本身
         if args and args[0].lower() == "wasu":
             args = args[1:]
-        
-        async for r in self._handle_wasu(event, args):
-            yield r
 
-    # ================== MiMo 子命令 ==================
+        # 委托给华数模块处理
+        wasu_module = self._manager.get_module("wasu")
+        if wasu_module:
+            async for result in wasu_module.handle_command("wasu", args, event):
+                yield result
+        else:
+            yield event.plain_result("❌ 华数广电模块未加载")
 
-    async def _handle_mimo(self, event: AstrMessageEvent, args: list):
-        """处理 MiMo 相关命令"""
-        mimo_indices = self._accounts.get_account_indices("mimo")
+    # ══════════════════════════════════════════
+    #  JM 指令
+    # ══════════════════════════════════════════
 
-        # /mimo otp <验证码> — 提交 OTP 验证码
-        if args and args[0].lower() == "otp":
-            if len(args) < 2:
-                yield event.plain_result("用法: /mimo otp <验证码>")
-                return
-            
-            otp_code = args[1].strip()
-            if not otp_code:
-                yield event.plain_result("验证码不能为空")
-                return
-            
-            # 检查是否有等待 OTP 的账号
-            pending = self._mimo.get_pending_otp_account()
-            if not pending:
-                yield event.plain_result("没有等待 OTP 验证的账号")
-                return
-            
-            yield event.plain_result(f"正在提交验证码...")
-            
-            try:
-                result = self._mimo.submit_otp(otp_code)
-                
-                # 更新账号信息
-                all_accounts = self._accounts.get_all_accounts()
-                target_acc = None
-                for acc in all_accounts:
-                    if acc.get("platform") == "mimo" and (acc.get("account") == pending or acc.get("name") == pending):
-                        acc.update(result)
-                        target_acc = acc
-                        break
-                self._accounts.save_all_accounts(all_accounts)
-                
-                yield event.plain_result(f"✅ OTP 验证成功！账号 {pending} 已登录")
-                
-                # 自动重新查询该账号
-                if target_acc:
-                    yield event.plain_result("🔍 正在查询...")
-                    query_result = await self._mimo.query_one(target_acc)
-                    if "error" in query_result:
-                        yield event.plain_result(f"❌ {query_result['error']}")
-                    else:
-                        template = target_acc.get("template") or None
-                        mr = MimoResult(success=True, account_name=pending, data=query_result, template=template)
-                        yield event.plain_result(mr.to_text())
-            except Exception as e:
-                yield event.plain_result(f"❌ OTP 验证失败: {e}")
-            return
+    @filter.command("jm", alias={"JM", "Jm", "jM"}, desc="下载 JMComic 漫画 PDF：/jm <数字ID> [redownload]")
+    async def jm_command(self, event: AstrMessageEvent, jm_id: str = "", option: str = ""):
+        """/jm — 下载 JMComic 漫画（仅私聊）"""
+        # 委托给 JM 模块处理
+        jm_module = self._manager.get_module("jm")
+        if jm_module:
+            args = []
+            if jm_id:
+                args.append(jm_id)
+            if option:
+                args.append(option)
+            async for result in jm_module.handle_command("jm", args, event):
+                yield result
+        else:
+            yield event.plain_result("❌ JMComic 模块未加载")
 
-        # /mimo ls — 列出所有账号
-        if args and args[0].lower() == "ls":
-            if not mimo_indices:
-                yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
-                return
-            lines = [f"📋 共 {len(mimo_indices)} 个 MiMo 账号:"]
-            for i, (idx, acc) in enumerate(mimo_indices):
-                status = "✅" if acc.get("serviceToken") else "❌"
-                name = acc.get("name") or acc.get("account") or f"MiMo账号{i+1}"
-                lines.append(f"  {i + 1}. {status} {name}")
-            yield event.plain_result("\n".join(lines))
-            return
-
-        # /mimo del <序号或名称> — 删除指定账号
-        if args and args[0].lower() == "del":
-            if len(args) < 2:
-                yield event.plain_result("用法: /mimo del <序号或名称>")
-                return
-            
-            del_arg = args[1]
-            
-            # 尝试按序号删除
-            if del_arg.isdigit():
-                del_idx = int(del_arg) - 1
-                if 0 <= del_idx < len(mimo_indices):
-                    real_idx, acc = mimo_indices[del_idx]
-                    deleted = self._accounts.delete_account("mimo", del_idx)
-                    if deleted:
-                        name = deleted.get("name") or deleted.get("account") or "未知"
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-            
-            # 按名称删除
-            for idx, acc in mimo_indices:
-                name = acc.get("name") or acc.get("account") or ""
-                if name == del_arg:
-                    deleted = self._accounts.delete_account("mimo", idx)
-                    if deleted:
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-            
-            yield event.plain_result(f"❌ 未找到账号: {del_arg}")
-            return
-
-        # /mimo — 查询所有账号
-        if not args:
-            if not mimo_indices:
-                yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
-                return
-            yield event.plain_result("🔍 正在查询所有 MiMo 账号...")
-            
-            # 查询所有账号
-            for idx, acc in mimo_indices:
-                result = await self._mimo.query_one(acc)
-                label = acc.get("name") or acc.get("account") or f"账号{idx + 1}"
-                if "error" in result:
-                    yield event.plain_result(f"📋 {label}\n❌ {result['error']}")
-                else:
-                    template = acc.get("template") or None
-                    mr = MimoResult(success=True, account_name=label, data=result, template=template)
-                    yield event.plain_result(mr.to_text())
-            return
-
-        # /mimo <名称> — 查询指定账号
-        query_arg = args[0]
-        
-        # 按名称查找
-        for idx, acc in mimo_indices:
-            name = acc.get("name") or acc.get("account") or ""
-            if name == query_arg:
-                yield event.plain_result("🔍 正在查询...")
-                result = await self._mimo.query_one(acc)
-                template = acc.get("template") or None
-                if "error" in result:
-                    yield event.plain_result(f"📋 {name}\n❌ {result['error']}")
-                else:
-                    mr = MimoResult(success=True, account_name=name, data=result, template=template)
-                    yield event.plain_result(mr.to_text())
-                return
-        
-        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /mimo ls 查看所有账号")
-
-    # ================== 华数子命令 ==================
-
-    async def _handle_wasu(self, event: AstrMessageEvent, args: list):
-        """处理华数广电相关命令"""
-        wasu_indices = self._accounts.get_account_indices("wasu")
-
-        # /wasu ls — 列出所有账号
-        if args and args[0].lower() == "ls":
-            if not wasu_indices:
-                yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
-                return
-            lines = [f"📋 共 {len(wasu_indices)} 个华数账号:"]
-            for i, (idx, acc) in enumerate(wasu_indices):
-                name = acc.get("name") or acc.get("phone") or f"华数账号{i+1}"
-                lines.append(f"  {i + 1}. {name} | 手机号: {acc.get('phone', '无')}")
-            yield event.plain_result("\n".join(lines))
-            return
-
-        # /wasu del <序号或名称> — 删除指定账号
-        if args and args[0].lower() == "del":
-            if len(args) < 2:
-                yield event.plain_result("用法: /wasu del <序号或名称>")
-                return
-            
-            del_arg = args[1]
-            
-            # 尝试按序号删除
-            if del_arg.isdigit():
-                del_idx = int(del_arg) - 1
-                if 0 <= del_idx < len(wasu_indices):
-                    deleted = self._accounts.delete_account("wasu", del_idx)
-                    if deleted:
-                        name = deleted.get("name") or deleted.get("phone") or "未知"
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-            
-            # 按名称删除
-            for idx, acc in wasu_indices:
-                name = acc.get("name") or acc.get("phone") or ""
-                if name == del_arg:
-                    deleted = self._accounts.delete_account("wasu", idx)
-                    if deleted:
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-            
-            yield event.plain_result(f"❌ 未找到账号: {del_arg}")
-            return
-
-        # /wasu — 查询所有账号
-        if not args:
-            if not wasu_indices:
-                yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
-                return
-            yield event.plain_result("🔍 正在查询所有华数账号...")
-            
-            for idx, acc in wasu_indices:
-                name = acc.get("name") or acc.get("phone") or f"华数账号{idx + 1}"
-                try:
-                    result = await self._wasu.query(acc)
-                    if result.success:
-                        yield event.plain_result(result.to_text())
-                    else:
-                        yield event.plain_result(f"📋 {name}\n❌ {result.error}")
-                except Exception as e:
-                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
-            return
-
-        # /wasu <名称> — 查询指定账号
-        query_arg = args[0]
-        
-        # 按名称查找
-        for idx, acc in wasu_indices:
-            name = acc.get("name") or acc.get("phone") or ""
-            if name == query_arg:
-                yield event.plain_result("🔍 正在查询...")
-                try:
-                    result = await self._wasu.query(acc)
-                    if result.success:
-                        yield event.plain_result(result.to_text())
-                    else:
-                        yield event.plain_result(f"📋 {name}\n❌ {result.error}")
-                except Exception as e:
-                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
-                return
-        
-        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /wasu ls 查看所有账号")
-
-    # ================== 更新 ==================
+    # ══════════════════════════════════════════
+    #  更新
+    # ══════════════════════════════════════════
 
     async def _handle_update(self, event: AstrMessageEvent):
         """处理更新命令（始终执行更新）"""
@@ -781,134 +423,3 @@ class ResourceQueryPlugin(Star):
             yield event.plain_result(f"{result}\n{reload_result}")
         else:
             yield event.plain_result(result)
-
-    # ================== JM 下载 ==================
-
-    @filter.command("jm", alias={"JM", "Jm", "jM"}, desc="下载 JMComic 漫画 PDF：/jm <数字ID> [redownload]")
-    async def jm_command(self, event: AstrMessageEvent, jm_id: str = "", option: str = ""):
-        """/jm — 下载 JMComic 漫画（仅私聊）"""
-        # 从 JM 配置读取（而非 AstrBot 原生配置）
-        jm_cfg = self._jm._config
-
-        # 检查是否启用
-        if not jm_cfg.get("jm_enabled", True):
-            yield event.plain_result("JM 下载功能当前已关闭")
-            return
-
-        # 只允许私聊
-        if event.get_group_id():
-            yield event.plain_result("JM 下载仅支持私聊使用，请私聊发送命令")
-            return
-
-        # 解析 ID 和选项
-        force_redownload = option.lower() == "redownload"
-        album_id = normalize_album_id(jm_id)
-        if album_id is None:
-            yield event.plain_result(
-                "用法：/jm <数字ID> [redownload]\n"
-                "例如：/jm 123456\n"
-                "添加 redownload 可强制重新下载"
-            )
-            return
-
-        # 是否发送文件
-        send_file = jm_cfg.get("jm_send_file", True)
-        # 文件大小限制（MB），0 表示不限制
-        max_file_size_mb = jm_cfg.get("jm_max_file_size", 10)
-
-        # 获取漫画信息
-        album_info = await self._jm.get_album_info(album_id)
-
-        # 构建简短信息
-        info_parts = [f"JM{album_id}"]
-        if album_info.get('name') and album_info['name'] != '未知':
-            info_parts.append(album_info['name'])
-        if album_info.get('image_count'):
-            info_parts.append(f"{album_info['image_count']}P")
-
-        # 如果不强制重新下载，检查本地缓存
-        if not force_redownload:
-            local_cache = self._jm.check_local(album_id)
-            if local_cache and local_cache['has_pdf']:
-                # 检查文件大小限制
-                if send_file and local_cache.get("pdf_path"):
-                    if max_file_size_mb > 0 and local_cache['pdf_size_mb'] > max_file_size_mb:
-                        yield event.plain_result(f"{' | '.join(info_parts)}\n文件过大，跳过发送")
-                    else:
-                        yield event.chain_result([
-                            File(name=local_cache["pdf_name"], file=local_cache["pdf_path"])
-                        ])
-                else:
-                    yield event.plain_result(f"{' | '.join(info_parts)}\n本地已有缓存")
-                return
-
-        # 无缓存或强制重新下载
-        yield event.plain_result(f"{' | '.join(info_parts)}\n正在下载...")
-
-        # 进度消息追踪
-        last_progress_msg = ""
-
-        async def send_progress(current: int, total: int, msg: str):
-            """发送或更新进度消息（只发送有进度的消息）"""
-            nonlocal last_progress_msg
-
-            # 只处理有进度值的消息
-            if total <= 0 or current <= 0:
-                return
-
-            # 构建进度消息
-            percent = int(current / total * 100)
-            progress_msg = f"下载中 {percent}%"
-
-            # 避免重复发送相同消息
-            if progress_msg == last_progress_msg:
-                return
-            last_progress_msg = progress_msg
-
-            try:
-                await event.send(MessageChain().message(progress_msg))
-            except Exception:
-                pass
-
-        # 进度回调函数
-        def progress_callback(current: int, total: int, msg: str):
-            """同步回调，转换为异步发送"""
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(send_progress(current, total, msg))
-                else:
-                    loop.run_until_complete(send_progress(current, total, msg))
-            except Exception:
-                pass
-
-        # 执行下载（此时不会有缓存，会真正下载）
-        result = await self._jm.download(
-            album_id,
-            send_file=send_file,
-            progress_callback=progress_callback,
-            force_redownload=True,  # 已经检查过缓存，这里强制下载
-        )
-
-        if result["success"]:
-            # 发送文件（使用 chain_result 兼容各平台）
-            if send_file and "pdf_path" in result:
-                # 检查文件大小限制
-                file_size_mb = result.get("file_size_mb", 0)
-                if max_file_size_mb > 0 and file_size_mb > max_file_size_mb:
-                    yield event.plain_result("文件过大，跳过发送")
-                else:
-                    try:
-                        pdf_path = result["pdf_path"]
-                        pdf_name = result["pdf_name"]
-
-                        # 使用 chain_result 发送文件，兼容微信、QQ 等各平台
-                        yield event.chain_result([
-                            File(name=pdf_name, file=pdf_path)
-                        ])
-
-                    except Exception as e:
-                        self.logger.exception(f"JM PDF upload failed: {e}")
-                        yield event.plain_result("发送失败，请检查权限")
-        else:
-            yield event.plain_result(result["message"])

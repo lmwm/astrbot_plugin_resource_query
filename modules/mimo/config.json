@@ -1,0 +1,14 @@
+{
+  "platform": "mimo",
+  "platform_name": "MiMo",
+  "platform_icon": "📋",
+  "default_device_id": "wb_MIQUERY000001",
+  "default_ua": "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1",
+  "api": {
+    "account_base": "https://account.xiaomi.com",
+    "balance_url": "https://platform.xiaomimimo.com/api/v1/balance",
+    "usage_url": "https://platform.xiaomimimo.com/api/v1/usage"
+  },
+  "query_timeout": 15,
+  "login_timeout": 15
+}

@@ -1,3 +1,58 @@
+## v4.0.0 (2025-09-XX)
+
+### ♻️ 重大重构：模块化架构
+
+- **全新模块化架构**：采用分层设计，各功能模块独立管理
+  - `core/` 核心框架层：模块基类、注册中心、总管理器
+  - `modules/` 功能模块层：MiMo、华数广电、JMComic
+  - `common/` 通用工具层：公共工具函数
+
+### 🏗️ 架构设计原则
+
+1. **分模块**：不同功能分模块添加，总管理模块管理不同模块与 AstrBot 之间的通信
+2. **模块管理**：每个模块有自己的管理模块，和总管理模块对接
+3. **模块自治**：各模块自己管理自己的内容（配置保存读取、下载等）
+4. **模块隔离**：模块之间互不干扰，需要联系通过总管理模块联系
+
+### 📁 新增文件
+
+- `core/__init__.py` - 核心框架模块导出
+- `core/module.py` - 模块基类（ModuleBase）
+- `core/registry.py` - 模块注册中心（ModuleRegistry）
+- `core/manager.py` - 总管理器基类（PluginManager）
+- `modules/__init__.py` - 功能模块导出
+- `modules/mimo/` - MiMo 平台模块（重构）
+- `modules/wasu/` - 华数广电模块（重构）
+- `modules/jm/` - JMComic 下载模块（重构）
+
+### 🎯 架构改进
+
+```
+v3.x 架构：                      v4.0 架构：
+main.py (914行)                  main.py (重构)
+  ├─ 命令处理                      └─ 总管理器
+  ├─ 账号管理                           ├─ 模块注册
+  └─ Web API                           └─ 指令分发
+                                 
+mimo/                            core/
+  └─ manager.py                      ├─ module.py (模块基类)
+                                     ├─ registry.py (注册中心)
+wasu/                                  └─ manager.py (总管理器)
+  └─ manager.py                  
+                                 modules/
+jm/                                  ├─ mimo/ (MiMo模块)
+  └─ downloader.py                   ├─ wasu/ (华数模块)
+                                     └─ jm/ (JM模块)
+```
+
+### ✨ 扩展性改进
+
+- 添加新平台只需在 `modules/` 目录下创建新模块
+- 模块自动注册到注册中心，无需修改主入口
+- 模块间通过注册中心通信，保持松耦合
+
+---
+
 ## v3.25.0 (2025-01-XX)
 
 ### ♻️ 界面调整
