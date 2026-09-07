@@ -174,7 +174,7 @@ class MimoManager(BasePlatform):
         """查询单个 MiMo 账号，失败时自动重登录并重试"""
         if acc.pop("_otp_required", False):
             return {
-                "error": "需要短信验证，请使用 /query mimo login 账号 密码 手动登录"
+                "error": "需要短信验证，请在网页管理界面登录该账号"
             }
 
         login_error = acc.pop("_login_error", "")
