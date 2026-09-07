@@ -168,7 +168,6 @@ class NewPlatform(BasePlatform):
 ```
 astrbot_plugin_resource_query/
 ├── main.py                  # 插件主入口
-├── account.py               # 账号管理模块
 ├── base.py                  # 基类定义
 ├── http_utils.py            # HTTP 工具函数
 ├── updater.py               # 更新模块
@@ -180,6 +179,10 @@ astrbot_plugin_resource_query/
 ├── logo.png                 # 插件图标
 ├── .gitignore               # Git 忽略规则
 ├── _conf_schema.json        # AstrBot 配置模式
+├── common/                  # 通用模块
+│   ├── __init__.py          # 模块导出
+│   ├── account.py           # 账号管理器
+│   └── utils.py             # 通用工具函数
 ├── mimo/                    # MiMo 平台模块
 │   ├── __init__.py          # 模块导出
 │   ├── account.py           # 小米账号登录（参考 MiService）
@@ -200,23 +203,22 @@ astrbot_plugin_resource_query/
 │   └── default_template.txt # 默认模板
 ├── jm/                      # JMComic 下载模块
 │   ├── __init__.py          # 模块导出
-│   ├── downloader.py        # 下载管理器
+│   ├── downloader.py        # 下载管理器（适配器）
 │   ├── constants.py         # 常量定义
-│   └── utils.py             # 工具函数
-├── jmcomic_downloader/      # JMComic 下载器核心
-│   ├── __init__.py
-│   ├── manager.py
-│   ├── models.py
-│   ├── config.py
-│   ├── utils.py
-│   ├── README.md
-│   ├── cache/
-│   ├── converters/
-│   └── downloaders/
-├── pages/                   # WebUI Pages
-│   └── template-editor/
-│       └── index.html       # 配置管理界面
-└── templates/               # 默认模板
+│   ├── utils.py             # 工具函数
+│   └── core/                # 下载器核心
+│       ├── __init__.py      # 核心模块导出
+│       ├── manager.py       # JM 管理器
+│       ├── models.py        # 数据模型
+│       ├── config.py        # 配置管理
+│       ├── utils.py         # 核心工具函数
+│       ├── README.md        # 核心模块说明
+│       ├── cache/           # 缓存管理
+│       ├── converters/      # PDF 转换器
+│       └── downloaders/     # 下载器实现
+└── pages/                   # WebUI Pages
+    └── template-editor/
+        └── index.html       # 配置管理界面
 ```
 
 ## MiMo 登录流程
