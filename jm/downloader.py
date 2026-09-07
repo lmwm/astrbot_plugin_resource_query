@@ -28,8 +28,7 @@ from pathlib import Path
 from typing import Callable
 
 # 导入管理器
-from .jmcomic_downloader import JMManager
-from .jmcomic_downloader.utils import normalize_album_id
+from ..jmcomic_downloader import JMManager
 
 # 类型定义
 ProgressCallback = Callable[[int, int, str], None]
@@ -68,6 +67,7 @@ class JMDownloader:
         default_config = {
             "jm_enabled": True,
             "jm_send_file": True,
+            "jm_max_file_size": 10,  # 文件大小限制（MB），0 表示不限制
             "jm_cookies": "",
             "jm_proxy": "",
             "jm_timeout": 20,
@@ -172,7 +172,3 @@ class JMDownloader:
             album_id: 漫画 ID
         """
         self._manager.cleanup_files(album_id)
-
-
-# 重新导出 normalize_album_id 以保持接口兼容
-__all__ = ["JMDownloader", "normalize_album_id"]

@@ -42,7 +42,7 @@ from .mimo import (
     StsError,
 )
 from .updater import check_update, do_update, reload_plugin
-from .wasu import WasuPlatform
+from .wasu import WasuManager, WasuResult
 
 _PLUGIN_NAME = "astrbot_plugin_resource_query"
 
@@ -63,7 +63,7 @@ class ResourceQueryPlugin(Star):
         # 初始化管理器和平台模块
         self._accounts = AccountManager(_PLUGIN_NAME, self._plugin_dir)
         self._mimo = MimoManager(self._plugin_dir)
-        self._wasu = WasuPlatform(self._plugin_dir)
+        self._wasu = WasuManager(self._plugin_dir)
         self._jm = JMDownloader(self._accounts._get_jm_config_path())
 
         # 为现有账号填充默认 device_id 和 ua
