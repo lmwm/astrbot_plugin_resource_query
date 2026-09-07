@@ -595,17 +595,8 @@ class ResourceQueryPlugin(Star):
                 return
             yield event.plain_result("🔍 正在查询所有 MiMo 账号...")
             
-            # 分离已登录和未登录的账号
-            logged_in = []
-            skipped = []
+            # 查询所有账号
             for idx, acc in mimo_indices:
-                if not acc.get("serviceToken"):
-                    skipped.append(acc.get("name") or acc.get("account") or f"账号{idx + 1}")
-                    continue
-                logged_in.append((idx, acc))
-            
-            # 只查询已登录的账号
-            for idx, acc in logged_in:
                 result = await self._mimo.query_one(acc)
                 label = acc.get("name") or acc.get("account") or f"账号{idx + 1}"
                 if "error" in result:
@@ -614,10 +605,6 @@ class ResourceQueryPlugin(Star):
                     template = acc.get("template") or None
                     mr = MimoResult(success=True, account_name=label, data=result, template=template)
                     yield event.plain_result(mr.to_text())
-            
-            # 提示跳过的账号
-            if skipped:
-                yield event.plain_result(f"⚠️ 跳过未登录的账号: {', '.join(skipped)}")
             return
 
         # /mimo <名称> — 查询指定账号
@@ -627,11 +614,6 @@ class ResourceQueryPlugin(Star):
         for idx, acc in mimo_indices:
             name = acc.get("name") or acc.get("account") or ""
             if name == query_arg:
-                # 检查账号是否已登录
-                if not acc.get("serviceToken"):
-                    yield event.plain_result(f"❌ 账号 {name} 未登录，请在网页管理界面登录")
-                    return
-                
                 yield event.plain_result("🔍 正在查询...")
                 result = await self._mimo.query_one(acc)
                 template = acc.get("template") or None
