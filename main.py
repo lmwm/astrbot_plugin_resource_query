@@ -620,10 +620,10 @@ class ResourceQueryPlugin(Star):
                 yield event.plain_result(f"⚠️ 跳过未登录的账号: {', '.join(skipped)}")
             return
 
-        # /mimo <序号或名称> — 查询指定账号
+        # /mimo <名称> — 查询指定账号
         query_arg = args[0]
         
-        # 优先按名称查找（避免数字名称与序号冲突）
+        # 按名称查找
         for idx, acc in mimo_indices:
             name = acc.get("name") or acc.get("account") or ""
             if name == query_arg:
@@ -639,28 +639,6 @@ class ResourceQueryPlugin(Star):
                     yield event.plain_result(f"📋 {name}\n❌ {result['error']}")
                 else:
                     mr = MimoResult(success=True, account_name=name, data=result, template=template)
-                    yield event.plain_result(mr.to_text())
-                return
-        
-        # 按序号查找
-        if query_arg.isdigit():
-            query_idx = int(query_arg) - 1
-            if 0 <= query_idx < len(mimo_indices):
-                real_idx, acc = mimo_indices[query_idx]
-                
-                # 检查账号是否已登录
-                if not acc.get("serviceToken"):
-                    yield event.plain_result(f"❌ 账号 {acc.get('name') or acc.get('account')} 未登录，请在网页管理界面登录")
-                    return
-                
-                yield event.plain_result("🔍 正在查询...")
-                result = await self._mimo.query_one(acc)
-                label = acc.get("name") or acc.get("account") or f"账号{query_idx + 1}"
-                template = acc.get("template") or None
-                if "error" in result:
-                    yield event.plain_result(f"📋 {label}\n❌ {result['error']}")
-                else:
-                    mr = MimoResult(success=True, account_name=label, data=result, template=template)
                     yield event.plain_result(mr.to_text())
                 return
         
@@ -737,30 +715,13 @@ class ResourceQueryPlugin(Star):
                     yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
             return
 
-        # /wasu <序号或名称> — 查询指定账号
+        # /wasu <名称> — 查询指定账号
         query_arg = args[0]
         
-        # 优先按名称查找（避免数字名称与序号冲突）
+        # 按名称查找
         for idx, acc in wasu_indices:
             name = acc.get("name") or acc.get("phone") or ""
             if name == query_arg:
-                yield event.plain_result("🔍 正在查询...")
-                try:
-                    result = await self._wasu.query(acc)
-                    if result.success:
-                        yield event.plain_result(result.to_text())
-                    else:
-                        yield event.plain_result(f"📋 {name}\n❌ {result.error}")
-                except Exception as e:
-                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
-                return
-        
-        # 按序号查找
-        if query_arg.isdigit():
-            query_idx = int(query_arg) - 1
-            if 0 <= query_idx < len(wasu_indices):
-                real_idx, acc = wasu_indices[query_idx]
-                name = acc.get("name") or acc.get("phone") or f"华数账号{query_idx + 1}"
                 yield event.plain_result("🔍 正在查询...")
                 try:
                     result = await self._wasu.query(acc)
