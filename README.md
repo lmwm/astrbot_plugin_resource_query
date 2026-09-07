@@ -16,7 +16,7 @@
 - 多账号支持，每个账号可独立配置
 - 支持 serviceToken / passToken / 账号密码三级凭据自动降级
 - 凭据自动持久化，重启后无需重新登录
-- 交互式 OTP 验证码输入
+- 支持 OTP 验证码验证（通过 WebUI Pages）
 
 ### 华数广电
 - 查询流量使用情况
@@ -47,52 +47,45 @@
 | 指令 | 说明 |
 |------|------|
 | `/query mimo` | 查询所有 MiMo 账号 |
-| `/query mimo <序号>` | 查询指定 MiMo 账号 |
-| `/query mimo login` | 查看当前凭据状态 |
-| `/query mimo login <账号> <密码>` | 登录（支持 OTP 交互） |
-| `/query mimo login passtoken <账号> <userId> <token>` | 设置 passToken |
-| `/query mimo list` | 列出所有账号 |
-| `/query mimo del <序号>` | 删除指定账号 |
+| `/query mimo <序号或名称>` | 查询指定 MiMo 账号 |
+
+> **注意**：MiMo 登录功能仅支持通过 WebUI Pages 管理界面操作，不支持指令登录。
 
 ### 华数广电指令
 
 | 指令 | 说明 |
 |------|------|
-| `/query wasu` | 查询所有华数账号 |
-| `/query wasu <序号>` | 查询指定华数账号 |
-| `/query wasu login` | 查看当前账号 |
-| `/query wasu login <user_key> <token> <phone> [<sign>]` | 添加/更新账号 |
-| `/query wasu list` | 列出所有账号 |
-| `/query wasu del <序号>` | 删除指定账号 |
+| `/query wasu list` | 列出所有华数账号 |
+| `/query wasu del <序号或名称>` | 删除指定华数账号 |
 
 ## 首次使用
 
 ### MiMo 配置
 
-#### 方式 1：WebUI 配置（推荐）
+#### 通过 WebUI Pages 管理界面（推荐）
 
-在 AstrBot WebUI 插件配置中填写账号和密码，直接发送 `/query mimo` 即可自动登录查询。
+1. 打开 AstrBot WebUI，进入插件管理页面
+2. 点击"添加 MiMo 账号"
+3. 填写小米账号和密码
+4. 点击"测试"按钮
+5. 如果需要 OTP 验证，输入收到的验证码后再次点击"测试"
+6. 测试成功后点击"保存"
 
-#### 方式 2：交互式登录
+#### 登录方式说明
 
-```
-你: /query mimo login 13800138000 你的密码
-机器人: ✅ 登录成功!
-        userId: 123456789
-```
+MiMo 支持三种登录方式：
+
+| 登录方式 | 说明 |
+|----------|------|
+| 账号密码 | 输入小米账号和密码，支持 OTP 验证 |
+| PassToken | 输入 PassToken 和 User ID |
+| ServiceToken | 输入 ServiceToken 和 User ID |
 
 ### 华数广电配置
 
 1. 打开华数广电微信小程序
 2. 获取 `user_key`、`token`、`phone`、`sign` 参数
-3. 使用指令配置：
-
-```
-你: /query wasu login your_user_key your_token 13800138000 your_sign
-机器人: ✅ 华数账号 13800138000 配置成功
-```
-
-或在 WebUI 插件配置中直接填写。
+3. 在 WebUI Pages 管理界面添加账号
 
 ## 配置（WebUI）
 
@@ -137,7 +130,7 @@
 
 ```bash
 # 复制到 AstrBot 插件目录
-cp -r astrbot_plugin_mimo /path/to/AstrBot/data/plugins/
+cp -r astrbot_plugin_resource_query /path/to/AstrBot/data/plugins/
 
 # 重启 AstrBot 或在 WebUI 热重载插件
 ```
@@ -167,6 +160,73 @@ class NewPlatform(BasePlatform):
         pass
 ```
 
+## 项目结构
+
+```
+astrbot_plugin_resource_query/
+├── main.py                  # 插件主入口
+├── account.py               # 账号管理模块
+├── base.py                  # 基类定义
+├── http_utils.py            # HTTP 工具函数
+├── updater.py               # 更新模块
+├── wasu.py                  # 华数广电平台
+├── jm.py                    # JMComic 下载
+├── mimo/                    # MiMo 平台模块
+│   ├── __init__.py          # 模块导出
+│   ├── account.py           # 小米账号登录（参考 MiService）
+│   ├── manager.py           # MiMo 管理器
+│   ├── query.py             # 查询逻辑
+│   ├── result.py            # 查询结果格式化
+│   ├── exceptions.py        # 异常类定义
+│   ├── constants.py         # 常量定义
+│   ├── utils.py             # 工具函数
+│   └── config.json          # MiMo 配置文件
+├── pages/                   # WebUI Pages
+│   └── template-editor/
+│       └── index.html       # 配置管理界面
+└── templates/               # 默认模板
+    └── wasu_default.txt     # 华数默认模板
+```
+
+## MiMo 登录流程
+
+MiMo 登录参考 [MiService](https://github.com/Yonsm/MiService) 的 `miaccount.py` 实现。
+
+### 账号密码登录（无 OTP）
+
+```
+1. serviceLogin → 获取 qs/sid/_sign/callback
+2. serviceLoginAuth2 → 提交账号密码（MD5哈希）
+3. 获取 userId/passToken/location/nonce/ssecurity
+4. STS → 换取 serviceToken
+```
+
+### 账号密码登录（需要 OTP）
+
+```
+1. serviceLogin → 获取 qs/sid/_sign/callback
+2. serviceLoginAuth2 → 提交账号密码 → 返回 notificationUrl
+3. _trigger_otp_send → 发送验证码
+   - GET notificationUrl → 建立验证会话
+   - GET /identity/list → 获取验证方式
+   - GET /identity/auth/verifyPhone → 触发发送
+   - POST /identity/auth/sendPhoneTicket → 发送短信
+4. 等待用户输入验证码
+5. _submit_otp_code → 提交验证码
+   - POST /identity/auth/verifyPhone + ticket
+   - GET location → 设置认证 cookies
+6. serviceLogin → 获取完整认证响应
+7. STS → 换取 serviceToken
+```
+
+### 凭据优先级
+
+查询时自动降级：
+1. serviceToken（最快，直接查询）
+2. passToken（自动换取 serviceToken）
+3. 账号密码（自动登录，可能需要 OTP）
+
 ## 更新日志
 
 - 2025-01: 网络连接测试提交
+- 2025-08: 重构 MiMo 登录模块，参考 MiService 实现 OTP 验证流程
