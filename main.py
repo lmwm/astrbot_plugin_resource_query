@@ -31,7 +31,7 @@ from astrbot.api.message_components import File
 from astrbot.api.star import Context, Star
 from astrbot.core.utils.session_waiter import SessionController, session_waiter
 
-from .account import AccountManager
+from .common import AccountManager
 from .jm import JMDownloader, normalize_album_id
 from .mimo import (
     LoginError,

@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Callable
 
 # 导入管理器
-from ..jmcomic_downloader import JMManager
+from .core import JMManager
 
 # 类型定义
 ProgressCallback = Callable[[int, int, str], None]
