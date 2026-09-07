@@ -8,15 +8,15 @@
 
 指令：
   /query                    — 查询帮助
-  /query mimo               — 查询所有 MiMo 账号
-  /query mimo <序号>        — 查询指定 MiMo 账号
-  /query mimo login         — MiMo 登录
-  /query mimo list          — 列出所有 MiMo 账号
-  /query mimo del <序号>    — 删除 MiMo 账号
-  /query wasu               — 查询所有华数账号
-  /query wasu login         — 华数登录
-  /query wasu list          — 列出所有华数账号
-  /query wasu del <序号>    — 删除华数账号
+  /mimo                     — 查询所有 MiMo 账号
+  /mimo <序号或名称>        — 查询指定 MiMo 账号
+  /mimo ls                  — 列出所有 MiMo 账号
+  /mimo del <序号或名称>    — 删除 MiMo 账号
+  /wasu                     — 查询所有华数账号
+  /wasu <序号或名称>        — 查询指定华数账号
+  /wasu ls                  — 列出所有华数账号
+  /wasu del <序号或名称>    — 删除华数账号
+  /query update             — 更新插件
   /jm <ID>                  — 下载 JMComic 漫画 PDF（仅私聊）
 """
 
@@ -481,10 +481,14 @@ class ResourceQueryPlugin(Star):
                 "📊 资源查询插件 v3.19.0\n"
                 "────────────────\n"
                 "用法:\n"
-                "  /query mimo — 查询所有 MiMo 用量\n"
-                "  /query mimo <序号或名称> — 查询指定账号\n"
-                "  /query wasu list — 列出华数账号\n"
-                "  /query wasu del <序号或名称> — 删除华数账号\n"
+                "  /mimo — 查询所有 MiMo 用量\n"
+                "  /mimo <序号或名称> — 查询指定账号\n"
+                "  /mimo ls — 列出所有 MiMo 账号\n"
+                "  /mimo del <序号或名称> — 删除 MiMo 账号\n"
+                "  /wasu — 查询所有华数账号\n"
+                "  /wasu <序号或名称> — 查询指定华数账号\n"
+                "  /wasu ls — 列出所有华数账号\n"
+                "  /wasu del <序号或名称> — 删除华数账号\n"
                 "  /query update — 更新插件\n"
                 "  /jm <ID> — 下载 JMComic 漫画"
             )
@@ -504,13 +508,87 @@ class ResourceQueryPlugin(Star):
         else:
             yield event.plain_result(f"❌ 未知平台: {platform}\n支持: mimo, wasu")
 
+    # ================== MiMo 指令 ==================
+
+    @filter.command("mimo")
+    async def mimo_cmd(self, event: AstrMessageEvent):
+        """/mimo — MiMo 查询指令"""
+        args = event.get_message_str().strip().split()
+        # 移除指令名本身
+        if args and args[0].lower() == "mimo":
+            args = args[1:]
+        
+        async for r in self._handle_mimo(event, args):
+            yield r
+
+    # ================== 华数指令 ==================
+
+    @filter.command("wasu")
+    async def wasu_cmd(self, event: AstrMessageEvent):
+        """/wasu — 华数广电查询指令"""
+        args = event.get_message_str().strip().split()
+        # 移除指令名本身
+        if args and args[0].lower() == "wasu":
+            args = args[1:]
+        
+        async for r in self._handle_wasu(event, args):
+            yield r
+
     # ================== MiMo 子命令 ==================
 
     async def _handle_mimo(self, event: AstrMessageEvent, args: list):
         """处理 MiMo 相关命令"""
         mimo_indices = self._accounts.get_account_indices("mimo")
 
-        # /query mimo — 查询所有账号
+        # /mimo ls — 列出所有账号
+        if args and args[0].lower() == "ls":
+            if not mimo_indices:
+                yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
+                return
+            lines = [f"📋 共 {len(mimo_indices)} 个 MiMo 账号:"]
+            for i, (idx, acc) in enumerate(mimo_indices):
+                status = "✅" if acc.get("serviceToken") else "❌"
+                name = acc.get("name") or acc.get("account") or f"MiMo账号{i+1}"
+                lines.append(f"  {i + 1}. {status} {name}")
+            yield event.plain_result("\n".join(lines))
+            return
+
+        # /mimo del <序号或名称> — 删除指定账号
+        if args and args[0].lower() == "del":
+            if len(args) < 2:
+                yield event.plain_result("用法: /mimo del <序号或名称>")
+                return
+            
+            del_arg = args[1]
+            
+            # 尝试按序号删除
+            if del_arg.isdigit():
+                del_idx = int(del_arg) - 1
+                if 0 <= del_idx < len(mimo_indices):
+                    real_idx, acc = mimo_indices[del_idx]
+                    deleted = self._accounts.delete_account("mimo", del_idx)
+                    if deleted:
+                        name = deleted.get("name") or deleted.get("account") or "未知"
+                        yield event.plain_result(f"✅ 已删除: {name}")
+                    else:
+                        yield event.plain_result("❌ 删除失败")
+                    return
+            
+            # 按名称删除
+            for idx, acc in mimo_indices:
+                name = acc.get("name") or acc.get("account") or ""
+                if name == del_arg:
+                    deleted = self._accounts.delete_account("mimo", idx)
+                    if deleted:
+                        yield event.plain_result(f"✅ 已删除: {name}")
+                    else:
+                        yield event.plain_result("❌ 删除失败")
+                    return
+            
+            yield event.plain_result(f"❌ 未找到账号: {del_arg}")
+            return
+
+        # /mimo — 查询所有账号
         if not args:
             if not mimo_indices:
                 yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
@@ -542,7 +620,7 @@ class ResourceQueryPlugin(Star):
                 yield event.plain_result(f"⚠️ 跳过未登录的账号: {', '.join(skipped)}")
             return
 
-        # /query mimo <序号或名称> — 查询指定账号
+        # /mimo <序号或名称> — 查询指定账号
         query_arg = args[0]
         
         # 尝试按序号查找
@@ -586,7 +664,7 @@ class ResourceQueryPlugin(Star):
                     yield event.plain_result(mr.to_text())
                 return
         
-        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /query mimo 查看所有账号")
+        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /mimo ls 查看所有账号")
 
     # ================== 华数子命令 ==================
 
@@ -594,21 +672,22 @@ class ResourceQueryPlugin(Star):
         """处理华数广电相关命令"""
         wasu_indices = self._accounts.get_account_indices("wasu")
 
-        # /query wasu list — 列出所有账号
-        if args and args[0].lower() == "list":
+        # /wasu ls — 列出所有账号
+        if args and args[0].lower() == "ls":
             if not wasu_indices:
-                yield event.plain_result("还没有配置华数账号")
+                yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
                 return
             lines = [f"📋 共 {len(wasu_indices)} 个华数账号:"]
             for i, (idx, acc) in enumerate(wasu_indices):
-                lines.append(f"  {i + 1}. {acc.get('name') or acc.get('phone') or f'华数账号{i+1}'} | 手机号: {acc.get('phone', '无')}")
+                name = acc.get("name") or acc.get("phone") or f"华数账号{i+1}"
+                lines.append(f"  {i + 1}. {name} | 手机号: {acc.get('phone', '无')}")
             yield event.plain_result("\n".join(lines))
             return
 
-        # /query wasu del <序号或名称> — 删除指定账号
+        # /wasu del <序号或名称> — 删除指定账号
         if args and args[0].lower() == "del":
             if len(args) < 2:
-                yield event.plain_result("用法: /query wasu del <序号或名称>")
+                yield event.plain_result("用法: /wasu del <序号或名称>")
                 return
             
             del_arg = args[1]
@@ -639,12 +718,61 @@ class ResourceQueryPlugin(Star):
             yield event.plain_result(f"❌ 未找到账号: {del_arg}")
             return
 
-        # 无效命令
-        yield event.plain_result(
-            "华数用法:\n"
-            "  /query wasu list — 列出所有账号\n"
-            "  /query wasu del <序号或名称> — 删除账号"
-        )
+        # /wasu — 查询所有账号
+        if not args:
+            if not wasu_indices:
+                yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
+                return
+            yield event.plain_result("🔍 正在查询所有华数账号...")
+            
+            for idx, acc in wasu_indices:
+                name = acc.get("name") or acc.get("phone") or f"华数账号{idx + 1}"
+                try:
+                    result = await self._wasu.query(acc)
+                    if result.success:
+                        yield event.plain_result(result.to_text())
+                    else:
+                        yield event.plain_result(f"📋 {name}\n❌ {result.error}")
+                except Exception as e:
+                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
+            return
+
+        # /wasu <序号或名称> — 查询指定账号
+        query_arg = args[0]
+        
+        # 尝试按序号查找
+        if query_arg.isdigit():
+            query_idx = int(query_arg) - 1
+            if 0 <= query_idx < len(wasu_indices):
+                real_idx, acc = wasu_indices[query_idx]
+                name = acc.get("name") or acc.get("phone") or f"华数账号{query_idx + 1}"
+                yield event.plain_result("🔍 正在查询...")
+                try:
+                    result = await self._wasu.query(acc)
+                    if result.success:
+                        yield event.plain_result(result.to_text())
+                    else:
+                        yield event.plain_result(f"📋 {name}\n❌ {result.error}")
+                except Exception as e:
+                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
+                return
+        
+        # 按名称查找
+        for idx, acc in wasu_indices:
+            name = acc.get("name") or acc.get("phone") or ""
+            if name == query_arg:
+                yield event.plain_result("🔍 正在查询...")
+                try:
+                    result = await self._wasu.query(acc)
+                    if result.success:
+                        yield event.plain_result(result.to_text())
+                    else:
+                        yield event.plain_result(f"📋 {name}\n❌ {result.error}")
+                except Exception as e:
+                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
+                return
+        
+        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /wasu ls 查看所有账号")
 
     # ================== 更新 ==================
 
