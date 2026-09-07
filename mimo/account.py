@@ -210,10 +210,9 @@ class MiAccount:
             if e.code == 401:
                 logger.info("[_trigger_otp_send] notificationUrl 返回 401，OTP 已触发")
                 return
-            raise
+            raise LoginError(f"打开 OTP 验证会话失败: HTTP {e.code}")
         except Exception as e:
-            logger.warning(f"[_trigger_otp_send] notificationUrl 异常: {e}")
-            return
+            raise LoginError(f"打开 OTP 验证会话失败: {e}")
 
         # Step 2: 获取可用验证方式
         list_url = (
@@ -224,22 +223,21 @@ class MiAccount:
             with opener.open(Request(list_url, headers=headers), timeout=15) as r:
                 idata = parse_resp(r.read())
         except Exception as e:
-            logger.warning(f"[_trigger_otp_send] identity/list 异常: {e}")
-            return
+            raise LoginError(f"获取验证方式失败: {e}")
 
         flag = idata.get("flag", 4)
         method = "Email" if flag == 8 else "Phone"
 
         # Step 3: 触发 OTP 发送
+        verify_url = f"{self.account_base}/identity/auth/verify{method}?_flag={flag}&_json=true"
         try:
-            verify_url = f"{self.account_base}/identity/auth/verify{method}?_flag={flag}&_json=true"
             with opener.open(Request(verify_url, headers=headers), timeout=15) as r:
                 tresp = parse_resp(r.read())
-            if tresp.get("code") not in (0, None):
-                logger.warning(f"[_trigger_otp_send] verify 响应异常: {tresp}")
         except Exception as e:
-            logger.warning(f"[_trigger_otp_send] verify 异常: {e}")
-            return
+            raise LoginError(f"触发 {method} 验证码发送失败: {e}")
+        if tresp.get("code") not in (0, None):
+            tips = tresp.get("tips") or tresp.get("desc") or str(tresp)
+            raise LoginError(tips)
 
         # Step 4: 发送短信
         if method == "Phone":
@@ -254,10 +252,11 @@ class MiAccount:
             try:
                 with opener.open(req, timeout=15) as r:
                     sresp = parse_resp(r.read())
-                if sresp.get("code") not in (0, None):
-                    logger.warning(f"[_trigger_otp_send] sendPhoneTicket 响应异常: {sresp}")
             except Exception as e:
-                logger.warning(f"[_trigger_otp_send] sendPhoneTicket 异常: {e}")
+                raise LoginError(f"发送短信验证码失败: {e}")
+            if sresp.get("code") not in (0, None):
+                tips = sresp.get("tips") or sresp.get("desc") or str(sresp)
+                raise LoginError(tips)
 
         logger.info("[_trigger_otp_send] OTP 验证码发送完成")
 

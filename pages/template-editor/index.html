@@ -1287,7 +1287,7 @@
             document.getElementById('mimo-field-otp').focus();
             showMimoLoginStatus('验证码已发送到您的手机，请输入6位数字验证码后再次点击测试', 'info');
           } else {
-            showMimoLoginStatus(`❌ ${result?.message || '登录失败'}`, 'error');
+            showMimoLoginStatus(result?.message || '操作失败', 'error');
           }
           return;
         }
@@ -1324,13 +1324,13 @@
             document.getElementById('mimo-field-service-token').value = creds.serviceToken;
           }
         } else {
-          const errMsg = result?.message || result?.error || '测试失败';
-          showMimoLoginStatus(`❌ ${errMsg}`, 'error');
+          const errMsg = result?.message || result?.error || '操作失败';
+          showMimoLoginStatus(errMsg, 'error');
         }
       } catch (e) {
         console.error('[测试错误]', e);
         const errMsg = e.message || e.toString() || '未知错误';
-        showMimoLoginStatus(`❌ 测试失败: ${errMsg}`, 'error');
+        showMimoLoginStatus(errMsg, 'error');
       } finally {
         testBtn.disabled = false;
         testBtn.textContent = '🧪 测试';
@@ -1450,10 +1450,10 @@
           document.getElementById('mimo-field-otp').focus();
           showMimoLoginStatus('验证码已发送到您的手机，请输入6位数字验证码', 'info');
         } else {
-          showMimoLoginStatus(result?.message || '登录失败', 'error');
+          showMimoLoginStatus(result?.message || '操作失败', 'error');
         }
       } catch (e) {
-        showMimoLoginStatus('登录失败: ' + (e.message || '未知错误'), 'error');
+        showMimoLoginStatus(e.message || '未知错误', 'error');
       } finally {
         loginBtn.disabled = false;
         loginBtn.textContent = '🔑 登录';

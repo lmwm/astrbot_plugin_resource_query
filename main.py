@@ -418,12 +418,12 @@ class ResourceQueryPlugin(Star):
             elif error_name == "LoginError":
                 return json_response({
                     "status": "error",
-                    "message": f"登录失败: {e}"
+                    "message": str(e)
                 })
             else:
                 return json_response({
                     "status": "error",
-                    "message": f"登录错误: {e}"
+                    "message": str(e)
                 })
 
     async def mimo_test(self):
