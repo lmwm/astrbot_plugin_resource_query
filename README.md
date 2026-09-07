@@ -172,8 +172,14 @@ astrbot_plugin_resource_query/
 ├── base.py                  # 基类定义
 ├── http_utils.py            # HTTP 工具函数
 ├── updater.py               # 更新模块
-├── wasu.py                  # 华数广电平台
-├── jm.py                    # JMComic 下载
+├── __init__.py              # 模块初始化
+├── requirements.txt         # 依赖声明
+├── metadata.yaml            # 插件元数据
+├── README.md                # 说明文档
+├── CHANGELOG.md             # 更新日志
+├── logo.png                 # 插件图标
+├── .gitignore               # Git 忽略规则
+├── _conf_schema.json        # AstrBot 配置模式
 ├── mimo/                    # MiMo 平台模块
 │   ├── __init__.py          # 模块导出
 │   ├── account.py           # 小米账号登录（参考 MiService）
@@ -183,12 +189,34 @@ astrbot_plugin_resource_query/
 │   ├── exceptions.py        # 异常类定义
 │   ├── constants.py         # 常量定义
 │   ├── utils.py             # 工具函数
-│   └── config.json          # MiMo 配置文件
+│   ├── config.json          # MiMo 配置文件
+│   └── default_template.txt # 默认模板
+├── wasu/                    # 华数广电平台模块
+│   ├── __init__.py          # 模块导出
+│   ├── manager.py           # 华数管理器
+│   ├── result.py            # 查询结果格式化
+│   ├── constants.py         # 常量定义
+│   ├── utils.py             # 工具函数
+│   └── default_template.txt # 默认模板
+├── jm/                      # JMComic 下载模块
+│   ├── __init__.py          # 模块导出
+│   ├── downloader.py        # 下载管理器
+│   ├── constants.py         # 常量定义
+│   └── utils.py             # 工具函数
+├── jmcomic_downloader/      # JMComic 下载器核心
+│   ├── __init__.py
+│   ├── manager.py
+│   ├── models.py
+│   ├── config.py
+│   ├── utils.py
+│   ├── README.md
+│   ├── cache/
+│   ├── converters/
+│   └── downloaders/
 ├── pages/                   # WebUI Pages
 │   └── template-editor/
 │       └── index.html       # 配置管理界面
 └── templates/               # 默认模板
-    └── wasu_default.txt     # 华数默认模板
 ```
 
 ## MiMo 登录流程
