@@ -43,6 +43,10 @@ class AccountManager:
         """获取指定平台的配置目录"""
         return get_platform_path(self._plugin_name, platform)
 
+    def _get_jm_config_path(self) -> Path:
+        """获取 JM 下载配置目录"""
+        return get_platform_path(self._plugin_name, "jm")
+
     def _get_account_filename(self, acc: dict) -> str:
         """获取账号配置文件名"""
         return get_account_filename(acc)
