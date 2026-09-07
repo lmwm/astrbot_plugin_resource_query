@@ -240,13 +240,20 @@ class MimoManager(BasePlatform):
         # 如果没有 serviceToken，尝试自动获取
         if not service_token:
             acc = await self.ensure_account(acc)
-            service_token = acc.get("serviceToken", "")
-            user_id = acc.get("userId", "")
+            
+            # 检查是否需要 OTP 验证
+            if acc.pop("_otp_required", False):
+                return {
+                    "error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"
+                }
             
             # 检查是否有登录错误
             login_error = acc.pop("_login_error", "")
             if login_error:
                 return {"error": login_error}
+            
+            service_token = acc.get("serviceToken", "")
+            user_id = acc.get("userId", "")
             
             if not service_token or not user_id:
                 return {
