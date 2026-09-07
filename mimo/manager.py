@@ -166,6 +166,59 @@ class MimoManager(BasePlatform):
             "serviceToken": result["serviceToken"],
         }
 
+    def get_pending_otp_account(self) -> str | None:
+        """获取等待 OTP 验证的账号名称"""
+        for key, mi in self._mi_account_cache.items():
+            if mi._otp_session is not None:
+                # key 格式是 "account:device_id"
+                return key.split(":")[0]
+        return None
+
+    def submit_otp(self, otp_code: str) -> dict:
+        """提交 OTP 验证码，完成登录
+
+        Args:
+            otp_code: OTP 验证码。
+
+        Returns:
+            登录成功的凭据 dict。
+
+        Raises:
+            LoginError: 登录失败。
+        """
+        # 找到有 OTP 会话的 MiAccount
+        for key, mi in self._mi_account_cache.items():
+            if mi._otp_session is not None:
+                # 使用缓存的会话提交 OTP
+                session = mi._otp_session
+                mi._otp_session = None
+
+                opener = session["opener"]
+                jar = session["jar"]
+                notification_url = session["notification_url"]
+
+                # 提交 OTP 码
+                mi._submit_otp_code(opener, jar, notification_url, otp_code)
+
+                # 重新调用 serviceLogin
+                resp = mi._serviceLogin(opener)
+                if resp.get("code") != 0:
+                    raise LoginError(f"OTP 验证后登录失败: {resp}")
+
+                # 检查响应是否包含必要字段
+                for field in ("userId", "passToken", "location", "nonce", "ssecurity"):
+                    if field not in resp:
+                        raise LoginError(f"OTP 验证后登录响应缺少 '{field}': {resp}")
+
+                service_token = mi._sts(opener, jar, resp)
+                return {
+                    "userId": str(resp["userId"]),
+                    "passToken": resp["passToken"],
+                    "serviceToken": service_token,
+                }
+
+        raise LoginError("没有等待 OTP 验证的账号")
+
     # ══════════════════════════════════════════
     #  查询相关
     # ══════════════════════════════════════════
@@ -174,7 +227,7 @@ class MimoManager(BasePlatform):
         """查询单个 MiMo 账号，失败时自动重登录并重试"""
         if acc.pop("_otp_required", False):
             return {
-                "error": "需要短信验证，请在网页管理界面登录该账号"
+                "error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"
             }
 
         login_error = acc.pop("_login_error", "")

@@ -540,6 +540,41 @@ class ResourceQueryPlugin(Star):
         """处理 MiMo 相关命令"""
         mimo_indices = self._accounts.get_account_indices("mimo")
 
+        # /mimo otp <验证码> — 提交 OTP 验证码
+        if args and args[0].lower() == "otp":
+            if len(args) < 2:
+                yield event.plain_result("用法: /mimo otp <验证码>")
+                return
+            
+            otp_code = args[1].strip()
+            if not otp_code:
+                yield event.plain_result("验证码不能为空")
+                return
+            
+            # 检查是否有等待 OTP 的账号
+            pending = self._mimo.get_pending_otp_account()
+            if not pending:
+                yield event.plain_result("没有等待 OTP 验证的账号")
+                return
+            
+            yield event.plain_result(f"正在提交验证码...")
+            
+            try:
+                result = self._mimo.submit_otp(otp_code)
+                
+                # 更新账号信息
+                all_accounts = self._accounts.get_all_accounts()
+                for acc in all_accounts:
+                    if acc.get("platform") == "mimo" and (acc.get("account") == pending or acc.get("name") == pending):
+                        acc.update(result)
+                        break
+                self._accounts.save_all_accounts(all_accounts)
+                
+                yield event.plain_result(f"✅ OTP 验证成功！账号 {pending} 已登录")
+            except Exception as e:
+                yield event.plain_result(f"❌ OTP 验证失败: {e}")
+            return
+
         # /mimo ls — 列出所有账号
         if args and args[0].lower() == "ls":
             if not mimo_indices:
