@@ -276,7 +276,7 @@
           <div class="card">
             <div class="card-header">
               <div class="card-title">⚙️ MiMo 变量配置</div>
-              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); saveMimoVarConfig()">💾 保存配置</button>
+              <button class="btn btn-primary btn-sm" onclick="saveMimoVarConfig()">💾 保存配置</button>
             </div>
             <div class="card-body">
               <div id="mimo-var-list"></div>
@@ -314,7 +314,7 @@
           <div class="card">
             <div class="card-header">
               <div class="card-title">⚙️ 华数变量配置</div>
-              <button class="btn btn-primary btn-sm" onclick="event.stopPropagation(); saveWasuVarConfig()">💾 保存配置</button>
+              <button class="btn btn-primary btn-sm" onclick="saveWasuVarConfig()">💾 保存配置</button>
             </div>
             <div class="card-body">
               <div id="wasu-var-list"></div>
@@ -441,6 +441,7 @@
             <label class="form-label">登录方式</label>
             <div class="platform-tabs">
               <div class="platform-tab active" data-method="password" onclick="switchMimoLoginMethod('password')">账号密码</div>
+              <div class="platform-tab" data-method="passtoken" onclick="switchMimoLoginMethod('passtoken')">PassToken</div>
               <div class="platform-tab" data-method="token" onclick="switchMimoLoginMethod('token')">ServiceToken</div>
             </div>
           </div>
@@ -492,6 +493,21 @@
             </div>
           </div>
 
+          <!-- PassToken 登录 -->
+          <div id="mimo-passtoken-section" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">PassToken *</label>
+              <input class="form-input" id="mimo-field-passtoken" placeholder="粘贴 PassToken" style="font-family: monospace; font-size: 12px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">User ID *</label>
+              <input class="form-input" id="mimo-field-passtoken-user-id" placeholder="小米用户 ID">
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+              PassToken 必须配合 User ID 使用，查询时会自动换取 ServiceToken
+            </div>
+          </div>
+
           <div id="mimo-login-status" style="margin-top: 12px; padding: 10px; border-radius: 8px; display: none;"></div>
         </div>
 
@@ -518,7 +534,7 @@
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeMimoModal()">取消</button>
-        <button class="btn btn-secondary" id="mimo-login-btn" onclick="mimoLoginOnly()">🔑 登录</button>
+        <button class="btn btn-secondary" id="mimo-test-btn" onclick="testMimoAccount()">🧪 测试</button>
         <button class="btn btn-primary" id="mimo-save-btn" onclick="saveMimoAccount()">💾 保存</button>
       </div>
     </div>
@@ -644,29 +660,7 @@
     // 变量配置结构：{ mimo: { variables: [{name, desc, default, show}], sample_data: {} }, wasu: {...} }
     let templateVars = {};
 
-    // ==================== URL Hash 状态管理 ====================
-    
-    /**
-     * 解析 URL hash 获取当前页面状态
-     * 格式: #page 或 #page/subpage
-     */
-    function parseHash() {
-      const hash = window.location.hash.replace('#', '').split('/');
-      return {
-        page: hash[0] || 'mimo',
-        subPage: hash[1] || 'accounts'
-      };
-    }
-
-    /**
-     * 更新 URL hash（不触发页面跳转）
-     */
-    function updateHash(page, subPage) {
-      const newHash = subPage ? `${page}/${subPage}` : page;
-      history.replaceState(null, '', `#${newHash}`);
-    }
-
-    // 页面切换（支持 event 参数，兼容 onclick 调用）
+    // 页面切换
     function switchPage(page, eventObj) {
       const evt = eventObj || event;
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -675,15 +669,12 @@
       if (evt && evt.target) {
         evt.target.classList.add('active');
       } else {
-        // 从 hash 恢复时，手动找到对应的 tab 并激活
         document.querySelectorAll('.nav-tab').forEach(t => {
           if (t.getAttribute('onclick')?.includes(`'${page}'`)) {
             t.classList.add('active');
           }
         });
       }
-      // 更新 hash，默认显示 accounts 子页面
-      updateHash(page, 'accounts');
       // 激活对应的子页面
       const pageEl = document.getElementById('page-' + page);
       if (pageEl) {
@@ -707,46 +698,8 @@
       if (evt && evt.target) {
         evt.target.classList.add('active');
       } else {
-        // 从 hash 恢复时，手动找到对应的 tab 并激活
         page.querySelectorAll('.sub-tab').forEach(t => {
           if (t.getAttribute('onclick')?.includes(`'${sub}'`)) {
-            t.classList.add('active');
-          }
-        });
-      }
-      // 更新 hash
-      updateHash(parent, sub);
-    }
-
-    /**
-     * 从 URL hash 恢复页面状态
-     */
-    function restorePageState() {
-      const { page, subPage } = parseHash();
-      const validPages = ['mimo', 'wasu', 'jm'];
-      const pageName = validPages.includes(page) ? page : 'mimo';
-      
-      // 切换主页面
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-      const targetPage = document.getElementById('page-' + pageName);
-      if (targetPage) targetPage.classList.add('active');
-      document.querySelectorAll('.nav-tab').forEach(t => {
-        if (t.getAttribute('onclick')?.includes(`'${pageName}'`)) {
-          t.classList.add('active');
-        }
-      });
-      
-      // 切换子页面（仅对有子页面的主页面生效）
-      if (pageName !== 'jm' && targetPage) {
-        const validSubPages = ['accounts', 'variables'];
-        const subName = validSubPages.includes(subPage) ? subPage : 'accounts';
-        targetPage.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
-        targetPage.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
-        const targetSubPage = document.getElementById(pageName + '-' + subName);
-        if (targetSubPage) targetSubPage.classList.add('active');
-        targetPage.querySelectorAll('.sub-tab').forEach(t => {
-          if (t.getAttribute('onclick')?.includes(`'${subName}'`)) {
             t.classList.add('active');
           }
         });
@@ -759,14 +712,6 @@
       await loadAccounts();
       renderMimoVarList();
       renderWasuVarList();
-      
-      // 从 URL hash 恢复页面状态
-      restorePageState();
-    });
-
-    // 监听浏览器前进/后退按钮
-    window.addEventListener('popstate', () => {
-      restorePageState();
     });
 
     async function loadDefaults() {
@@ -814,6 +759,15 @@
       }
       list.innerHTML = mimoAccounts.map((acc, i) => {
         const globalIndex = accounts.indexOf(acc);
+        // 判断凭据类型
+        let credentialType = '未配置';
+        if (acc.serviceToken) {
+          credentialType = 'ServiceToken';
+        } else if (acc.passToken) {
+          credentialType = 'PassToken';
+        } else if (acc.account && acc.password) {
+          credentialType = '账号密码';
+        }
         return `
         <div class="account-card" onclick="editMimoAccount(${globalIndex})" style="cursor: pointer;">
           <div class="account-card-header">
@@ -825,7 +779,7 @@
           </div>
           <div class="account-stats">
             <div><div class="stat-label">账号</div><div class="stat-value">${acc.account || '-'}</div></div>
-            <div><div class="stat-label">登录状态</div><div class="stat-value ${acc.serviceToken ? 'success' : 'warning'}">${acc.serviceToken ? '✓ 已登录' : '○ 未登录'}</div></div>
+            <div><div class="stat-label">凭据</div><div class="stat-value">${credentialType}</div></div>
           </div>
           <div class="account-actions">
             <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation(); editMimoAccount(${globalIndex})">✏️ 编辑</button>
@@ -897,6 +851,8 @@
       document.getElementById('mimo-otp-section').style.display = 'none';
       document.getElementById('mimo-field-service-token').value = '';
       document.getElementById('mimo-field-user-id').value = '';
+      document.getElementById('mimo-field-passtoken').value = '';
+      document.getElementById('mimo-field-passtoken-user-id').value = '';
       document.getElementById('mimo-field-template').value = defaultTemplates['mimo'] || '';
       document.getElementById('mimo-login-status').style.display = 'none';
       updateMimoLoginMethodUI();
@@ -923,12 +879,16 @@
       document.getElementById('mimo-otp-section').style.display = 'none';
       document.getElementById('mimo-field-service-token').value = acc.serviceToken || '';
       document.getElementById('mimo-field-user-id').value = acc.userId || '';
+      document.getElementById('mimo-field-passtoken').value = acc.passToken || '';
+      document.getElementById('mimo-field-passtoken-user-id').value = acc.userId || '';
       document.getElementById('mimo-field-template').value = acc.template || defaultTemplates['mimo'] || '';
       document.getElementById('mimo-login-status').style.display = 'none';
       
-      // 如果已有serviceToken，切换到token模式
+      // 判断登录方式
       if (acc.serviceToken) {
         mimoLoginMethod = 'token';
+      } else if (acc.passToken) {
+        mimoLoginMethod = 'passtoken';
       } else {
         mimoLoginMethod = 'password';
       }
@@ -977,6 +937,7 @@
       });
       document.getElementById('mimo-password-section').style.display = mimoLoginMethod === 'password' ? 'block' : 'none';
       document.getElementById('mimo-token-section').style.display = mimoLoginMethod === 'token' ? 'block' : 'none';
+      document.getElementById('mimo-passtoken-section').style.display = mimoLoginMethod === 'passtoken' ? 'block' : 'none';
     }
 
     function toggleMimoPassword() {
@@ -1154,54 +1115,96 @@
           name = generateDefaultName('mimo');
         }
 
+        // 收集所有字段
         const account = document.getElementById('mimo-field-account').value.trim();
         const password = document.getElementById('mimo-field-password').value.trim();
+        const serviceToken = document.getElementById('mimo-field-service-token').value.trim();
+        const serviceTokenUserId = document.getElementById('mimo-field-user-id').value.trim();
+        const passToken = document.getElementById('mimo-field-passtoken').value.trim();
+        const passTokenUserId = document.getElementById('mimo-field-passtoken-user-id').value.trim();
         const template = document.getElementById('mimo-field-template').value.trim() || defaultTemplates['mimo'] || '';
 
-        if (mimoLoginMethod === 'token') {
-          // ServiceToken 模式
-          const serviceToken = document.getElementById('mimo-field-service-token').value.trim();
-          const userId = document.getElementById('mimo-field-user-id').value.trim();
-          
-          if (!serviceToken) {
-            showMimoLoginStatus('请输入 ServiceToken', 'error');
-            return;
-          }
-          if (!userId) {
-            showMimoLoginStatus('请输入 User ID', 'error');
-            return;
-          }
+        // 检查是否有任何一种完整的凭据
+        const hasPassword = account && password;
+        const hasPassToken = passToken && passTokenUserId;
+        const hasServiceToken = serviceToken && serviceTokenUserId;
 
-          const acc = {
-            platform: 'mimo',
-            name: name,
-            account: account || '',
-            password: password || '',
-            device_id: document.getElementById('mimo-field-device-id').value || '',
-            ua: document.getElementById('mimo-field-ua').value || '',
-            userId: userId,
-            serviceToken: serviceToken,
-            template: template
-          };
+        if (!hasPassword && !hasPassToken && !hasServiceToken) {
+          showMimoLoginStatus('请至少填写一种完整的凭据：账号密码、PassToken+User ID、或 ServiceToken+User ID', 'error');
+          return;
+        }
 
-          if (mimoEditingIndex >= 0) {
-            accounts[mimoEditingIndex] = acc;
-          } else {
-            accounts.push(acc);
-          }
+        // 构建账号对象，保存所有填写的字段
+        const acc = {
+          platform: 'mimo',
+          name: name,
+          account: account || '',
+          password: password || '',
+          device_id: document.getElementById('mimo-field-device-id').value || '',
+          ua: document.getElementById('mimo-field-ua').value || '',
+          template: template
+        };
 
-          await saveAccounts();
-          closeMimoModal();
-          showToast(mimoEditingIndex >= 0 ? 'MiMo 账号已更新' : 'MiMo 账号已添加');
+        // 保存所有填写的凭据
+        if (serviceToken) acc.serviceToken = serviceToken;
+        if (serviceTokenUserId) acc.userId = serviceTokenUserId;
+        if (passToken) acc.passToken = passToken;
+        if (passTokenUserId && !acc.userId) acc.userId = passTokenUserId;
+
+        if (mimoEditingIndex >= 0) {
+          accounts[mimoEditingIndex] = acc;
         } else {
-          // 账号密码模式 - 只保存，不登录
-          if (!account) {
-            showMimoLoginStatus('请输入小米账号', 'error');
+          accounts.push(acc);
+        }
+
+        await saveAccounts();
+        closeMimoModal();
+        showToast(mimoEditingIndex >= 0 ? 'MiMo 账号已更新' : 'MiMo 账号已添加');
+      } catch (e) {
+        showMimoLoginStatus('保存失败: ' + (e.message || '未知错误'), 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 保存';
+      }
+    }
+
+    async function testMimoAccount() {
+      const testBtn = document.getElementById('mimo-test-btn');
+      testBtn.disabled = true;
+      testBtn.textContent = '测试中...';
+
+      try {
+        const account = document.getElementById('mimo-field-account').value.trim();
+        const password = document.getElementById('mimo-field-password').value.trim();
+        const otpCode = document.getElementById('mimo-field-otp').value.trim();
+        const passToken = document.getElementById('mimo-field-passtoken').value.trim();
+        const passTokenUserId = document.getElementById('mimo-field-passtoken-user-id').value.trim();
+        const serviceToken = document.getElementById('mimo-field-service-token').value.trim();
+        const serviceTokenUserId = document.getElementById('mimo-field-user-id').value.trim();
+
+        // 检查是否有任何一种完整的凭据
+        const hasPassword = account && password;
+        const hasPassToken = passToken && passTokenUserId;
+        const hasServiceToken = serviceToken && serviceTokenUserId;
+
+        if (!hasPassword && !hasPassToken && !hasServiceToken) {
+          showMimoLoginStatus('请至少填写一种完整的凭据后再测试', 'error');
+          return;
+        }
+
+        // 如果有账号密码，使用登录 API（支持 OTP）
+        if (hasPassword) {
+          if (mimoOtpMode && !otpCode) {
+            showMimoLoginStatus('请输入验证码', 'error');
             return;
           }
-          if (!password) {
-            showMimoLoginStatus('请输入密码', 'error');
-            return;
+
+          showMimoLoginStatus(mimoOtpMode ? '正在验证...' : '正在登录...', 'info');
+
+          // 先保存账号（如果还没有保存）
+          let name = document.getElementById('mimo-field-name').value.trim();
+          if (!name) {
+            name = generateDefaultName('mimo');
           }
 
           const acc = {
@@ -1210,8 +1213,7 @@
             account: account,
             password: password,
             device_id: document.getElementById('mimo-field-device-id').value || '',
-            ua: document.getElementById('mimo-field-ua').value || '',
-            template: template
+            ua: document.getElementById('mimo-field-ua').value || ''
           };
 
           // 如果是编辑模式，保留原有的凭据
@@ -1227,16 +1229,111 @@
           } else {
             accounts.push(acc);
           }
-
           await saveAccounts();
-          closeMimoModal();
-          showToast(mimoEditingIndex >= 0 ? 'MiMo 账号已更新' : 'MiMo 账号已添加');
+
+          // 重新获取mimo账号列表和索引
+          const mimoAccounts = accounts.filter(a => a.platform === 'mimo');
+          let mimoIdx = -1;
+          for (let i = 0; i < mimoAccounts.length; i++) {
+            if (mimoAccounts[i].name === name && mimoAccounts[i].account === account) {
+              mimoIdx = i;
+              break;
+            }
+          }
+          
+          if (mimoIdx < 0) {
+            mimoIdx = mimoAccounts.length - 1;
+          }
+
+          // 调用登录API
+          const postData = {
+            index: mimoIdx,
+            account: account,
+            password: password
+          };
+          if (mimoOtpMode && otpCode) {
+            postData.otp_code = otpCode;
+          }
+
+          const result = await bridge.apiPost('mimo/login', postData);
+
+          if (result && result.status === 'ok') {
+            showMimoLoginStatus('✅ 测试成功', 'success');
+            mimoOtpMode = false;
+            document.getElementById('mimo-otp-section').style.display = 'none';
+            
+            // 更新账号信息
+            if (result.account) {
+              const idx = accounts.findIndex(a => a.platform === 'mimo' && a.name === name && a.account === account);
+              if (idx >= 0) {
+                accounts[idx] = { ...accounts[idx], ...result.account };
+              }
+              // 自动填写获取到的凭证
+              if (result.account.userId) {
+                document.getElementById('mimo-field-user-id').value = result.account.userId;
+                document.getElementById('mimo-field-passtoken-user-id').value = result.account.userId;
+              }
+              if (result.account.passToken) {
+                document.getElementById('mimo-field-passtoken').value = result.account.passToken;
+              }
+              if (result.account.serviceToken) {
+                document.getElementById('mimo-field-service-token').value = result.account.serviceToken;
+              }
+            }
+            renderAccounts();
+          } else if (result && result.status === 'otp_required') {
+            mimoOtpMode = true;
+            document.getElementById('mimo-otp-section').style.display = 'block';
+            document.getElementById('mimo-field-otp').focus();
+            showMimoLoginStatus('验证码已发送到您的手机，请输入6位数字验证码后再次点击测试', 'info');
+          } else {
+            showMimoLoginStatus(`❌ ${result?.message || '登录失败'}`, 'error');
+          }
+          return;
+        }
+
+        // 其他凭据（PassToken、ServiceToken）使用测试 API
+        showMimoLoginStatus('正在测试...', 'info');
+        
+        const testAcc = {
+          platform: 'mimo',
+          device_id: document.getElementById('mimo-field-device-id').value || 'wb_MIQUERY000001',
+          ua: document.getElementById('mimo-field-ua').value || 'APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1'
+        };
+
+        if (serviceToken) testAcc.serviceToken = serviceToken;
+        if (serviceTokenUserId) testAcc.userId = serviceTokenUserId;
+        if (passToken) testAcc.passToken = passToken;
+        if (passTokenUserId && !testAcc.userId) testAcc.userId = passTokenUserId;
+
+        const result = await bridge.apiPost('mimo/test', testAcc);
+
+        if (result && (result.status === 'ok' || result.message === '测试成功')) {
+          showMimoLoginStatus('✅ 测试成功', 'success');
+          
+          // 自动填写凭证
+          const creds = result.credentials || {};
+          if (creds.userId) {
+            document.getElementById('mimo-field-user-id').value = creds.userId;
+            document.getElementById('mimo-field-passtoken-user-id').value = creds.userId;
+          }
+          if (creds.passToken) {
+            document.getElementById('mimo-field-passtoken').value = creds.passToken;
+          }
+          if (creds.serviceToken) {
+            document.getElementById('mimo-field-service-token').value = creds.serviceToken;
+          }
+        } else {
+          const errMsg = result?.message || result?.error || '测试失败';
+          showMimoLoginStatus(`❌ ${errMsg}`, 'error');
         }
       } catch (e) {
-        showMimoLoginStatus('保存失败: ' + (e.message || '未知错误'), 'error');
+        console.error('[测试错误]', e);
+        const errMsg = e.message || e.toString() || '未知错误';
+        showMimoLoginStatus(`❌ 测试失败: ${errMsg}`, 'error');
       } finally {
-        saveBtn.disabled = false;
-        saveBtn.textContent = '💾 保存';
+        testBtn.disabled = false;
+        testBtn.textContent = '🧪 测试';
       }
     }
 
@@ -1331,11 +1428,21 @@
             if (idx >= 0) {
               accounts[idx] = { ...accounts[idx], ...result.account };
             }
+            // 自动填写获取到的凭证
+            if (result.account.userId) {
+              document.getElementById('mimo-field-user-id').value = result.account.userId;
+              document.getElementById('mimo-field-passtoken-user-id').value = result.account.userId;
+            }
+            if (result.account.passToken) {
+              document.getElementById('mimo-field-passtoken').value = result.account.passToken;
+            }
+            if (result.account.serviceToken) {
+              document.getElementById('mimo-field-service-token').value = result.account.serviceToken;
+            }
           }
           renderAccounts();
           showMimoLoginStatus('登录成功！', 'success');
           mimoOtpMode = false;
-          setTimeout(closeMimoModal, 1500);
         } else if (result && result.status === 'otp_required') {
           // 需要验证码
           mimoOtpMode = true;
@@ -1675,8 +1782,6 @@
     }
 
     async function saveMimoVarConfig() {
-      event.stopPropagation();
-      event.preventDefault();
       try {
         await bridge.apiPost('template-vars', templateVars);
         showToast('MiMo 变量配置已保存');
@@ -1686,8 +1791,6 @@
     }
 
     async function saveWasuVarConfig() {
-      event.stopPropagation();
-      event.preventDefault();
       try {
         await bridge.apiPost('template-vars', templateVars);
         showToast('华数变量配置已保存');

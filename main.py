@@ -35,12 +35,11 @@ from .account import AccountManager
 from .jm import JMDownloader, normalize_album_id
 from .mimo import (
     LoginError,
-    MimoPlatform,
+    MimoManager,
     MimoResult,
     OtpRequired,
     PassTokenExpired,
     StsError,
-    _sync_login_account,
 )
 from .updater import check_update, do_update, reload_plugin
 from .wasu import WasuPlatform
@@ -63,7 +62,7 @@ class ResourceQueryPlugin(Star):
 
         # 初始化管理器和平台模块
         self._accounts = AccountManager(_PLUGIN_NAME, self._plugin_dir)
-        self._mimo = MimoPlatform(self._plugin_dir)
+        self._mimo = MimoManager(self._plugin_dir)
         self._wasu = WasuPlatform(self._plugin_dir)
         self._jm = JMDownloader(self._accounts._get_jm_config_path())
 
@@ -97,6 +96,9 @@ class ResourceQueryPlugin(Star):
         )
         context.register_web_api(
             f"/{_PLUGIN_NAME}/mimo/login", self.mimo_login, ["POST"], "MiMo 登录"
+        )
+        context.register_web_api(
+            f"/{_PLUGIN_NAME}/mimo/test", self.mimo_test, ["POST"], "MiMo 测试查询"
         )
 
     def _fill_default_fields(self):
@@ -424,6 +426,49 @@ class ResourceQueryPlugin(Star):
                     "message": f"登录错误: {e}"
                 })
 
+    async def mimo_test(self):
+        """MiMo 测试查询（仅查询余额）"""
+        from astrbot.api.web import json_response, request
+        from astrbot.api import logger
+        
+        payload = await request.json(default={})
+        account = payload
+        
+        if not account:
+            return json_response({
+                "status": "error",
+                "message": "缺少账号配置"
+            })
+        
+        try:
+            # 使用管理器查询
+            logger.info(f"[MiMo测试] 开始测试查询, 账号: {account.get('account', 'N/A')}")
+            result_data = await self._mimo.query_one(account)
+            
+            if "error" in result_data:
+                logger.warning(f"[MiMo测试] 查询返回错误: {result_data['error']}")
+                return json_response({
+                    "status": "error",
+                    "message": result_data["error"]
+                })
+            
+            logger.info(f"[MiMo测试] 查询成功")
+            return json_response({
+                "status": "ok",
+                "message": "测试成功",
+                "credentials": {
+                    "userId": account.get("userId", ""),
+                    "passToken": account.get("passToken", ""),
+                    "serviceToken": account.get("serviceToken", "")
+                }
+            })
+        except Exception as e:
+            logger.error(f"[MiMo测试] 异常: {type(e).__name__}: {e}")
+            return json_response({
+                "status": "error",
+                "message": f"{type(e).__name__}: {e}"
+            })
+
     # ================== 主指令 ==================
 
     @filter.command("query")
@@ -488,11 +533,8 @@ class ResourceQueryPlugin(Star):
                 if "error" in result:
                     yield event.plain_result(f"📋 {label}\n❌ {result['error']}")
                 else:
-                    prev = self._mimo.limits.get_prev(acc)
                     template = acc.get("template") or None
-                    usage = result.get("usage", {}).get("data", {})
-                    self._mimo.limits.update(acc, usage.get("accountRateLimit", {}))
-                    mr = MimoResult(success=True, account_name=label, data=result, prev_limit=prev, template=template)
+                    mr = MimoResult(success=True, account_name=label, data=result, template=template)
                     yield event.plain_result(mr.to_text())
             
             # 提示跳过的账号
@@ -521,10 +563,7 @@ class ResourceQueryPlugin(Star):
                 if "error" in result:
                     yield event.plain_result(f"📋 {label}\n❌ {result['error']}")
                 else:
-                    prev = self._mimo.limits.get_prev(acc)
-                    usage = result.get("usage", {}).get("data", {})
-                    self._mimo.limits.update(acc, usage.get("accountRateLimit", {}))
-                    mr = MimoResult(success=True, account_name=label, data=result, prev_limit=prev, template=template)
+                    mr = MimoResult(success=True, account_name=label, data=result, template=template)
                     yield event.plain_result(mr.to_text())
                 return
         
@@ -543,10 +582,7 @@ class ResourceQueryPlugin(Star):
                 if "error" in result:
                     yield event.plain_result(f"📋 {name}\n❌ {result['error']}")
                 else:
-                    prev = self._mimo.limits.get_prev(acc)
-                    usage = result.get("usage", {}).get("data", {})
-                    self._mimo.limits.update(acc, usage.get("accountRateLimit", {}))
-                    mr = MimoResult(success=True, account_name=name, data=result, prev_limit=prev, template=template)
+                    mr = MimoResult(success=True, account_name=name, data=result, template=template)
                     yield event.plain_result(mr.to_text())
                 return
         

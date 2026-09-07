@@ -89,8 +89,11 @@ class AccountManager:
             if platform not in ("mimo", "wasu"):
                 continue
 
-            # 读取该平台下的所有 json 文件
+            # 读取该平台下的所有 json 文件（跳过 var_config.json）
             for json_file in platform_dir.glob("*.json"):
+                # 跳过变量配置文件
+                if json_file.name == "var_config.json":
+                    continue
                 try:
                     acc = json.loads(json_file.read_text(encoding="utf-8"))
                     if isinstance(acc, dict):
