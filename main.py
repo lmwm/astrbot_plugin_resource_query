@@ -564,13 +564,26 @@ class ResourceQueryPlugin(Star):
                 
                 # 更新账号信息
                 all_accounts = self._accounts.get_all_accounts()
+                target_acc = None
                 for acc in all_accounts:
                     if acc.get("platform") == "mimo" and (acc.get("account") == pending or acc.get("name") == pending):
                         acc.update(result)
+                        target_acc = acc
                         break
                 self._accounts.save_all_accounts(all_accounts)
                 
                 yield event.plain_result(f"✅ OTP 验证成功！账号 {pending} 已登录")
+                
+                # 自动重新查询该账号
+                if target_acc:
+                    yield event.plain_result("🔍 正在查询...")
+                    query_result = await self._mimo.query_one(target_acc)
+                    if "error" in query_result:
+                        yield event.plain_result(f"❌ {query_result['error']}")
+                    else:
+                        template = target_acc.get("template") or None
+                        mr = MimoResult(success=True, account_name=pending, data=query_result, template=template)
+                        yield event.plain_result(mr.to_text())
             except Exception as e:
                 yield event.plain_result(f"❌ OTP 验证失败: {e}")
             return
