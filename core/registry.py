@@ -8,6 +8,8 @@
 3. 模块隔离：注册中心不参与模块间的直接通信
 """
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
