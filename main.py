@@ -2,11 +2,16 @@
 资源查询 AstrBot 插件（模块化架构）
 
 支持平台：
+  - MiMo：小米 MiMo 平台用量查询
   - 华数广电：流量/通话/余额查询
   - JMComic：漫画下载（仅私聊）
 
 指令：
   /query                    — 查询帮助
+  /mimo                     — 查询所有 MiMo 账号
+  /mimo <序号或名称>        — 查询指定 MiMo 账号
+  /mimo ls                  — 列出所有 MiMo 账号
+  /mimo del <序号或名称>    — 删除 MiMo 账号
   /wasu                     — 查询所有华数账号
   /wasu <序号或名称>        — 查询指定华数账号
   /wasu ls                  — 列出所有华数账号
@@ -20,18 +25,16 @@
 
   ┌─────────────────────────────────────────────────────────────┐
   │                    main.py (总管理模块)                      │
-  │  ┌─────────────┐  ┌─────────────┐                          │
-  │  │  华数模块   │  │  JM模块     │                          │
-  │  └──────┬──────┘  └──────┬──────┘                          │
-  │         │                │                                 │
-  │         └────────────────┼────────────────┐                │
+  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
+  │  │  MiMo模块   │  │  华数模块   │  │  JM模块     │        │
+  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
+  │         │                │                │                │
+  │         └────────────────┼────────────────┘                │
   │                          │                                 │
   │                    ┌─────┴─────┐                           │
   │                    │ 模块注册中心 │                          │
   │                    └───────────┘                           │
   └─────────────────────────────────────────────────────────────┘
-
-注意：MiMo 模块已暂停，文件保留在 modules/mimo/ 但不加载。
 """
 
 import asyncio
@@ -45,6 +48,7 @@ from astrbot.api.message_components import File
 from astrbot.api.star import Context, Star
 
 from .core.manager import PluginManager
+from .modules.mimo import MimoModule, MimoResult
 from .modules.wasu import WasuModule
 from .modules.jm import JMModule, normalize_album_id
 from .updater import check_update, do_update, reload_plugin
@@ -75,7 +79,9 @@ class ResourceQueryPlugin(Star):
 
     def _register_modules(self):
         """注册所有功能模块"""
-        # MiMo 模块已暂停，文件保留在 modules/mimo/ 但不加载
+        # 注册 MiMo 模块
+        mimo_module = MimoModule(self._plugin_dir, _PLUGIN_NAME)
+        self._manager.register_module(mimo_module)
 
         # 注册华数广电模块
         wasu_module = WasuModule(self._plugin_dir, _PLUGIN_NAME)
@@ -189,10 +195,19 @@ class ResourceQueryPlugin(Star):
         import re
         from astrbot.api.web import json_response
 
-        # 变量描述映射（MiMo 相关变量已暂停）
+        # 变量描述映射
         var_descriptions = {
             "label": "账号名称",
             "balance": "余额",
+            "gift_balance": "赠送余额",
+            "input_token": "输入Token（自动格式化）",
+            "output_token": "输出Token（自动格式化）",
+            "cache_token": "缓存Token（自动格式化）",
+            "monthly_cost": "本月费用",
+            "total_cost": "累计费用",
+            "tpm": "TPM 限额",
+            "rpm": "RPM 限额",
+            "concurrency": "并发限额",
             "month_fee": "当月话费",
             "arrears": "欠费",
             "total_used": "本月累计使用",
@@ -204,8 +219,14 @@ class ResourceQueryPlugin(Star):
             "voice_detail": "语音详细信息（多行）",
         }
 
-        # 变量默认值（MiMo 已暂停）
+        # 变量默认值
         var_defaults = {
+            "mimo": {
+                "label": "MiMo账号", "balance": "177.40", "gift_balance": "177.40",
+                "input_token": "10.3亿", "output_token": "324.0万", "cache_token": "9.8亿",
+                "monthly_cost": "120.93", "total_cost": "132.60",
+                "tpm": "10.0万", "rpm": "1,200", "concurrency": "50"
+            },
             "wasu": {
                 "label": "138****8888", "balance": "¥56.80", "month_fee": "¥38.50",
                 "arrears": "¥0.00", "total_used": "15.62 GB", "total": "30.00 GB",
@@ -323,6 +344,26 @@ class ResourceQueryPlugin(Star):
             else:
                 supported = ", ".join(self._manager.get_module_names())
                 yield event.plain_result(f"❌ 未知平台: {platform}\n支持: {supported}")
+
+    # ══════════════════════════════════════════
+    #  MiMo 指令
+    # ══════════════════════════════════════════
+
+    @filter.command("mimo")
+    async def mimo_cmd(self, event: AstrMessageEvent):
+        """/mimo — MiMo 查询指令"""
+        args = event.get_message_str().strip().split()
+        # 移除指令名本身
+        if args and args[0].lower() == "mimo":
+            args = args[1:]
+
+        # 委托给 MiMo 模块处理
+        mimo_module = self._manager.get_module("mimo")
+        if mimo_module:
+            async for result in mimo_module.handle_command("mimo", args, event):
+                yield result
+        else:
+            yield event.plain_result("❌ MiMo 模块未加载")
 
     # ══════════════════════════════════════════
     #  华数指令
