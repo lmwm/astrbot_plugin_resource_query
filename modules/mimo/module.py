@@ -61,6 +61,26 @@ class MimoModule(ModuleBase):
     #  账号管理（覆盖基类方法）
     # ══════════════════════════════════════════
 
+    def _get_account_filename(self, acc: dict) -> str:
+        """获取账号配置文件名（覆盖基类方法）
+
+        文件名格式：mimo_{名称}.json
+
+        Args:
+            acc: 账号配置
+
+        Returns:
+            文件名
+        """
+        name = acc.get("name", "").strip()
+        if not name:
+            name = acc.get("account") or "unnamed"
+        # 清理文件名中的非法字符
+        name = "".join(c for c in name if c.isalnum() or c in "-_\u4e00-\u9fff")
+        if not name:
+            name = "unnamed"
+        return f"mimo_{name}.json"
+
     def get_accounts(self) -> list[dict]:
         """获取所有 MiMo 账号
 

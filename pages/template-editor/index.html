@@ -1262,7 +1262,7 @@
             mimoOtpMode = false;
             document.getElementById('mimo-otp-section').style.display = 'none';
             
-            // 更新账号信息
+            // 更新账号信息并保存到配置
             if (result.account) {
               const idx = accounts.findIndex(a => a.platform === 'mimo' && a.name === name && a.account === account);
               if (idx >= 0) {
@@ -1279,6 +1279,8 @@
               if (result.account.serviceToken) {
                 document.getElementById('mimo-field-service-token').value = result.account.serviceToken;
               }
+              // 自动保存凭据到配置
+              await saveAccounts();
             }
             renderAccounts();
           } else if (result && result.status === 'otp_required') {
@@ -1322,6 +1324,14 @@
           }
           if (creds.serviceToken) {
             document.getElementById('mimo-field-service-token').value = creds.serviceToken;
+          }
+          
+          // 自动保存凭据到配置（如果有编辑中的账号）
+          if (mimoEditingIndex >= 0 && accounts[mimoEditingIndex]) {
+            if (creds.userId) accounts[mimoEditingIndex].userId = creds.userId;
+            if (creds.passToken) accounts[mimoEditingIndex].passToken = creds.passToken;
+            if (creds.serviceToken) accounts[mimoEditingIndex].serviceToken = creds.serviceToken;
+            await saveAccounts();
           }
         } else {
           const errMsg = result?.message || result?.error || '操作失败';
@@ -1422,7 +1432,7 @@
         const result = await bridge.apiPost('mimo/login', postData);
 
         if (result && result.status === 'ok') {
-          // 更新账号信息
+          // 更新账号信息并保存到配置
           if (result.account) {
             const idx = accounts.indexOf(acc);
             if (idx >= 0) {
@@ -1439,6 +1449,8 @@
             if (result.account.serviceToken) {
               document.getElementById('mimo-field-service-token').value = result.account.serviceToken;
             }
+            // 自动保存凭据到配置
+            await saveAccounts();
           }
           renderAccounts();
           showMimoLoginStatus('登录成功！', 'success');
