@@ -884,11 +884,13 @@
       document.getElementById('mimo-field-template').value = acc.template || defaultTemplates['mimo'] || '';
       document.getElementById('mimo-login-status').style.display = 'none';
       
-      // 判断登录方式
-      if (acc.serviceToken) {
-        mimoLoginMethod = 'token';
+      // 判断登录方式（优先级：账号密码 > PassToken > ServiceToken）
+      if (acc.account && acc.password) {
+        mimoLoginMethod = 'password';
       } else if (acc.passToken) {
         mimoLoginMethod = 'passtoken';
+      } else if (acc.serviceToken) {
+        mimoLoginMethod = 'token';
       } else {
         mimoLoginMethod = 'password';
       }
