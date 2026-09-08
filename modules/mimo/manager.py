@@ -2,6 +2,10 @@
 
 注意：此管理器是 MiMo 模块的内部实现，不对外暴露。
 MiMoModule 通过组合方式使用此管理器。
+
+登录流程：
+  1. 账号密码 → PassToken + User ID（login_with_password）
+  2. PassToken → ServiceToken（login_with_passtoken）
 """
 
 import asyncio
@@ -45,7 +49,15 @@ class MimoManager:
         return await loop.run_in_executor(None, self._sync_re_login_account, acc)
 
     def login_account(self, acc: dict, otp_code: str | None = None) -> dict:
-        """同步：完整登录流程（在线程中调用）"""
+        """同步：完整登录流程（在线程中调用）
+
+        流程：
+          1. 账号密码 → PassToken + User ID
+          2. PassToken → ServiceToken
+
+        Returns:
+            dict: {"userId", "passToken", "serviceToken"}
+        """
         return self._sync_login_account(acc, otp_code)
 
     def _create_mi_account(self, acc: dict) -> MiAccount:
@@ -72,36 +84,61 @@ class MimoManager:
         self._mi_account_cache[cache_key] = mi
         return mi
 
+    def _get_service_token(self, mi: MiAccount, user_id: str, pass_token: str, acc: dict) -> None:
+        """通过 PassToken 获取 ServiceToken 并更新账号配置
+
+        Args:
+            mi: MiAccount 实例
+            user_id: 用户 ID
+            pass_token: PassToken
+            acc: 账号配置字典（会被修改）
+        """
+        user_id, service_token = mi.login_with_passtoken(user_id, pass_token)
+        acc["userId"] = user_id
+        acc["serviceToken"] = service_token
+
     def _sync_ensure_account(self, acc: dict) -> dict:
-        """同步：确保账号有可用凭据。优先级：serviceToken > passToken > account+password"""
+        """同步：确保账号有可用凭据
+
+        优先级：serviceToken > passToken > account+password
+
+        流程：
+          1. 如果有 serviceToken，直接返回
+          2. 如果有 passToken，调用 login_with_passtoken() 获取 serviceToken
+          3. 如果有账号密码，调用 login_with_password() 获取 passToken，再获取 serviceToken
+        """
         service_token = acc.get("serviceToken", "")
         pass_token = acc.get("passToken", "")
         user_id = acc.get("userId", "")
 
+        # 已有 serviceToken，直接返回
         if service_token and user_id:
             return acc
 
+        # 尝试用 passToken 获取 serviceToken
         if pass_token:
             mi = self._create_mi_account(acc)
             try:
-                user_id, service_token = mi.login_with_passtoken(user_id, pass_token)
-                acc["userId"] = user_id
-                acc["serviceToken"] = service_token
+                self._get_service_token(mi, user_id, pass_token, acc)
                 return acc
             except PassTokenExpired:
                 acc["passToken"] = ""
             except (OSError, StsError):
                 pass
 
+        # 尝试用账号密码登录
         account = acc.get("account", "")
         password = acc.get("password", "")
         if account and password:
             mi = self._create_mi_account(acc)
             try:
+                # 第一步：账号密码 → PassToken + User ID
                 result = mi.login_with_password(account, password)
                 acc["userId"] = result["userId"]
                 acc["passToken"] = result["passToken"]
-                acc["serviceToken"] = result["serviceToken"]
+
+                # 第二步：PassToken → ServiceToken
+                self._get_service_token(mi, result["userId"], result["passToken"], acc)
                 return acc
             except OtpRequired:
                 acc["_otp_required"] = True
@@ -115,32 +152,38 @@ class MimoManager:
         return acc
 
     def _sync_re_login_account(self, acc: dict) -> dict:
-        """同步：查询失败后重新登录。优先级：passToken > account+password"""
+        """同步：查询失败后重新登录
+
+        优先级：passToken > account+password
+        """
         acc["serviceToken"] = ""
         pass_token = acc.get("passToken", "")
         user_id = acc.get("userId", "")
 
+        # 尝试用 passToken 获取 serviceToken
         if pass_token:
             mi = self._create_mi_account(acc)
             try:
-                user_id, service_token = mi.login_with_passtoken(user_id, pass_token)
-                acc["userId"] = user_id
-                acc["serviceToken"] = service_token
+                self._get_service_token(mi, user_id, pass_token, acc)
                 return acc
             except PassTokenExpired:
                 acc["passToken"] = ""
             except (OSError, StsError):
                 pass
 
+        # 尝试用账号密码登录
         account = acc.get("account", "")
         password = acc.get("password", "")
         if account and password:
             mi = self._create_mi_account(acc)
             try:
+                # 第一步：账号密码 → PassToken + User ID
                 result = mi.login_with_password(account, password)
                 acc["userId"] = result["userId"]
                 acc["passToken"] = result["passToken"]
-                acc["serviceToken"] = result["serviceToken"]
+
+                # 第二步：PassToken → ServiceToken
+                self._get_service_token(mi, result["userId"], result["passToken"], acc)
                 return acc
             except OtpRequired:
                 acc["_otp_required"] = True
@@ -154,17 +197,33 @@ class MimoManager:
         return acc
 
     def _sync_login_account(self, acc: dict, otp_code: str | None = None) -> dict:
-        """同步：完整登录流程，返回凭据 dict"""
+        """同步：完整登录流程，返回凭据 dict
+
+        流程：
+          1. 账号密码 → PassToken + User ID（或 OTP 验证）
+          2. PassToken → ServiceToken
+
+        Returns:
+            dict: {"account", "password", "userId", "passToken", "serviceToken"}
+        """
         mi = self._create_mi_account(acc)
+
+        # 第一步：账号密码 → PassToken + User ID
         result = mi.login_with_password(
             acc["account"], acc["password"], otp_code=otp_code
         )
+
+        # 第二步：PassToken → ServiceToken
+        user_id, service_token = mi.login_with_passtoken(
+            result["userId"], result["passToken"]
+        )
+
         return {
             "account": acc["account"],
             "password": acc["password"],
-            "userId": result["userId"],
+            "userId": user_id,
             "passToken": result["passToken"],
-            "serviceToken": result["serviceToken"],
+            "serviceToken": service_token,
         }
 
     def get_pending_otp_account(self) -> str | None:
@@ -178,11 +237,15 @@ class MimoManager:
     def submit_otp(self, otp_code: str) -> dict:
         """提交 OTP 验证码，完成登录
 
+        流程：
+          1. 提交 OTP 验证码，获取 PassToken + User ID
+          2. 通过 PassToken 获取 ServiceToken
+
         Args:
             otp_code: OTP 验证码。
 
         Returns:
-            登录成功的凭据 dict。
+            登录成功的凭据 dict: {"userId", "passToken", "serviceToken"}
 
         Raises:
             LoginError: 登录失败。
@@ -190,31 +253,17 @@ class MimoManager:
         # 找到有 OTP 会话的 MiAccount
         for key, mi in self._mi_account_cache.items():
             if mi._otp_session is not None:
-                # 使用缓存的会话提交 OTP
-                session = mi._otp_session
-                mi._otp_session = None
+                # 第一步：提交 OTP，获取 PassToken + User ID
+                result = mi.login_with_password("", "", otp_code=otp_code)
 
-                opener = session["opener"]
-                jar = session["jar"]
-                notification_url = session["notification_url"]
+                # 第二步：PassToken → ServiceToken
+                user_id, service_token = mi.login_with_passtoken(
+                    result["userId"], result["passToken"]
+                )
 
-                # 提交 OTP 码
-                mi._submit_otp_code(opener, jar, notification_url, otp_code)
-
-                # 重新调用 serviceLogin
-                resp = mi._serviceLogin(opener)
-                if resp.get("code") != 0:
-                    raise LoginError(f"OTP 验证后登录失败: {resp}")
-
-                # 检查响应是否包含必要字段
-                for field in ("userId", "passToken", "location", "nonce", "ssecurity"):
-                    if field not in resp:
-                        raise LoginError(f"OTP 验证后登录响应缺少 '{field}': {resp}")
-
-                service_token = mi._sts(opener, jar, resp)
                 return {
-                    "userId": str(resp["userId"]),
-                    "passToken": resp["passToken"],
+                    "userId": user_id,
+                    "passToken": result["passToken"],
                     "serviceToken": service_token,
                 }
 

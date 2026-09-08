@@ -1,6 +1,10 @@
 """小米账号登录封装
 
 参考 MiService (https://github.com/Yonsm/MiService) 的 miaccount.py 实现。
+
+功能拆分：
+  1. login_with_password() - 账号密码登录 → 获取 PassToken + User ID（包括 OTP）
+  2. login_with_passtoken() - PassToken → 获取 ServiceToken
 """
 
 import base64
@@ -34,65 +38,33 @@ class MiAccount:
         # 缓存OTP会话状态，保持 opener/jar 在整个OTP流程中不变
         self._otp_session = None
 
-    def login_with_passtoken(self, user_id: str, pass_token: str) -> tuple[str, str]:
-        """使用 passToken 登录，返回 (userId, serviceToken)"""
-        opener, jar = new_opener()
-        for n, v in [
-            ("sdkVersion", "3.9"),
-            ("deviceId", self.device_id),
-            ("userId", user_id),
-            ("passToken", pass_token),
-        ]:
-            inject_cookie(jar, n, v)
-        resp = self._serviceLogin(opener)
-        code = resp.get("code")
-        if code != 0:
-            if code == 70016:
-                raise PassTokenExpired(f"passToken 已过期 (code={code})")
-            raise StsError(f"serviceLogin 失败 (code={code})")
-        if not resp.get("userId"):
-            raise PassTokenExpired("passToken 无效")
-        service_token = self._sts(opener, jar, resp)
-        return str(resp["userId"]), service_token
+    # ══════════════════════════════════════════
+    #  1. 账号登录 → 获取 PassToken + User ID
+    # ══════════════════════════════════════════
 
     def login_with_password(
         self, account: str, password: str, otp_code: str | None = None
     ) -> dict:
-        """使用账号密码登录，返回含 userId/passToken/serviceToken 的 dict
+        """使用账号密码登录，获取 PassToken + User ID
 
-        OTP 流程分两次调用：
-        - 第一次（无 otp_code）：触发 OTP 发送，抛出 OtpRequired，缓存会话
-        - 第二次（有 otp_code）：提交 OTP 码，使用缓存的会话继续登录
+        功能：完成账号密码认证，获取 PassToken 和 User ID。
+        如果需要 OTP 验证码，会缓存会话并抛出 OtpRequired。
+
+        Args:
+            account: 小米账号（手机号或邮箱）
+            password: 密码
+            otp_code: OTP 验证码（可选，用于二次调用）
+
+        Returns:
+            dict: {"userId": str, "passToken": str}
+
+        Raises:
+            OtpRequired: 需要 OTP 验证码（第一次调用）
+            LoginError: 登录失败
         """
         # === 第二次调用：提交 OTP 码 ===
         if otp_code and self._otp_session:
-            session = self._otp_session
-            self._otp_session = None
-
-            opener = session["opener"]
-            jar = session["jar"]
-            notification_url = session["notification_url"]
-            sid = session["sid"]
-
-            # 提交 OTP 码
-            self._submit_otp_code(opener, jar, notification_url, otp_code)
-
-            # 重新调用 serviceLogin（此时 session 已有认证 cookies）
-            resp = self._serviceLogin(opener)
-            if resp.get("code") != 0:
-                raise LoginError(f"OTP 验证后登录失败: {resp}")
-
-            # 检查响应是否包含必要字段
-            for key in ("userId", "passToken", "location", "nonce", "ssecurity"):
-                if key not in resp:
-                    raise LoginError(f"OTP 验证后登录响应缺少 '{key}': {resp}")
-
-            service_token = self._sts(opener, jar, resp)
-            return {
-                "userId": str(resp["userId"]),
-                "passToken": resp["passToken"],
-                "serviceToken": service_token,
-            }
+            return self._handle_otp_submit(otp_code)
 
         # === 第一次调用：开始登录 ===
         opener, jar = new_opener()
@@ -102,12 +74,10 @@ class MiAccount:
         # 1. serviceLogin
         resp = self._serviceLogin(opener)
         if resp.get("code") == 0:
-            # 已经登录（有 passToken cookie），直接获取 STS
-            st = self._sts(opener, jar, resp)
+            # 已经登录（有 passToken cookie），直接返回
             return {
                 "userId": str(resp["userId"]),
                 "passToken": resp.get("passToken", ""),
-                "serviceToken": st,
             }
 
         if not resp.get("qs"):
@@ -132,20 +102,95 @@ class MiAccount:
             self._trigger_otp_send(opener, notification_url)
             raise OtpRequired(notification_url)
 
-        # 4. 不需要 OTP，直接获取 STS
-        for key in ("userId", "passToken", "location", "nonce", "ssecurity"):
+        # 4. 不需要 OTP，直接返回
+        for key in ("userId", "passToken"):
             if key not in resp2:
                 raise LoginError(f"登录响应缺少 '{key}': {resp2}")
 
-        service_token = self._sts(opener, jar, resp2)
         return {
             "userId": str(resp2["userId"]),
             "passToken": resp2["passToken"],
-            "serviceToken": service_token,
         }
 
+    def _handle_otp_submit(self, otp_code: str) -> dict:
+        """处理 OTP 验证码提交，返回 PassToken + User ID
+
+        Args:
+            otp_code: OTP 验证码
+
+        Returns:
+            dict: {"userId": str, "passToken": str}
+        """
+        session = self._otp_session
+        self._otp_session = None
+
+        opener = session["opener"]
+        jar = session["jar"]
+        notification_url = session["notification_url"]
+
+        # 提交 OTP 码
+        self._submit_otp_code(opener, jar, notification_url, otp_code)
+
+        # 重新调用 serviceLogin（此时 session 已有认证 cookies）
+        resp = self._serviceLogin(opener)
+        if resp.get("code") != 0:
+            raise LoginError(f"OTP 验证后登录失败: {resp}")
+
+        # 检查响应是否包含必要字段
+        for key in ("userId", "passToken"):
+            if key not in resp:
+                raise LoginError(f"OTP 验证后登录响应缺少 '{key}': {resp}")
+
+        return {
+            "userId": str(resp["userId"]),
+            "passToken": resp["passToken"],
+        }
+
+    # ══════════════════════════════════════════
+    #  2. PassToken → 获取 ServiceToken
+    # ══════════════════════════════════════════
+
+    def login_with_passtoken(self, user_id: str, pass_token: str) -> tuple[str, str]:
+        """使用 PassToken 获取 ServiceToken
+
+        功能：通过 PassToken 换取 ServiceToken。
+
+        Args:
+            user_id: 用户 ID
+            pass_token: PassToken
+
+        Returns:
+            tuple: (userId, serviceToken)
+
+        Raises:
+            PassTokenExpired: PassToken 已过期
+            StsError: STS 换取失败
+        """
+        opener, jar = new_opener()
+        for n, v in [
+            ("sdkVersion", "3.9"),
+            ("deviceId", self.device_id),
+            ("userId", user_id),
+            ("passToken", pass_token),
+        ]:
+            inject_cookie(jar, n, v)
+
+        resp = self._serviceLogin(opener)
+        code = resp.get("code")
+        if code != 0:
+            if code == 70016:
+                raise PassTokenExpired(f"passToken 已过期 (code={code})")
+            raise StsError(f"serviceLogin 失败 (code={code})")
+
+        if not resp.get("userId"):
+            raise PassTokenExpired("passToken 无效")
+
+        # 通过 STS 换取 ServiceToken
+        service_token = self._sts(opener, jar, resp)
+        return str(resp["userId"]), service_token
+
     # ──────────────────────────────────────────────
-    #  内部方法
+    #  内部方法：API 调用
     # ──────────────────────────────────────────────
 
     def _serviceLogin(self, opener, jar=None, extra_cookies=None) -> dict:
@@ -186,6 +231,10 @@ class MiAccount:
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         with opener.open(req, timeout=15) as r:
             return parse_resp(r.read())
+
+    # ──────────────────────────────────────────────
+    #  内部方法：OTP 相关
+    # ──────────────────────────────────────────────
 
     def _trigger_otp_send(self, opener, notification_url):
         """触发 OTP 验证码发送（参考 MiService _verify_otp 步骤 1-4）
@@ -328,6 +377,10 @@ class MiAccount:
         inject_cookie(jar, "deviceId", self.device_id, domain="account.xiaomi.com")
 
         logger.info("[_submit_otp_code] OTP 验证码提交完成")
+
+    # ──────────────────────────────────────────────
+    #  内部方法：STS 换取
+    # ──────────────────────────────────────────────
 
     def _sts(self, opener, jar, resp) -> str:
         """通过 STS 换取 serviceToken"""
