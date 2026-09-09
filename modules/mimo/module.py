@@ -653,6 +653,9 @@ class MimoModule(ModuleBase):
 
     async def _handle_query_one(self, identifier: str, event, accounts: list[dict]):
         """查询指定账号"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         # 按名称查找
         acc = self._find_account(accounts, identifier)
         if acc:
@@ -668,7 +671,10 @@ class MimoModule(ModuleBase):
                     data=result.get("data", {}),
                     template=result.get("template")
                 )
-                yield event.plain_result(mr.to_text())
+                logger.info(f"[MiMo] mr.to_text() 调用前")
+                text = mr.to_text()
+                logger.info(f"[MiMo] mr.to_text() 返回: {repr(text[:100])}")
+                yield event.plain_result(text)
             return
 
         yield event.plain_result(f"❌ 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号")

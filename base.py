@@ -1,7 +1,10 @@
 """资源查询插件 - 基础框架"""
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -15,6 +18,7 @@ class QueryResult:
 
     def to_text(self) -> str:
         """转换为文本格式"""
+        logger.info(f"[QueryResult.to_text] success={self.success}, platform={self.platform}, account_name={self.account_name}")
         if not self.success:
             return f"📋 {self.platform} - {self.account_name}\n❌ {self.error}"
         return self._format_data()
