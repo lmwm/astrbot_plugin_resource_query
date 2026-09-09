@@ -97,15 +97,71 @@ class MimoManager:
         acc["userId"] = user_id
         acc["serviceToken"] = service_token
 
+    def _try_pass_token_login(self, mi: MiAccount, user_id: str, pass_token: str, acc: dict) -> bool:
+        """尝试使用 passToken 获取 serviceToken
+
+        Args:
+            mi: MiAccount 实例
+            user_id: 用户 ID
+            pass_token: PassToken
+            acc: 账号配置字典（会被修改）
+
+        Returns:
+            是否成功获取 serviceToken
+        """
+        try:
+            self._get_service_token(mi, user_id, pass_token, acc)
+            return True
+        except PassTokenExpired:
+            acc["passToken"] = ""
+            return False
+        except (OSError, StsError):
+            return False
+
+    def _try_password_login(self, mi: MiAccount, acc: dict) -> bool:
+        """尝试使用账号密码登录
+
+        流程：
+          1. 账号密码 → PassToken + User ID
+          2. PassToken → ServiceToken
+
+        Args:
+            mi: MiAccount 实例
+            acc: 账号配置字典（会被修改）
+
+        Returns:
+            是否成功登录
+        """
+        account = acc.get("account", "")
+        password = acc.get("password", "")
+
+        if not account or not password:
+            acc["_login_error"] = "令牌过期，请使用 /mimo otp <验证码> 或重新登录"
+            return False
+
+        try:
+            # 第一步：账号密码 → PassToken + User ID
+            result = mi.login_with_password(account, password)
+            acc["userId"] = result["userId"]
+            acc["passToken"] = result["passToken"]
+
+            # 第二步：PassToken → ServiceToken
+            self._get_service_token(mi, result["userId"], result["passToken"], acc)
+            return True
+        except OtpRequired:
+            acc["_otp_required"] = True
+            return False
+        except LoginError as e:
+            acc["_login_error"] = f"登录失败: {e}"
+            return False
+        except (OSError, StsError) as e:
+            acc["_login_error"] = f"网络错误: {e}"
+            return False
+
     def _sync_ensure_account(self, acc: dict) -> dict:
         """同步：确保账号有可用凭据
 
         优先级：serviceToken > passToken > account+password
-
-        流程：
-          1. 如果有 serviceToken，直接返回
-          2. 如果有 passToken，调用 login_with_passtoken() 获取 serviceToken
-          3. 如果有账号密码，调用 login_with_password() 获取 passToken，再获取 serviceToken
         """
         service_token = acc.get("serviceToken", "")
         pass_token = acc.get("passToken", "")
@@ -118,37 +174,12 @@ class MimoManager:
         # 尝试用 passToken 获取 serviceToken
         if pass_token:
             mi = self._create_mi_account(acc)
-            try:
-                self._get_service_token(mi, user_id, pass_token, acc)
+            if self._try_pass_token_login(mi, user_id, pass_token, acc):
                 return acc
-            except PassTokenExpired:
-                acc["passToken"] = ""
-            except (OSError, StsError):
-                pass
 
         # 尝试用账号密码登录
-        account = acc.get("account", "")
-        password = acc.get("password", "")
-        if account and password:
-            mi = self._create_mi_account(acc)
-            try:
-                # 第一步：账号密码 → PassToken + User ID
-                result = mi.login_with_password(account, password)
-                acc["userId"] = result["userId"]
-                acc["passToken"] = result["passToken"]
-
-                # 第二步：PassToken → ServiceToken
-                self._get_service_token(mi, result["userId"], result["passToken"], acc)
-                return acc
-            except OtpRequired:
-                acc["_otp_required"] = True
-            except LoginError as e:
-                acc["_login_error"] = f"登录失败: {e}"
-            except (OSError, StsError) as e:
-                acc["_login_error"] = f"网络错误: {e}"
-            return acc
-
-        acc["_login_error"] = "令牌过期，请使用 /mimo otp <验证码> 或重新登录"
+        mi = self._create_mi_account(acc)
+        self._try_password_login(mi, acc)
         return acc
 
     def _sync_re_login_account(self, acc: dict) -> dict:
@@ -163,37 +194,12 @@ class MimoManager:
         # 尝试用 passToken 获取 serviceToken
         if pass_token:
             mi = self._create_mi_account(acc)
-            try:
-                self._get_service_token(mi, user_id, pass_token, acc)
+            if self._try_pass_token_login(mi, user_id, pass_token, acc):
                 return acc
-            except PassTokenExpired:
-                acc["passToken"] = ""
-            except (OSError, StsError):
-                pass
 
         # 尝试用账号密码登录
-        account = acc.get("account", "")
-        password = acc.get("password", "")
-        if account and password:
-            mi = self._create_mi_account(acc)
-            try:
-                # 第一步：账号密码 → PassToken + User ID
-                result = mi.login_with_password(account, password)
-                acc["userId"] = result["userId"]
-                acc["passToken"] = result["passToken"]
-
-                # 第二步：PassToken → ServiceToken
-                self._get_service_token(mi, result["userId"], result["passToken"], acc)
-                return acc
-            except OtpRequired:
-                acc["_otp_required"] = True
-            except LoginError as e:
-                acc["_login_error"] = f"重新登录失败: {e}"
-            except (OSError, StsError) as e:
-                acc["_login_error"] = f"网络错误: {e}"
-            return acc
-
-        acc["_login_error"] = "令牌过期，请使用 /mimo otp <验证码> 或重新登录"
+        mi = self._create_mi_account(acc)
+        self._try_password_login(mi, acc)
         return acc
 
     def _sync_login_account(self, acc: dict, otp_code: str | None = None) -> dict:

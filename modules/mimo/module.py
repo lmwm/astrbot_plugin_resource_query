@@ -58,6 +58,49 @@ class MimoModule(ModuleBase):
         return "小米 MiMo 平台用量查询"
 
     # ══════════════════════════════════════════
+    #  通用工具方法
+    # ══════════════════════════════════════════
+
+    def _find_account(self, accounts: list[dict], identifier: str) -> dict | None:
+        """根据名称或账号查找账号
+
+        Args:
+            accounts: 账号列表
+            identifier: 账号名称或账号 ID
+
+        Returns:
+            找到的账号字典，未找到返回 None
+        """
+        for acc in accounts:
+            name = acc.get("name", "")
+            account = acc.get("account", "")
+            if identifier in (name, account):
+                return acc
+        return None
+
+    def _create_result(self, success: bool, account_name: str, data: dict = None,
+                       error: str = "", template: str = None) -> MimoResult:
+        """创建 MimoResult 对象
+
+        Args:
+            success: 是否成功
+            account_name: 账号名称
+            data: 查询数据
+            error: 错误信息
+            template: 消息模板
+
+        Returns:
+            MimoResult 对象
+        """
+        return MimoResult(
+            success=success,
+            account_name=account_name,
+            data=data or {},
+            error=error,
+            template=template,
+        )
+
+    # ══════════════════════════════════════════
     #  账号管理（覆盖基类方法）
     # ══════════════════════════════════════════
 
@@ -318,7 +361,6 @@ class MimoModule(ModuleBase):
 
     async def _handle_login_api(self):
         """处理 MiMo 登录 API"""
-        from ...common.utils import load_json_file, save_json_file
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})
@@ -468,147 +510,160 @@ class MimoModule(ModuleBase):
 
         # /mimo otp <验证码> — 提交 OTP 验证码
         if args and args[0].lower() == "otp":
-            if len(args) < 2:
-                yield event.plain_result("用法: /mimo otp <验证码>")
-                return
-
-            otp_code = args[1].strip()
-            if not otp_code:
-                yield event.plain_result("验证码不能为空")
-                return
-
-            # 检查是否有等待 OTP 的账号
-            pending = self.get_pending_otp_account()
-            if not pending:
-                yield event.plain_result("没有等待 OTP 验证的账号")
-                return
-
-            yield event.plain_result("正在提交验证码...")
-
-            try:
-                result = self.submit_otp(otp_code)
-
-                # 使用配置管理方法更新账号信息
-                self.update_account_by_match(
-                    match_fn=lambda acc: acc.get("account") == pending or acc.get("name") == pending,
-                    updates=result,
-                )
-
-                yield event.plain_result(f"✅ OTP 验证成功！账号 {pending} 已登录")
-
-                # 自动重新查询该账号
-                target_acc = None
-                for acc in accounts:
-                    if acc.get("account") == pending or acc.get("name") == pending:
-                        target_acc = acc
-                        break
-
-                if target_acc:
-                    yield event.plain_result("🔍 正在查询...")
-                    query_result = await self.query(target_acc)
-                    if not query_result.get("success"):
-                        yield event.plain_result(f"❌ {query_result.get('error')}")
-                    else:
-                        mr = MimoResult(
-                            success=True,
-                            account_name=pending,
-                            data=query_result.get("data", {}),
-                            template=query_result.get("template")
-                        )
-                        yield event.plain_result(mr.to_text())
-            except Exception as e:
-                yield event.plain_result(f"❌ OTP 验证失败: {e}")
+            await self._handle_otp_command(args, event, accounts)
             return
 
         # /mimo ls — 列出所有账号
         if args and args[0].lower() == "ls":
-            if not accounts:
-                yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
-                return
-            lines = [f"📋 共 {len(accounts)} 个 MiMo 账号:"]
-            for i, acc in enumerate(accounts):
-                status = "✅" if acc.get("serviceToken") else "❌"
-                name = acc.get("name") or acc.get("account") or f"MiMo账号{i+1}"
-                lines.append(f"  {i + 1}. {status} {name}")
-            yield event.plain_result("\n".join(lines))
+            self._handle_ls_command(event, accounts)
             return
 
         # /mimo del <序号或名称> — 删除指定账号
         if args and args[0].lower() == "del":
-            if len(args) < 2:
-                yield event.plain_result("用法: /mimo del <序号或名称>")
-                return
-
-            del_arg = args[1]
-
-            # 尝试按序号删除
-            if del_arg.isdigit():
-                del_idx = int(del_arg) - 1
-                if 0 <= del_idx < len(accounts):
-                    deleted = self.delete_account(del_idx)
-                    if deleted:
-                        name = deleted.get("name") or deleted.get("account") or "未知"
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-
-            # 按名称删除
-            for i, acc in enumerate(accounts):
-                name = acc.get("name") or acc.get("account") or ""
-                if name == del_arg:
-                    deleted = self.delete_account(i)
-                    if deleted:
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-
-            yield event.plain_result(f"❌ 未找到账号: {del_arg}")
+            self._handle_del_command(args, event, accounts)
             return
 
         # /mimo — 查询所有账号
         if not args:
-            if not accounts:
-                yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
-                return
-            yield event.plain_result("🔍 正在查询所有 MiMo 账号...")
-
-            # 查询所有账号
-            for acc in accounts:
-                result = await self.query(acc)
-                label = acc.get("name") or acc.get("account") or "MiMo账号"
-                if not result.get("success"):
-                    yield event.plain_result(f"📋 {label}\n❌ {result.get('error')}")
-                else:
-                    mr = MimoResult(
-                        success=True,
-                        account_name=label,
-                        data=result.get("data", {}),
-                        template=result.get("template")
-                    )
-                    yield event.plain_result(mr.to_text())
+            await self._handle_query_all(event, accounts)
             return
 
         # /mimo <名称> — 查询指定账号
-        query_arg = args[0]
+        await self._handle_query_one(args[0], event, accounts)
 
-        # 按名称查找
-        for acc in accounts:
-            name = acc.get("name") or acc.get("account") or ""
-            if name == query_arg:
+    async def _handle_otp_command(self, args: list[str], event, accounts: list[dict]):
+        """处理 OTP 验证码提交"""
+        if len(args) < 2:
+            yield event.plain_result("用法: /mimo otp <验证码>")
+            return
+
+        otp_code = args[1].strip()
+        if not otp_code:
+            yield event.plain_result("验证码不能为空")
+            return
+
+        # 检查是否有等待 OTP 的账号
+        pending = self.get_pending_otp_account()
+        if not pending:
+            yield event.plain_result("没有等待 OTP 验证的账号")
+            return
+
+        yield event.plain_result("正在提交验证码...")
+
+        try:
+            result = self.submit_otp(otp_code)
+
+            # 使用配置管理方法更新账号信息
+            self.update_account_by_match(
+                match_fn=lambda acc: acc.get("account") == pending or acc.get("name") == pending,
+                updates=result,
+            )
+
+            yield event.plain_result(f"✅ OTP 验证成功！账号 {pending} 已登录")
+
+            # 自动重新查询该账号
+            target_acc = self._find_account(accounts, pending)
+            if target_acc:
                 yield event.plain_result("🔍 正在查询...")
-                result = await self.query(acc)
-                if not result.get("success"):
-                    yield event.plain_result(f"📋 {name}\n❌ {result.get('error')}")
+                query_result = await self.query(target_acc)
+                if not query_result.get("success"):
+                    yield event.plain_result(f"❌ {query_result.get('error')}")
                 else:
-                    mr = MimoResult(
+                    mr = self._create_result(
                         success=True,
-                        account_name=name,
-                        data=result.get("data", {}),
-                        template=result.get("template")
+                        account_name=pending,
+                        data=query_result.get("data", {}),
+                        template=query_result.get("template")
                     )
                     yield event.plain_result(mr.to_text())
+        except Exception as e:
+            yield event.plain_result(f"❌ OTP 验证失败: {e}")
+
+    def _handle_ls_command(self, event, accounts: list[dict]):
+        """列出所有账号"""
+        if not accounts:
+            yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
+            return
+        lines = [f"📋 共 {len(accounts)} 个 MiMo 账号:"]
+        for i, acc in enumerate(accounts):
+            status = "✅" if acc.get("serviceToken") else "❌"
+            name = acc.get("name") or acc.get("account") or f"MiMo账号{i+1}"
+            lines.append(f"  {i + 1}. {status} {name}")
+        yield event.plain_result("\n".join(lines))
+
+    def _handle_del_command(self, args: list[str], event, accounts: list[dict]):
+        """删除指定账号"""
+        if len(args) < 2:
+            yield event.plain_result("用法: /mimo del <序号或名称>")
+            return
+
+        del_arg = args[1]
+
+        # 尝试按序号删除
+        if del_arg.isdigit():
+            del_idx = int(del_arg) - 1
+            if 0 <= del_idx < len(accounts):
+                deleted = self.delete_account(del_idx)
+                if deleted:
+                    name = deleted.get("name") or deleted.get("account") or "未知"
+                    yield event.plain_result(f"✅ 已删除: {name}")
+                else:
+                    yield event.plain_result("❌ 删除失败")
                 return
 
-        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /mimo ls 查看所有账号")
+        # 按名称删除
+        for i, acc in enumerate(accounts):
+            name = acc.get("name") or acc.get("account") or ""
+            if name == del_arg:
+                deleted = self.delete_account(i)
+                if deleted:
+                    yield event.plain_result(f"✅ 已删除: {name}")
+                else:
+                    yield event.plain_result("❌ 删除失败")
+                return
+
+        yield event.plain_result(f"❌ 未找到账号: {del_arg}")
+
+    async def _handle_query_all(self, event, accounts: list[dict]):
+        """查询所有账号"""
+        if not accounts:
+            yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
+            return
+        yield event.plain_result("🔍 正在查询所有 MiMo 账号...")
+
+        # 查询所有账号
+        for acc in accounts:
+            result = await self.query(acc)
+            label = acc.get("name") or acc.get("account") or "MiMo账号"
+            if not result.get("success"):
+                yield event.plain_result(f"📋 {label}\n❌ {result.get('error')}")
+            else:
+                mr = self._create_result(
+                    success=True,
+                    account_name=label,
+                    data=result.get("data", {}),
+                    template=result.get("template")
+                )
+                yield event.plain_result(mr.to_text())
+
+    async def _handle_query_one(self, identifier: str, event, accounts: list[dict]):
+        """查询指定账号"""
+        # 按名称查找
+        acc = self._find_account(accounts, identifier)
+        if acc:
+            name = acc.get("name") or acc.get("account") or identifier
+            yield event.plain_result("🔍 正在查询...")
+            result = await self.query(acc)
+            if not result.get("success"):
+                yield event.plain_result(f"📋 {name}\n❌ {result.get('error')}")
+            else:
+                mr = self._create_result(
+                    success=True,
+                    account_name=name,
+                    data=result.get("data", {}),
+                    template=result.get("template")
+                )
+                yield event.plain_result(mr.to_text())
+            return
+
+        yield event.plain_result(f"❌ 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号")
