@@ -44,13 +44,4 @@ timeout:
 #  默认消息模板
 # ══════════════════════════════════════════
 template:
-  default: |
-    📋 {label}
-    ────────────────
-      余额        {balance}元
-      赠送        {gift_balance}元
-      输入        {input_token}
-      输出        {output_token}
-      缓存        {cache_token}
-      本月费用    {monthly_cost}元
-      累计费用    {total_cost}元
+  default: "📋 {label}\n────────────────\n  余额        {balance}元\n  赠送        {gift_balance}元\n  输入        {input_token}\n  输出        {output_token}\n  缓存        {cache_token}\n  本月费用    {monthly_cost}元\n  累计费用    {total_cost}元"
