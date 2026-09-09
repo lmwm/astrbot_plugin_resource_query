@@ -371,16 +371,18 @@
       const modules = ['mimo', 'wasu', 'jm'];
       for (const mod of modules) {
         try {
-          // 加载 HTML
-          const htmlResponse = await fetch(`/api/plugin/page/${mod}/${mod}.html`);
+          // 加载 HTML（使用相对路径）
+          const htmlResponse = await fetch(`modules/${mod}.html`);
           if (htmlResponse.ok) {
             const html = await htmlResponse.text();
             document.getElementById(MODULES[mod].containerId).innerHTML = html;
+          } else {
+            console.error(`加载 ${mod}.html 失败: ${htmlResponse.status}`);
           }
 
-          // 加载 JS
+          // 加载 JS（使用相对路径）
           const script = document.createElement('script');
-          script.src = `/api/plugin/page/${mod}/${mod}.js`;
+          script.src = `modules/${mod}.js`;
           document.head.appendChild(script);
         } catch (e) {
           console.error(`加载 ${mod} 模块失败:`, e);
