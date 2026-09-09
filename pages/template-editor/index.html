@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>资源查询插件管理</title>
   <script src="/api/plugin/page/bridge-sdk.js"></script>
+  <script src="modules/mimo.js" defer></script>
+  <script src="modules/wasu.js" defer></script>
+  <script src="modules/jm.js" defer></script>
   <style>
     :root {
       --primary: #3c96ca;
@@ -247,10 +250,319 @@
         <button class="nav-tab" onclick="switchPage('jm', event)">🎮 JM 设置</button>
       </div>
 
-      <!-- 模块页面容器（动态加载） -->
-      <div id="mimo-page-container"></div>
-      <div id="wasu-page-container"></div>
-      <div id="jm-page-container"></div>
+      <!-- MiMo 账号管理页面 -->
+      <div class="page active" id="page-mimo">
+        <div class="sub-tabs">
+          <button class="sub-tab active" onclick="switchSubPage('mimo', 'accounts', event)">📋 账号管理</button>
+          <button class="sub-tab" onclick="switchSubPage('mimo', 'variables', event)">⚙️ 变量配置</button>
+        </div>
+        <div class="sub-page active" id="mimo-accounts">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">🤖 MiMo 账号管理</div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:12px;color:var(--text-muted)"><span id="mimo-count">0</span> 个账号</span>
+                <button class="btn btn-primary btn-sm" onclick="openAddMimoModal()">＋ 添加 MiMo 账号</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="account-grid" id="mimo-account-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sub-page" id="mimo-variables">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚙️ MiMo 变量配置</div>
+              <button class="btn btn-primary btn-sm" onclick="saveMimoVarConfig()">💾 保存配置</button>
+            </div>
+            <div class="card-body">
+              <div id="mimo-var-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 华数账号管理页面 -->
+      <div class="page" id="page-wasu">
+        <div class="sub-tabs">
+          <button class="sub-tab active" onclick="switchSubPage('wasu', 'accounts', event)">📋 账号管理</button>
+          <button class="sub-tab" onclick="switchSubPage('wasu', 'variables', event)">⚙️ 变量配置</button>
+        </div>
+        <div class="sub-page active" id="wasu-accounts">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">📺 华数广电账号管理</div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:12px;color:var(--text-muted)"><span id="wasu-count">0</span> 个账号</span>
+                <button class="btn btn-primary btn-sm" onclick="openAddWasuModal()">＋ 添加华数账号</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="account-grid" id="wasu-account-list"></div>
+            </div>
+          </div>
+        </div>
+        <div class="sub-page" id="wasu-variables">
+          <div class="card">
+            <div class="card-header">
+              <div class="card-title">⚙️ 华数变量配置</div>
+              <button class="btn btn-primary btn-sm" onclick="saveWasuVarConfig()">💾 保存配置</button>
+            </div>
+            <div class="card-body">
+              <div id="wasu-var-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- JM 设置页面 -->
+      <div class="page" id="page-jm">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title">🎮 JMComic 下载配置</div>
+            <button class="btn btn-primary btn-sm" onclick="saveJmConfig()">💾 保存配置</button>
+          </div>
+          <div class="card-body">
+            <div style="max-width: 700px;">
+              <div style="margin-bottom: 24px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">基本设置</div>
+                <div class="form-row" style="margin-bottom: 14px;">
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+                      <input type="checkbox" id="jm-enabled" checked style="width:auto;">
+                      启用 JM 下载功能
+                    </label>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">关闭后 /jm 命令将不可用</div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label" style="display:flex;align-items:center;gap:8px;">
+                      <input type="checkbox" id="jm-send-file" checked style="width:auto;">
+                      下载后发送 PDF 文件
+                    </label>
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">关闭后只显示结果提示，不发送文件</div>
+                  </div>
+                  <div class="form-group" style="margin-bottom:0">
+                    <label class="form-label">文件大小限制（MB）</label>
+                    <input class="form-input" id="jm-max-file-size" type="number" min="0" max="50" value="10" style="max-width: 150px;">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">超过此大小不发送文件，0 表示不限制</div>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-bottom: 24px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">网络设置</div>
+                <div class="form-group">
+                  <label class="form-label">JMComic Cookie</label>
+                  <input class="form-input" id="jm-cookies" placeholder="如：csrf=xxx; remember_web=xxx" style="font-family:monospace;font-size:12px;">
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">可选，格式为 k=v; k2=v2，用于访问仅登录可见内容</div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">代理地址</label>
+                  <input class="form-input" id="jm-proxy" placeholder="如：http://127.0.0.1:7890">
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">可选，留空使用系统代理</div>
+                </div>
+                <div class="form-row">
+                  <div class="form-group">
+                    <label class="form-label">请求超时（秒）</label>
+                    <input class="form-input" id="jm-timeout" type="number" min="5" max="120" value="20">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">单次网络请求超时，范围 5-120</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">重试次数</label>
+                    <input class="form-input" id="jm-retry-times" type="number" min="1" max="10" value="3">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">网络请求失败重试次数，范围 1-10</div>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-bottom: 16px;">
+                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">下载设置</div>
+                <div class="form-row" style="margin-bottom: 14px;">
+                  <div class="form-group">
+                    <label class="form-label">图片下载并发数</label>
+                    <input class="form-input" id="jm-image-threads" type="number" min="1" max="32" value="16">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">单章节内图片并行下载数，范围 1-32</div>
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">章节下载并发数</label>
+                    <input class="form-input" id="jm-photo-threads" type="number" min="1" max="16" value="4">
+                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">章节并行下载数，范围 1-16</div>
+                  </div>
+                </div>
+                <div class="form-group" style="max-width: 340px;">
+                  <label class="form-label">同时下载数量</label>
+                  <input class="form-input" id="jm-max-concurrent" type="number" min="1" max="3" value="1">
+                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">同时处理的漫画数量，范围 1-3</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MiMo 账号添加/编辑模态框 -->
+  <div class="modal-overlay" id="mimo-modal">
+    <div class="modal" style="max-width: 700px;">
+      <div class="modal-header">
+        <div class="modal-title" id="mimo-modal-title">添加 MiMo 账号</div>
+        <button class="btn btn-ghost" onclick="closeMimoModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <div class="platform-tabs">
+            <div class="platform-tab active" data-section="account" onclick="switchMimoModalSection('account')">📋 账号配置</div>
+            <div class="platform-tab" data-section="template" onclick="switchMimoModalSection('template')">📝 消息模板</div>
+          </div>
+        </div>
+        <div id="mimo-account-section">
+          <div class="form-group">
+            <label class="form-label">账号名称（可选）</label>
+            <input class="form-input" id="mimo-field-name" placeholder="如：我的MiMo账号">
+          </div>
+          <div class="form-group">
+            <label class="form-label">登录方式</label>
+            <div class="platform-tabs">
+              <div class="platform-tab active" data-method="password" onclick="switchMimoLoginMethod('password')">账号密码</div>
+              <div class="platform-tab" data-method="passtoken" onclick="switchMimoLoginMethod('passtoken')">PassToken</div>
+              <div class="platform-tab" data-method="token" onclick="switchMimoLoginMethod('token')">ServiceToken</div>
+            </div>
+          </div>
+          <div id="mimo-password-section">
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">小米账号 *</label>
+                <input class="form-input" id="mimo-field-account" placeholder="手机号或邮箱">
+              </div>
+              <div class="form-group">
+                <label class="form-label">密码 *</label>
+                <div class="password-wrapper">
+                  <input class="form-input" id="mimo-field-password" type="password" placeholder="密码">
+                  <button class="password-toggle" onclick="toggleMimoPassword()">👁</button>
+                </div>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label">设备标识</label>
+                <input class="form-input" id="mimo-field-device-id" placeholder="留空使用默认值">
+              </div>
+              <div class="form-group">
+                <label class="form-label">User-Agent</label>
+                <input class="form-input" id="mimo-field-ua" placeholder="留空使用默认值">
+              </div>
+            </div>
+            <div class="form-group" id="mimo-otp-section" style="display: none;">
+              <label class="form-label">短信验证码</label>
+              <input class="form-input" id="mimo-field-otp" placeholder="6位数字验证码" maxlength="6">
+              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">验证码已发送到您的手机，请输入6位数字验证码</div>
+            </div>
+          </div>
+          <div id="mimo-token-section" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">ServiceToken *</label>
+              <input class="form-input" id="mimo-field-service-token" placeholder="粘贴 ServiceToken" style="font-family: monospace; font-size: 12px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">User ID *</label>
+              <input class="form-input" id="mimo-field-user-id" placeholder="小米用户 ID">
+            </div>
+          </div>
+          <div id="mimo-passtoken-section" style="display: none;">
+            <div class="form-group">
+              <label class="form-label">PassToken *</label>
+              <input class="form-input" id="mimo-field-passtoken" placeholder="粘贴 PassToken" style="font-family: monospace; font-size: 12px;">
+            </div>
+            <div class="form-group">
+              <label class="form-label">User ID *</label>
+              <input class="form-input" id="mimo-field-passtoken-user-id" placeholder="小米用户 ID">
+            </div>
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">PassToken 必须配合 User ID 使用，查询时会自动换取 ServiceToken</div>
+          </div>
+          <div id="mimo-login-status" style="margin-top: 12px; padding: 10px; border-radius: 8px; display: none;"></div>
+        </div>
+        <div id="mimo-template-section" style="display: none;">
+          <div class="form-group">
+            <div class="template-header">
+              <label class="form-label" style="margin-bottom:0">消息模板</label>
+              <button class="btn btn-ghost btn-sm" onclick="resetMimoFieldTemplate()">↺ 恢复默认</button>
+            </div>
+            <div class="template-layout">
+              <div class="template-editor">
+                <div class="template-label">模板编辑</div>
+                <textarea class="form-textarea" id="mimo-field-template" oninput="syncMimoPreviewHeight()" style="min-height: 300px;"></textarea>
+              </div>
+              <div class="template-preview-box">
+                <div class="template-label">预览效果</div>
+                <div class="template-preview" id="mimo-field-template-preview" style="min-height: 300px;"></div>
+              </div>
+            </div>
+            <div class="variable-tags" id="mimo-field-variable-tags"></div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeMimoModal()">取消</button>
+        <button class="btn btn-secondary" id="mimo-test-btn" onclick="testMimoAccount()">🧪 测试</button>
+        <button class="btn btn-primary" id="mimo-save-btn" onclick="saveMimoAccount()">💾 保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 华数账号添加/编辑模态框 -->
+  <div class="modal-overlay" id="wasu-modal">
+    <div class="modal" style="max-width: 550px;">
+      <div class="modal-header">
+        <div class="modal-title" id="wasu-modal-title">添加华数账号</div>
+        <button class="btn btn-ghost" onclick="closeWasuModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">账号名称（可选）</label>
+          <input class="form-input" id="wasu-field-name" placeholder="如：我的华数账号">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">手机号 *</label>
+            <input class="form-input" id="wasu-field-phone" placeholder="手机号">
+          </div>
+          <div class="form-group">
+            <label class="form-label">User Key *</label>
+            <input class="form-input" id="wasu-field-user-key" placeholder="User Key">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Token *</label>
+            <input class="form-input" id="wasu-field-token" placeholder="Token">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Sign</label>
+            <input class="form-input" id="wasu-field-sign" placeholder="Sign（可选）">
+          </div>
+        </div>
+        <div class="form-group">
+          <div class="template-header">
+            <label class="form-label" style="margin-bottom:0">消息模板</label>
+            <button class="btn btn-ghost btn-sm" onclick="resetWasuTemplate()">↺ 恢复默认</button>
+          </div>
+          <div class="template-layout">
+            <div class="template-editor">
+              <div class="template-label">模板编辑</div>
+              <textarea class="form-textarea" id="wasu-field-template" oninput="syncWasuPreviewHeight()"></textarea>
+            </div>
+            <div class="template-preview-box">
+              <div class="template-label">预览效果</div>
+              <div class="template-preview" id="wasu-template-preview"></div>
+            </div>
+          </div>
+          <div class="variable-tags" id="wasu-variable-tags"></div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeWasuModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveWasuAccount()">保存</button>
+      </div>
     </div>
   </div>
 
@@ -313,19 +625,12 @@
     // 变量配置结构
     let templateVars = {};
 
-    // 模块配置
-    const MODULES = {
-      mimo: { pageId: 'page-mimo', containerId: 'mimo-page-container' },
-      wasu: { pageId: 'page-wasu', containerId: 'wasu-page-container' },
-      jm: { pageId: 'page-jm', containerId: 'jm-page-container' }
-    };
-
     // 页面切换
     function switchPage(page, eventObj) {
       const evt = eventObj || event;
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-      document.getElementById(MODULES[page].pageId).classList.add('active');
+      document.getElementById('page-' + page).classList.add('active');
       if (evt && evt.target) {
         evt.target.classList.add('active');
       } else {
@@ -336,7 +641,7 @@
         });
       }
       // 激活对应的子页面
-      const pageEl = document.getElementById(MODULES[page].pageId);
+      const pageEl = document.getElementById('page-' + page);
       if (pageEl) {
         pageEl.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
         pageEl.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
@@ -349,7 +654,7 @@
 
     function switchSubPage(parent, sub, eventObj) {
       const evt = eventObj || event;
-      const page = document.getElementById(MODULES[parent].pageId);
+      const page = document.getElementById('page-' + parent);
       if (!page) return;
       page.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
       page.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
@@ -366,33 +671,8 @@
       }
     }
 
-    // 动态加载模块页面
-    async function loadModulePages() {
-      const modules = ['mimo', 'wasu', 'jm'];
-      for (const mod of modules) {
-        try {
-          // 加载 HTML（使用相对路径）
-          const htmlResponse = await fetch(`modules/${mod}.html`);
-          if (htmlResponse.ok) {
-            const html = await htmlResponse.text();
-            document.getElementById(MODULES[mod].containerId).innerHTML = html;
-          } else {
-            console.error(`加载 ${mod}.html 失败: ${htmlResponse.status}`);
-          }
-
-          // 加载 JS（使用相对路径）
-          const script = document.createElement('script');
-          script.src = `modules/${mod}.js`;
-          document.head.appendChild(script);
-        } catch (e) {
-          console.error(`加载 ${mod} 模块失败:`, e);
-        }
-      }
-    }
-
     document.addEventListener('DOMContentLoaded', async () => {
       await bridge.ready();
-      await loadModulePages();
       await loadDefaults();
       await loadAccounts();
       renderMimoVarList();
