@@ -213,6 +213,7 @@ class ResourceQueryPlugin(Star):
         """获取模板变量定义"""
         import re
         from astrbot.api.web import json_response
+        from .modules.mimo.utils import get_config_value
 
         # 变量描述映射
         var_descriptions = {
@@ -256,47 +257,66 @@ class ResourceQueryPlugin(Star):
         }
 
         result = {}
+
+        # 获取各模块的默认模板（从 config.yaml 或 templates 目录）
+        templates = {}
+
+        # 尝试从 templates 目录读取
         templates_dir = self._plugin_dir / "templates"
         if templates_dir.exists():
             for txt_file in templates_dir.glob("*.txt"):
                 platform = txt_file.stem.replace("_default", "")
                 try:
-                    content = txt_file.read_text(encoding="utf-8")
-                    # 从模板中提取变量名
-                    vars_found = re.findall(r"\{(\w+)\}", content)
-                    platform_defaults = var_defaults.get(platform, {})
-
-                    # 检查是否有用户自定义配置
-                    module = self._manager.get_module(platform)
-                    if module:
-                        var_config_path = module.get_config_path() / "var_config.json"
-                        user_vars = {}
-                        if var_config_path.exists():
-                            try:
-                                user_config = json.loads(var_config_path.read_text(encoding="utf-8"))
-                                if user_config and "variables" in user_config:
-                                    for v in user_config["variables"]:
-                                        user_vars[v["name"]] = v
-                            except (json.JSONDecodeError, OSError):
-                                pass
-
-                        vars_list = []
-                        for v in dict.fromkeys(vars_found):  # 去重并保持顺序
-                            if v in user_vars:
-                                vars_list.append(user_vars[v])
-                            else:
-                                vars_list.append({
-                                    "name": v,
-                                    "desc": var_descriptions.get(v, v),
-                                    "default": platform_defaults.get(v, ""),
-                                    "show": True
-                                })
-
-                        result[platform] = {
-                            "variables": vars_list
-                        }
+                    templates[platform] = txt_file.read_text(encoding="utf-8")
                 except OSError:
                     pass
+
+        # 如果 templates 目录没有模板，从模块获取默认模板
+        for module in self._manager.get_all_modules():
+            platform = module.module_name
+            if platform not in templates:
+                default_template = module.get_default_template()
+                if default_template:
+                    templates[platform] = default_template
+
+        # 处理每个平台的变量
+        for platform, content in templates.items():
+            # 从模板中提取变量名
+            vars_found = re.findall(r"\{(\w+)\}", content)
+            if not vars_found:
+                continue
+
+            platform_defaults = var_defaults.get(platform, {})
+
+            # 检查是否有用户自定义配置
+            module = self._manager.get_module(platform)
+            if module:
+                var_config_path = module.get_config_path() / "var_config.json"
+                user_vars = {}
+                if var_config_path.exists():
+                    try:
+                        user_config = json.loads(var_config_path.read_text(encoding="utf-8"))
+                        if user_config and "variables" in user_config:
+                            for v in user_config["variables"]:
+                                user_vars[v["name"]] = v
+                    except (json.JSONDecodeError, OSError):
+                        pass
+
+                vars_list = []
+                for v in dict.fromkeys(vars_found):  # 去重并保持顺序
+                    if v in user_vars:
+                        vars_list.append(user_vars[v])
+                    else:
+                        vars_list.append({
+                            "name": v,
+                            "desc": var_descriptions.get(v, v),
+                            "default": platform_defaults.get(v, ""),
+                            "show": True
+                        })
+
+                result[platform] = {
+                    "variables": vars_list
+                }
 
         return json_response(result)
 
