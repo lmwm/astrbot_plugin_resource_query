@@ -681,6 +681,8 @@
       await loadAccounts();
       renderMimoVarList();
       renderWasuVarList();
+      // 自动选中第一个启用的标签
+      activateFirstEnabledModule();
     });
 
     // 加载模块启用配置
@@ -709,15 +711,14 @@
         const moduleName = page.dataset.module;
         page.style.display = modulesEnabled[moduleName] ? '' : 'none';
       });
+    }
 
-      // 如果当前激活的模块被禁用，切换到第一个启用的模块
-      const activeTab = document.querySelector('.nav-tab.active');
-      if (activeTab && activeTab.style.display === 'none') {
-        const firstEnabledTab = document.querySelector('.nav-tab[data-module]:not([style*="display: none"])');
-        if (firstEnabledTab) {
-          const moduleName = firstEnabledTab.dataset.module;
-          switchPage(moduleName);
-        }
+    // 激活第一个启用的模块
+    function activateFirstEnabledModule() {
+      const firstEnabledTab = document.querySelector('.nav-tab[data-module]:not([style*="display: none"])');
+      if (firstEnabledTab) {
+        const moduleName = firstEnabledTab.dataset.module;
+        switchPage(moduleName);
       }
     }
 
