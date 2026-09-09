@@ -16,16 +16,13 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request
 
 from ...http_utils import inject_cookie, new_opener, parse_resp
-from .constants import DEFAULT_ACCOUNT_BASE
+from .constants import DEFAULT_ACCOUNT_BASE, DEFAULT_UA_OTP
 from .exceptions import LoginError, OtpRequired, PassTokenExpired, StsError
 
 logger = logging.getLogger(__name__)
 
-# OTP 验证用的 User-Agent（参考 MiService）
-_UA_OTP = (
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
-)
+# OTP 验证用的 User-Agent（从 YAML 配置读取）
+_UA_OTP = DEFAULT_UA_OTP
 
 
 class MiAccount:

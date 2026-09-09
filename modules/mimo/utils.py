@@ -1,10 +1,14 @@
 """MiMo 平台工具函数"""
 
 import json
+import re
 from pathlib import Path
 
 # 获取当前模块目录
 _MODULE_DIR = Path(__file__).parent
+
+# YAML 配置缓存
+_yaml_config_cache: dict | None = None
 
 
 def fmt_num(n) -> str:
@@ -17,15 +21,155 @@ def fmt_num(n) -> str:
     return f"{n:,}"
 
 
-def load_default_template(plugin_dir: Path | None = None) -> str:
-    """加载默认模板，优先从模块目录读取"""
-    # 优先从模块目录读取
-    tpl_path = _MODULE_DIR / "default_template.txt"
-    if tpl_path.exists():
+def _parse_yaml_simple(text: str) -> dict:
+    """简单的 YAML 解析器（支持基本的键值对和嵌套）
+
+    Args:
+        text: YAML 文本内容
+
+    Returns:
+        解析后的字典
+    """
+    result = {}
+    current_section = None
+    current_subsection = None
+
+    for line in text.split("\n"):
+        # 跳过空行和注释
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        # 计算缩进级别
+        indent = len(line) - len(line.lstrip())
+
+        # 解析键值对
+        match = re.match(r"^(\w+):\s*(.*)?$", stripped)
+        if match:
+            key = match.group(1)
+            value = match.group(2).strip() if match.group(2) else ""
+
+            # 处理多行字符串
+            if value == "|":
+                # 多行字符串开始，后续行属于这个键
+                current_section = key
+                current_subsection = None
+                result[key] = ""
+                continue
+
+            if value:
+                # 移除引号
+                if (value.startswith('"') and value.endswith('"')) or \
+                   (value.startswith("'") and value.endswith("'")):
+                    value = value[1:-1]
+                result[key] = value
+            else:
+                # 这是一个新的嵌套部分
+                current_section = key
+                current_subsection = None
+                if key not in result:
+                    result[key] = {}
+        elif indent > 0 and current_section:
+            # 处理嵌套内容
+            sub_match = re.match(r"^(\w+):\s*(.*)?$", stripped)
+            if sub_match:
+                sub_key = sub_match.group(1)
+                sub_value = sub_match.group(2).strip() if sub_match.group(2) else ""
+
+                if sub_value == "|":
+                    current_subsection = sub_key
+                    result[current_section][sub_key] = ""
+                    continue
+
+                if sub_value:
+                    # 移除引号
+                    if (sub_value.startswith('"') and sub_value.endswith('"')) or \
+                       (sub_value.startswith("'") and sub_value.endswith("'")):
+                        sub_value = sub_value[1:-1]
+                    result[current_section][sub_key] = sub_value
+                else:
+                    current_subsection = sub_key
+                    result[current_section][sub_key] = {}
+            elif current_subsection and current_section:
+                # 多行字符串内容
+                if isinstance(result[current_section].get(current_subsection), str):
+                    if result[current_section][current_subsection]:
+                        result[current_section][current_subsection] += "\n"
+                    result[current_section][current_subsection] += stripped
+
+    return result
+
+
+def load_yaml_config() -> dict:
+    """加载 YAML 配置文件
+
+    Returns:
+        配置字典
+    """
+    global _yaml_config_cache
+
+    if _yaml_config_cache is not None:
+        return _yaml_config_cache
+
+    yaml_path = _MODULE_DIR / "config.yaml"
+    if yaml_path.exists():
         try:
-            return tpl_path.read_text(encoding="utf-8")
-        except OSError:
+            content = yaml_path.read_text(encoding="utf-8")
+            _yaml_config_cache = _parse_yaml_simple(content)
+            return _yaml_config_cache
+        except (OSError, Exception):
             pass
+
+    # 返回默认配置
+    _yaml_config_cache = {
+        "platform": {"name": "mimo", "display_name": "MiMo", "icon": "📋"},
+        "api": {
+            "account_base": "https://account.xiaomi.com",
+            "balance_url": "https://platform.xiaomimimo.com/api/v1/balance",
+            "usage_url": "https://platform.xiaomimimo.com/api/v1/usage",
+        },
+        "device": {
+            "default_device_id": "wb_MIQUERY000001",
+            "default_ua": "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1",
+            "ua_otp": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+        },
+        "timeout": {"query": 15, "login": 15},
+        "template": {
+            "default": "📋 {label}\n────────────────\n  余额        {balance}元\n  赠送        {gift_balance}元\n  输入        {input_token}\n  输出        {output_token}\n  缓存        {cache_token}\n  本月费用    {monthly_cost}元\n  累计费用    {total_cost}元"
+        },
+    }
+    return _yaml_config_cache
+
+
+def get_config_value(key_path: str, default=None):
+    """获取配置值
+
+    Args:
+        key_path: 配置路径，如 "api.account_base" 或 "device.default_device_id"
+        default: 默认值
+
+    Returns:
+        配置值
+    """
+    config = load_yaml_config()
+    keys = key_path.split(".")
+    value = config
+
+    for key in keys:
+        if isinstance(value, dict) and key in value:
+            value = value[key]
+        else:
+            return default
+
+    return value
+
+
+def load_default_template(plugin_dir: Path | None = None) -> str:
+    """加载默认模板，优先从 YAML 配置读取"""
+    # 优先从 YAML 配置读取
+    template = get_config_value("template.default")
+    if template:
+        return template
 
     # 兜底内置模板
     return """📋 {label}
@@ -40,31 +184,25 @@ def load_default_template(plugin_dir: Path | None = None) -> str:
 
 
 def load_config(plugin_dir: Path | None = None) -> dict:
-    """加载默认配置，优先从模块目录读取"""
-    default_config = {
-        "platform": "mimo",
-        "platform_name": "MiMo",
-        "platform_icon": "📋",
-        "default_device_id": "wb_MIQUERY000001",
-        "default_ua": "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1",
+    """加载配置，从 YAML 配置文件读取
+
+    Returns:
+        配置字典
+    """
+    yaml_config = load_yaml_config()
+
+    # 转换为原有格式以保持兼容
+    return {
+        "platform": get_config_value("platform.name", "mimo"),
+        "platform_name": get_config_value("platform.display_name", "MiMo"),
+        "platform_icon": get_config_value("platform.icon", "📋"),
+        "default_device_id": get_config_value("device.default_device_id", "wb_MIQUERY000001"),
+        "default_ua": get_config_value("device.default_ua", ""),
         "api": {
-            "account_base": "https://account.xiaomi.com",
-            "balance_url": "https://platform.xiaomimimo.com/api/v1/balance",
-            "usage_url": "https://platform.xiaomimimo.com/api/v1/usage",
+            "account_base": get_config_value("api.account_base", "https://account.xiaomi.com"),
+            "balance_url": get_config_value("api.balance_url", "https://platform.xiaomimimo.com/api/v1/balance"),
+            "usage_url": get_config_value("api.usage_url", "https://platform.xiaomimimo.com/api/v1/usage"),
         },
-        "query_timeout": 15,
-        "login_timeout": 15,
+        "query_timeout": get_config_value("timeout.query", 15),
+        "login_timeout": get_config_value("timeout.login", 15),
     }
-
-    # 优先从模块目录读取
-    config_path = _MODULE_DIR / "config.json"
-    if config_path.exists():
-        try:
-            with open(config_path, encoding="utf-8") as f:
-                file_config = json.load(f)
-            # 合并配置，文件配置优先
-            default_config.update(file_config)
-        except (json.JSONDecodeError, OSError):
-            pass
-
-    return default_config
