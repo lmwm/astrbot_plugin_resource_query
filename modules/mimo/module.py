@@ -110,6 +110,68 @@ class MimoModule(ModuleBase):
         return accounts
 
     # ══════════════════════════════════════════
+    #  配置管理
+    # ══════════════════════════════════════════
+
+    def update_account_config(
+        self,
+        account_name: str,
+        account_id: str,
+        updates: dict,
+        auto_save: bool = True,
+    ) -> bool:
+        """更新单个账号的配置
+
+        统一的配置管理方法，用于更新指定账号的字段并保存到配置文件。
+
+        Args:
+            account_name: 账号名称（用于匹配）
+            account_id: 账号 ID（用于匹配，如小米账号）
+            updates: 要更新的字段字典
+            auto_save: 是否自动保存到配置文件
+
+        Returns:
+            是否更新成功
+        """
+        accounts = self.get_accounts()
+
+        for acc in accounts:
+            if acc.get("name") == account_name and acc.get("account") == account_id:
+                acc.update(updates)
+                if auto_save:
+                    self.save_accounts(accounts)
+                return True
+
+        return False
+
+    def update_account_by_match(
+        self,
+        match_fn,
+        updates: dict,
+        auto_save: bool = True,
+    ) -> bool:
+        """通过匹配函数更新账号配置
+
+        Args:
+            match_fn: 匹配函数，接收 acc 字典，返回 bool
+            updates: 要更新的字段字典
+            auto_save: 是否自动保存到配置文件
+
+        Returns:
+            是否更新成功
+        """
+        accounts = self.get_accounts()
+
+        for acc in accounts:
+            if match_fn(acc):
+                acc.update(updates)
+                if auto_save:
+                    self.save_accounts(accounts)
+                return True
+
+        return False
+
+    # ══════════════════════════════════════════
     #  查询接口（实现基类抽象方法）
     # ══════════════════════════════════════════
 
@@ -127,24 +189,28 @@ class MimoModule(ModuleBase):
 
         try:
             # 记录查询前的凭证状态
-            old_service_token = account.get("serviceToken", "")
-            old_pass_token = account.get("passToken", "")
-            old_user_id = account.get("userId", "")
+            old_credentials = {
+                "serviceToken": account.get("serviceToken", ""),
+                "passToken": account.get("passToken", ""),
+                "userId": account.get("userId", ""),
+            }
 
             result_data = await self._manager.query_one(account)
 
             # 检查凭证是否有更新
-            new_service_token = account.get("serviceToken", "")
-            new_pass_token = account.get("passToken", "")
-            new_user_id = account.get("userId", "")
+            new_credentials = {
+                "serviceToken": account.get("serviceToken", ""),
+                "passToken": account.get("passToken", ""),
+                "userId": account.get("userId", ""),
+            }
 
-            if (
-                new_service_token != old_service_token
-                or new_pass_token != old_pass_token
-                or new_user_id != old_user_id
-            ):
+            if new_credentials != old_credentials:
                 # 凭证有更新，保存到配置文件
-                self._save_account_credentials(account)
+                self.update_account_config(
+                    account_name=account.get("name", ""),
+                    account_id=account.get("account", ""),
+                    updates=new_credentials,
+                )
 
             if "error" in result_data:
                 return {
@@ -167,30 +233,6 @@ class MimoModule(ModuleBase):
                 "error": str(e),
                 "template": template,
             }
-
-    def _save_account_credentials(self, account: dict) -> None:
-        """保存账号凭证到配置文件
-
-        Args:
-            account: 账号配置（包含更新后的凭证）
-        """
-        # 获取所有账号
-        accounts = self.get_accounts()
-
-        # 查找并更新对应的账号
-        account_name = account.get("name", "")
-        account_id = account.get("account", "")
-
-        for i, acc in enumerate(accounts):
-            if acc.get("name") == account_name and acc.get("account") == account_id:
-                # 更新凭证字段
-                for key in ["serviceToken", "passToken", "userId"]:
-                    if key in account:
-                        acc[key] = account[key]
-                break
-
-        # 保存到配置文件
-        self.save_accounts(accounts)
 
     # ══════════════════════════════════════════
     #  登录相关（委托给内部管理器）
@@ -314,18 +356,20 @@ class MimoModule(ModuleBase):
                 lambda: self.login_account(acc, otp_code=otp_code if otp_code else None)
             )
 
-            # 更新账号信息
-            acc.update(result)
-            accounts[index] = acc
-            self.save_accounts(accounts)
+            # 使用配置管理方法更新账号信息
+            self.update_account_config(
+                account_name=acc.get("name", ""),
+                account_id=acc.get("account", ""),
+                updates=result,
+            )
 
             return json_response({
                 "status": "ok",
                 "message": "登录成功",
                 "account": {
-                    "userId": acc.get("userId", ""),
-                    "serviceToken": acc.get("serviceToken", ""),
-                    "passToken": acc.get("passToken", "")
+                    "userId": result.get("userId", ""),
+                    "serviceToken": result.get("serviceToken", ""),
+                    "passToken": result.get("passToken", "")
                 }
             })
         except Exception as e:
@@ -444,12 +488,11 @@ class MimoModule(ModuleBase):
             try:
                 result = self.submit_otp(otp_code)
 
-                # 更新账号信息
-                for acc in accounts:
-                    if acc.get("account") == pending or acc.get("name") == pending:
-                        acc.update(result)
-                        break
-                self.save_accounts(accounts)
+                # 使用配置管理方法更新账号信息
+                self.update_account_by_match(
+                    match_fn=lambda acc: acc.get("account") == pending or acc.get("name") == pending,
+                    updates=result,
+                )
 
                 yield event.plain_result(f"✅ OTP 验证成功！账号 {pending} 已登录")
 
