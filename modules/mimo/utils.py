@@ -33,6 +33,7 @@ def _parse_yaml_simple(text: str) -> dict:
     result = {}
     current_section = None
     current_subsection = None
+    base_indent = 0
 
     for line in text.split("\n"):
         # 跳过空行和注释
@@ -43,59 +44,54 @@ def _parse_yaml_simple(text: str) -> dict:
         # 计算缩进级别
         indent = len(line) - len(line.lstrip())
 
-        # 解析键值对
+        # 解析键值对（只在当前缩进级别解析）
         match = re.match(r"^(\w+):\s*(.*)?$", stripped)
         if match:
             key = match.group(1)
             value = match.group(2).strip() if match.group(2) else ""
 
-            # 处理多行字符串
-            if value == "|":
-                # 多行字符串开始，后续行属于这个键
+            # 顶层键（缩进为0）
+            if indent == 0:
+                base_indent = 0
                 current_section = key
                 current_subsection = None
-                result[key] = ""
+
+                if value:
+                    # 移除引号
+                    if (value.startswith('"') and value.endswith('"')) or \
+                       (value.startswith("'") and value.endswith("'")):
+                        value = value[1:-1]
+                    result[key] = value
+                else:
+                    result[key] = {}
                 continue
 
-            if value:
-                # 移除引号
-                if (value.startswith('"') and value.endswith('"')) or \
-                   (value.startswith("'") and value.endswith("'")):
-                    value = value[1:-1]
-                result[key] = value
-            else:
-                # 这是一个新的嵌套部分
-                current_section = key
-                current_subsection = None
-                if key not in result:
-                    result[key] = {}
-        elif indent > 0 and current_section:
-            # 处理嵌套内容
-            sub_match = re.match(r"^(\w+):\s*(.*)?$", stripped)
-            if sub_match:
-                sub_key = sub_match.group(1)
-                sub_value = sub_match.group(2).strip() if sub_match.group(2) else ""
-
-                if sub_value == "|":
-                    current_subsection = sub_key
-                    result[current_section][sub_key] = ""
+            # 子键（缩进大于0）
+            if current_section and indent > base_indent:
+                # 处理多行字符串
+                if value == "|":
+                    current_subsection = key
+                    result[current_section][key] = ""
                     continue
 
-                if sub_value:
+                if value:
                     # 移除引号
-                    if (sub_value.startswith('"') and sub_value.endswith('"')) or \
-                       (sub_value.startswith("'") and sub_value.endswith("'")):
-                        sub_value = sub_value[1:-1]
-                    result[current_section][sub_key] = sub_value
+                    if (value.startswith('"') and value.endswith('"')) or \
+                       (value.startswith("'") and value.endswith("'")):
+                        value = value[1:-1]
+                    result[current_section][key] = value
                 else:
-                    current_subsection = sub_key
-                    result[current_section][sub_key] = {}
-            elif current_subsection and current_section:
-                # 多行字符串内容
-                if isinstance(result[current_section].get(current_subsection), str):
-                    if result[current_section][current_subsection]:
-                        result[current_section][current_subsection] += "\n"
-                    result[current_section][current_subsection] += stripped
+                    current_subsection = key
+                    result[current_section][key] = {}
+
+        # 处理多行字符串内容
+        elif current_subsection and current_section:
+            if isinstance(result[current_section].get(current_subsection), str):
+                if result[current_section][current_subsection]:
+                    result[current_section][current_subsection] += "\n"
+                # 去掉前导空格，但保留相对缩进
+                content_indent = len(line) - len(line.lstrip())
+                result[current_section][current_subsection] += stripped
 
     return result
 
