@@ -584,7 +584,7 @@ class MimoModule(ModuleBase):
         except Exception as e:
             yield event.plain_result(f"❌ OTP 验证失败: {e}")
 
-    def _handle_ls_command(self, event, accounts: list[dict]):
+    async def _handle_ls_command(self, event, accounts: list[dict]):
         """列出所有账号"""
         if not accounts:
             yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
@@ -596,7 +596,7 @@ class MimoModule(ModuleBase):
             lines.append(f"  {i + 1}. {status} {name}")
         yield event.plain_result("\n".join(lines))
 
-    def _handle_del_command(self, args: list[str], event, accounts: list[dict]):
+    async def _handle_del_command(self, args: list[str], event, accounts: list[dict]):
         """删除指定账号"""
         if len(args) < 2:
             yield event.plain_result("用法: /mimo del <序号或名称>")
