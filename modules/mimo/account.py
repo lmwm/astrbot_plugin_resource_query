@@ -21,8 +21,11 @@ from .utils import get_config_value
 
 logger = logging.getLogger(__name__)
 
-# OTP 验证用的 User-Agent（从 YAML 配置读取）
-_UA_OTP = get_config_value("device.ua_otp", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
+# User-Agent（从 YAML 配置读取，登录、OTP 验证、查询共用）
+_DEFAULT_UA = get_config_value("device.default_ua", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
+
+# API 基础地址
+_ACCOUNT_BASE = "https://account.xiaomi.com"
 
 
 class MiAccount:
@@ -30,8 +33,8 @@ class MiAccount:
 
     def __init__(self, device_id: str, ua: str, account_base: str | None = None):
         self.device_id = device_id
-        self.ua = ua
-        self.account_base = account_base or get_config_value("api.account_base", "https://account.xiaomi.com")
+        self.ua = ua or _DEFAULT_UA
+        self.account_base = account_base or _ACCOUNT_BASE
         # 缓存OTP会话状态，保持 opener/jar 在整个OTP流程中不变
         self._otp_session = None
 
@@ -240,7 +243,7 @@ class MiAccount:
         """
         if not notification_url.startswith("http"):
             notification_url = self.account_base + notification_url
-        headers = {"User-Agent": _UA_OTP}
+        headers = {"User-Agent": self.ua}
 
         from urllib.parse import parse_qs, urlparse
 
@@ -313,7 +316,7 @@ class MiAccount:
         """
         if not notification_url.startswith("http"):
             notification_url = self.account_base + notification_url
-        headers = {"User-Agent": _UA_OTP}
+        headers = {"User-Agent": self.ua}
 
         from urllib.parse import parse_qs, urlparse
 

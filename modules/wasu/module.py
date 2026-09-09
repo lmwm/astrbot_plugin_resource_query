@@ -44,7 +44,7 @@ class WasuModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return "📺"
+        return ""
 
     @property
     def module_desc(self) -> str:
@@ -249,7 +249,7 @@ class WasuModule(ModuleBase):
             if not accounts:
                 yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
                 return
-            lines = [f"📋 共 {len(accounts)} 个华数账号:"]
+            lines = [f"共 {len(accounts)} 个华数账号:"]
             for i, acc in enumerate(accounts):
                 name = acc.get("name") or acc.get("phone") or f"华数账号{i+1}"
                 lines.append(f"  {i + 1}. {name} | 手机号: {acc.get('phone', '无')}")
@@ -310,9 +310,9 @@ class WasuModule(ModuleBase):
                         )
                         yield event.plain_result(wr.to_text())
                     else:
-                        yield event.plain_result(f"📋 {name}\n❌ {result.get('error')}")
+                        yield event.plain_result(f"{name}\n❌ {result.get('error')}")
                 except Exception as e:
-                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
+                    yield event.plain_result(f"{name}\n❌ 查询失败: {e}")
             return
 
         # /wasu <名称> — 查询指定账号
@@ -334,9 +334,9 @@ class WasuModule(ModuleBase):
                         )
                         yield event.plain_result(wr.to_text())
                     else:
-                        yield event.plain_result(f"📋 {name}\n❌ {result.get('error')}")
+                        yield event.plain_result(f"{name}\n❌ {result.get('error')}")
                 except Exception as e:
-                    yield event.plain_result(f"📋 {name}\n❌ 查询失败: {e}")
+                    yield event.plain_result(f"{name}\n❌ 查询失败: {e}")
                 return
 
         yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /wasu ls 查看所有账号")

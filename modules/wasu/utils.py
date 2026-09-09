@@ -186,12 +186,9 @@ def load_yaml_config() -> dict:
 
     # 返回默认配置
     _yaml_config_cache = {
-        "platform": {"name": "wasu", "display_name": "华数广电", "icon": "📺"},
-        "api": {"base_url": "https://ups.wasu.cn"},
-        "headers": {"user_agent": "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv) "},
-        "timeout": {"query": 10},
+        "platform": {"name": "wasu", "display_name": "华数广电"},
         "template": {
-            "default": "📺 {label}\n────────────────\n💰 账户余额: {balance}\n   当月话费: {month_fee}\n   欠费: {arrears}\n\n📶 本月累计使用: {total_used}\n   总流量: {total} | 已用: {used} | 剩余: {remain}\n\n🕐 查询时间: {query_time}"
+            "default": "{label}\n────────────────\n账户余额: {balance}\n   当月话费: {month_fee}\n   欠费: {arrears}\n\n本月累计使用: {total_used}\n   总流量: {total} | 已用: {used} | 剩余: {remain}\n\n查询时间: {query_time}"
         },
     }
     return _yaml_config_cache
@@ -228,7 +225,7 @@ def load_default_template() -> str:
         return template
 
     # 兜底内置模板（最小化，仅包含必要字段）
-    return "📺 {label}\n  余额: {balance}\n  话费: {month_fee}"
+    return "{label}\n  余额: {balance}\n  话费: {month_fee}"
 
 
 def fmt_gb(val) -> str:

@@ -20,7 +20,7 @@ class QueryResult:
         """转换为文本格式"""
         logger.info(f"[QueryResult.to_text] success={self.success}, platform={self.platform}, account_name={self.account_name}")
         if not self.success:
-            return f"📋 {self.platform} - {self.account_name}\n❌ {self.error}"
+            return f"{self.platform} - {self.account_name}\n❌ {self.error}"
         return self._format_data()
 
     @abstractmethod

@@ -14,7 +14,11 @@ from pathlib import Path
 from .account import MiAccount
 from .exceptions import LoginError, OtpRequired, PassTokenExpired, StsError
 from .query import is_auth_error, is_valid_response, query_mimo
-from .utils import load_config
+
+# API 配置（硬编码）
+_BALANCE_URL = "https://platform.xiaomimimo.com/api/v1/balance"
+_USAGE_URL = "https://platform.xiaomimimo.com/api/v1/usage"
+_QUERY_TIMEOUT = 15
 
 
 class MimoManager:
@@ -30,7 +34,6 @@ class MimoManager:
             plugin_dir: 插件目录路径
         """
         self._plugin_dir = plugin_dir
-        self._config = load_config(plugin_dir)
         # 缓存 MiAccount 实例，用于保持 OTP 会话状态
         self._mi_account_cache: dict[str, MiAccount] = {}
 
@@ -317,14 +320,13 @@ class MimoManager:
                 }
 
         ua = acc.get("ua", "")
-        api_config = self._config.get("api", {})
         results = await query_mimo(
             service_token,
             user_id,
             ua,
-            balance_url=api_config.get("balance_url"),
-            usage_url=api_config.get("usage_url"),
-            timeout=self._config.get("query_timeout", 15),
+            balance_url=_BALANCE_URL,
+            usage_url=_USAGE_URL,
+            timeout=_QUERY_TIMEOUT,
         )
 
         if not is_auth_error(results) and is_valid_response(results):
@@ -336,9 +338,9 @@ class MimoManager:
                 acc["serviceToken"],
                 user_id,
                 ua,
-                balance_url=api_config.get("balance_url"),
-                usage_url=api_config.get("usage_url"),
-                timeout=self._config.get("query_timeout", 15),
+                balance_url=_BALANCE_URL,
+                usage_url=_USAGE_URL,
+                timeout=_QUERY_TIMEOUT,
             )
 
         return results

@@ -211,20 +211,13 @@ def load_yaml_config() -> dict:
 
     # 返回默认配置
     _yaml_config_cache = {
-        "platform": {"name": "mimo", "display_name": "MiMo", "icon": "📋"},
-        "api": {
-            "account_base": "https://account.xiaomi.com",
-            "balance_url": "https://platform.xiaomimimo.com/api/v1/balance",
-            "usage_url": "https://platform.xiaomimimo.com/api/v1/usage",
-        },
+        "platform": {"name": "mimo", "display_name": "MiMo"},
         "device": {
             "default_device_id": "wb_MIQUERY000001",
-            "default_ua": "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1",
-            "ua_otp": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
+            "default_ua": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148",
         },
-        "timeout": {"query": 15, "login": 15},
         "template": {
-            "default": "📋 {label}\n────────────────\n  余额        {balance}元\n  赠送        {gift_balance}元\n  输入        {input_token}\n  输出        {output_token}\n  缓存        {cache_token}\n  本月费用    {monthly_cost}元\n  累计费用    {total_cost}元"
+            "default": "{label}\n────────────────\n  余额        {balance}元\n  赠送        {gift_balance}元\n  输入        {input_token}\n  输出        {output_token}\n  缓存        {cache_token}\n  本月费用    {monthly_cost}元\n  累计费用    {total_cost}元"
         },
     }
     return _yaml_config_cache
@@ -261,7 +254,7 @@ def load_default_template(plugin_dir: Path | None = None) -> str:
         return template
 
     # 兜底内置模板（最小化，仅包含必要字段）
-    return "📋 {label}\n  余额: {balance}元\n  赠送: {gift_balance}元"
+    return "{label}\n  余额: {balance}元\n  赠送: {gift_balance}元"
 
 
 def load_config(plugin_dir: Path | None = None) -> dict:
@@ -270,20 +263,10 @@ def load_config(plugin_dir: Path | None = None) -> dict:
     Returns:
         配置字典
     """
-    yaml_config = load_yaml_config()
-
     # 转换为原有格式以保持兼容
     return {
         "platform": get_config_value("platform.name", "mimo"),
         "platform_name": get_config_value("platform.display_name", "MiMo"),
-        "platform_icon": get_config_value("platform.icon", "📋"),
         "default_device_id": get_config_value("device.default_device_id", "wb_MIQUERY000001"),
         "default_ua": get_config_value("device.default_ua", ""),
-        "api": {
-            "account_base": get_config_value("api.account_base", "https://account.xiaomi.com"),
-            "balance_url": get_config_value("api.balance_url", "https://platform.xiaomimimo.com/api/v1/balance"),
-            "usage_url": get_config_value("api.usage_url", "https://platform.xiaomimimo.com/api/v1/usage"),
-        },
-        "query_timeout": get_config_value("timeout.query", 15),
-        "login_timeout": get_config_value("timeout.login", 15),
     }

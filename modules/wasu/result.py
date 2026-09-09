@@ -35,7 +35,7 @@ class WasuResult(QueryResult):
             # 获取模板（模板应该由调用方提供，不能为空）
             if not self.template:
                 logger.error(f"[WasuResult] 模板为空，无法格式化")
-                return f"📺 {self.account_name}\n❌ 错误：模板未配置"
+                return f"{self.account_name}\n❌ 错误：模板未配置"
             tpl = self.template
 
             data = self.data
@@ -77,4 +77,4 @@ class WasuResult(QueryResult):
 
         except Exception as e:
             logger.error(f"[WasuResult] 错误: {type(e).__name__}: {e}")
-            return f"📺 {self.account_name}\n❌ 格式化错误: {e}"
+            return f"{self.account_name}\n❌ 格式化错误: {e}"

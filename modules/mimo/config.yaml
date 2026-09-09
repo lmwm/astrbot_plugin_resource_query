@@ -7,18 +7,6 @@
 platform:
   name: "mimo"
   display_name: "MiMo"
-  icon: "📋"
-
-# ══════════════════════════════════════════
-#  API 地址
-# ══════════════════════════════════════════
-api:
-  # 小米账号登录 API
-  account_base: "https://account.xiaomi.com"
-
-  # MiMo 平台 API
-  balance_url: "https://platform.xiaomimimo.com/api/v1/balance"
-  usage_url: "https://platform.xiaomimimo.com/api/v1/usage"
 
 # ══════════════════════════════════════════
 #  默认设备配置
@@ -27,25 +15,15 @@ device:
   # 默认设备标识
   default_device_id: "wb_MIQUERY000001"
 
-  # 默认 User-Agent
-  default_ua: "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1"
-
-  # OTP 验证用的 User-Agent
-  ua_otp: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
-
-# ══════════════════════════════════════════
-#  超时设置（秒）
-# ══════════════════════════════════════════
-timeout:
-  query: 15
-  login: 15
+  # 默认 User-Agent（登录、OTP 验证、查询共用）
+  default_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
 
 # ══════════════════════════════════════════
 #  默认消息模板
 # ══════════════════════════════════════════
 template:
   default: |-
-    📋 {label}
+    {label}
     ────────────────
       余额        {balance}元
       赠送        {gift_balance}元

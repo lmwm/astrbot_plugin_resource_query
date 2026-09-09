@@ -50,7 +50,7 @@ class MimoModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return self._config.get("platform_icon", "📋")
+        return ""
 
     @property
     def module_desc(self) -> str:
@@ -606,7 +606,7 @@ class MimoModule(ModuleBase):
         if not accounts:
             yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
             return
-        lines = [f"📋 共 {len(accounts)} 个 MiMo 账号:"]
+        lines = [f"共 {len(accounts)} 个 MiMo 账号:"]
         for i, acc in enumerate(accounts):
             status = "✅" if acc.get("serviceToken") else "❌"
             name = acc.get("name") or acc.get("account") or f"MiMo账号{i+1}"
@@ -658,7 +658,7 @@ class MimoModule(ModuleBase):
             result = await self.query(acc)
             label = acc.get("name") or acc.get("account") or "MiMo账号"
             if not result.get("success"):
-                yield event.plain_result(f"📋 {label}\n❌ {result.get('error')}")
+                yield event.plain_result(f"{label}\n❌ {result.get('error')}")
             else:
                 mr = self._create_result(
                     success=True,
@@ -680,7 +680,7 @@ class MimoModule(ModuleBase):
             yield event.plain_result("🔍 正在查询...")
             result = await self.query(acc)
             if not result.get("success"):
-                yield event.plain_result(f"📋 {name}\n❌ {result.get('error')}")
+                yield event.plain_result(f"{name}\n❌ {result.get('error')}")
             else:
                 mr = self._create_result(
                     success=True,

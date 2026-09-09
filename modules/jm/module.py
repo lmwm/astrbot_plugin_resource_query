@@ -43,7 +43,7 @@ class JMModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return "📚"
+        return ""
 
     @property
     def module_desc(self) -> str:
