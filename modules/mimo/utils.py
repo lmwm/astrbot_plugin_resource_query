@@ -13,7 +13,14 @@ _yaml_config_cache: dict | None = None
 
 def fmt_num(n) -> str:
     """格式化数字：大数用万/亿简化"""
-    n = int(n or 0)
+    try:
+        # 如果已经是格式化的字符串（如 "10.3亿"），直接返回
+        if isinstance(n, str) and any(c in n for c in ['万', '亿', ',']):
+            return n
+        n = int(float(n) if n else 0)
+    except (ValueError, TypeError):
+        return str(n) if n else "0"
+
     if n >= 100_000_000:
         return f"{n / 100_000_000:.1f}亿"
     if n >= 10_000:
