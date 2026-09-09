@@ -16,13 +16,13 @@ from urllib.parse import quote, urlencode
 from urllib.request import Request
 
 from ...http_utils import inject_cookie, new_opener, parse_resp
-from .constants import DEFAULT_ACCOUNT_BASE, DEFAULT_UA_OTP
 from .exceptions import LoginError, OtpRequired, PassTokenExpired, StsError
+from .utils import get_config_value
 
 logger = logging.getLogger(__name__)
 
 # OTP 验证用的 User-Agent（从 YAML 配置读取）
-_UA_OTP = DEFAULT_UA_OTP
+_UA_OTP = get_config_value("device.ua_otp", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
 
 
 class MiAccount:
@@ -31,7 +31,7 @@ class MiAccount:
     def __init__(self, device_id: str, ua: str, account_base: str | None = None):
         self.device_id = device_id
         self.ua = ua
-        self.account_base = account_base or DEFAULT_ACCOUNT_BASE
+        self.account_base = account_base or get_config_value("api.account_base", "https://account.xiaomi.com")
         # 缓存OTP会话状态，保持 opener/jar 在整个OTP流程中不变
         self._otp_session = None
 

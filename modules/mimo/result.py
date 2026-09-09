@@ -1,8 +1,7 @@
 """MiMo 查询结果类"""
 
 from ...base import QueryResult
-from .constants import DEFAULT_TEMPLATE
-from .utils import fmt_num
+from .utils import fmt_num, get_config_value
 
 
 class MimoResult(QueryResult):
@@ -37,7 +36,7 @@ class MimoResult(QueryResult):
         rpm = int(limit.get("rpm") or 0)
         concurrency = limit.get("concurrency")
 
-        tpl = self.template or DEFAULT_TEMPLATE
+        tpl = self.template or get_config_value("template.default", "")
         return tpl.format(
             label=self.account_name or "MiMo用量",
             balance=bal.get("balance", "?"),

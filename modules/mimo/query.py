@@ -4,7 +4,7 @@ import asyncio
 from urllib.request import Request
 
 from ...http_utils import inject_cookie, new_opener, parse_resp
-from .constants import DEFAULT_BALANCE_URL, DEFAULT_USAGE_URL
+from .utils import get_config_value
 
 
 async def query_mimo(
@@ -16,8 +16,8 @@ async def query_mimo(
     timeout: int = 15,
 ) -> dict:
     """查询 MiMo 平台余额和用量，返回原始 API 响应"""
-    balance_url = balance_url or DEFAULT_BALANCE_URL
-    usage_url = usage_url or DEFAULT_USAGE_URL
+    balance_url = balance_url or get_config_value("api.balance_url")
+    usage_url = usage_url or get_config_value("api.usage_url")
 
     def _query():
         opener, jar = new_opener()
