@@ -1,56 +1,44 @@
-# MiMo 模块统一配置文件
+# 华数广电模块统一配置文件
 # 所有常量和默认值集中管理
 
 # ══════════════════════════════════════════
 #  平台信息
 # ══════════════════════════════════════════
 platform:
-  name: "mimo"
-  display_name: "MiMo"
-  icon: "📋"
+  name: "wasu"
+  display_name: "华数广电"
+  icon: "📺"
 
 # ══════════════════════════════════════════
 #  API 地址
 # ══════════════════════════════════════════
 api:
-  # 小米账号登录 API
-  account_base: "https://account.xiaomi.com"
-
-  # MiMo 平台 API
-  balance_url: "https://platform.xiaomimimo.com/api/v1/balance"
-  usage_url: "https://platform.xiaomimimo.com/api/v1/usage"
+  base_url: "https://ups.wasu.cn"
 
 # ══════════════════════════════════════════
-#  默认设备配置
+#  默认请求头
 # ══════════════════════════════════════════
-device:
-  # 默认设备标识
-  default_device_id: "wb_MIQUERY000001"
-
-  # 默认 User-Agent
-  default_ua: "APP/com.xiaomi.mihome APPV/11.3.203 iosPassportSDK/4.2.50 iOS/26.3.1"
-
-  # OTP 验证用的 User-Agent
-  ua_otp: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+headers:
+  user_agent: "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv) "
 
 # ══════════════════════════════════════════
 #  超时设置（秒）
 # ══════════════════════════════════════════
 timeout:
-  query: 15
-  login: 15
+  query: 10
 
 # ══════════════════════════════════════════
 #  默认消息模板
 # ══════════════════════════════════════════
 template:
   default: |-
-    📋 {label}
+    📺 {label}
     ────────────────
-      余额        {balance}元
-      赠送        {gift_balance}元
-      输入        {input_token}
-      输出        {output_token}
-      缓存        {cache_token}
-      本月费用    {monthly_cost}元
-      累计费用    {total_cost}元
+    💰 账户余额: {balance}
+       当月话费: {month_fee}
+       欠费: {arrears}
+
+    📶 本月累计使用: {total_used}
+       总流量: {total} | 已用: {used} | 剩余: {remain}
+
+    🕐 查询时间: {query_time}

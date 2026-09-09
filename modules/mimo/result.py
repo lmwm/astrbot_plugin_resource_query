@@ -88,8 +88,11 @@ class MimoResult(QueryResult):
 
             logger.info(f"[MiMoResult] variables: {variables}")
 
-            # 获取模板
-            tpl = self.template or "📋 {label}\n────────────────\n  余额        {balance}元\n  赠送        {gift_balance}元\n  输入        {input_token}\n  输出        {output_token}\n  缓存        {cache_token}\n  本月费用    {monthly_cost}元\n  累计费用    {total_cost}元"
+            # 获取模板（模板应该由调用方提供，不能为空）
+            if not self.template:
+                logger.error(f"[MiMoResult] 模板为空，无法格式化")
+                return f"📋 {self.account_name}\n❌ 错误：模板未配置"
+            tpl = self.template
 
             # 格式化
             result = tpl.format(**variables)

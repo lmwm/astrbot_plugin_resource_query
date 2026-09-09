@@ -15,9 +15,9 @@ from urllib.request import Request
 
 from ...core.module import ModuleBase
 from ...http_utils import new_opener
-from .constants import DEFAULT_BASE_URL, DEFAULT_HEADERS, DEFAULT_TEMPLATE
+from .constants import DEFAULT_BASE_URL, DEFAULT_HEADERS
 from .result import WasuResult
-from .utils import fmt_gb, fmt_yuan
+from .utils import fmt_gb, fmt_yuan, load_default_template
 
 
 class WasuModule(ModuleBase):
@@ -52,14 +52,18 @@ class WasuModule(ModuleBase):
         return "华数广电流量/话费查询"
 
     def _load_default_template(self) -> str:
-        """从模板文件夹加载默认模板"""
-        tpl_path = self._plugin_dir / "templates" / "wasu_default.txt"
-        if tpl_path.exists():
-            try:
-                return tpl_path.read_text(encoding="utf-8")
-            except OSError:
-                pass
-        return DEFAULT_TEMPLATE
+        """从配置文件加载默认模板"""
+        return load_default_template()
+
+    def get_default_template(self) -> str:
+        """获取默认模板（覆盖基类方法）
+
+        优先从 config.yaml 加载默认模板。
+
+        Returns:
+            默认模板内容
+        """
+        return self._default_template
 
     # ══════════════════════════════════════════
     #  查询接口（实现基类抽象方法）
@@ -75,7 +79,10 @@ class WasuModule(ModuleBase):
             查询结果字典
         """
         label = account.get("name") or account.get("phone") or "华数账号"
+        # 获取模板：优先使用账号自定义模板，否则使用默认模板
         template = self.get_account_template(account)
+        if not template:
+            template = self._default_template
 
         user_key = account.get("user_key", "")
         token = account.get("token", "")

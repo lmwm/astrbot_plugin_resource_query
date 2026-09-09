@@ -247,9 +247,12 @@ class ModuleBase(ABC):
     def get_default_template(self) -> str:
         """获取默认模板
 
+        子类可以覆盖此方法以提供自定义的默认模板加载逻辑。
+
         Returns:
             默认模板内容
         """
+        # 尝试从 templates 目录加载
         template_file = self._plugin_dir / "templates" / f"{self.module_name}_default.txt"
         if template_file.exists():
             try:

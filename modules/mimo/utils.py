@@ -181,16 +181,8 @@ def load_default_template(plugin_dir: Path | None = None) -> str:
     if template:
         return template
 
-    # 兜底内置模板
-    return """📋 {label}
-────────────────
-  余额        {balance}元
-  赠送        {gift_balance}元
-  输入        {input_token}
-  输出        {output_token}
-  缓存        {cache_token}
-  本月费用    {monthly_cost}元
-  累计费用    {total_cost}元"""
+    # 兜底内置模板（最小化，仅包含必要字段）
+    return "📋 {label}\n  余额: {balance}元\n  赠送: {gift_balance}元"
 
 
 def load_config(plugin_dir: Path | None = None) -> dict:

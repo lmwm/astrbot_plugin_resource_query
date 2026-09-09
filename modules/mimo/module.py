@@ -101,6 +101,20 @@ class MimoModule(ModuleBase):
         )
 
     # ══════════════════════════════════════════
+    #  模板管理（覆盖基类方法）
+    # ══════════════════════════════════════════
+
+    def get_default_template(self) -> str:
+        """获取默认模板（覆盖基类方法）
+
+        优先从 config.yaml 加载默认模板。
+
+        Returns:
+            默认模板内容
+        """
+        return self._default_template
+
+    # ══════════════════════════════════════════
     #  账号管理（覆盖基类方法）
     # ══════════════════════════════════════════
 
@@ -228,7 +242,10 @@ class MimoModule(ModuleBase):
             查询结果字典
         """
         label = account.get("name") or account.get("account") or "MiMo账号"
+        # 获取模板：优先使用账号自定义模板，否则使用默认模板
         template = self.get_account_template(account)
+        if not template:
+            template = self._default_template
 
         try:
             # 记录查询前的凭证状态
