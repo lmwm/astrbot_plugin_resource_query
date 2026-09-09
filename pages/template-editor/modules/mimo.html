@@ -1,0 +1,164 @@
+<!-- MiMo 账号管理页面 -->
+<div class="page active" id="page-mimo">
+  <!-- 子标签页 -->
+  <div class="sub-tabs">
+    <button class="sub-tab active" onclick="switchSubPage('mimo', 'accounts', event)">📋 账号管理</button>
+    <button class="sub-tab" onclick="switchSubPage('mimo', 'variables', event)">⚙️ 变量配置</button>
+  </div>
+
+  <!-- MiMo 账号管理 -->
+  <div class="sub-page active" id="mimo-accounts">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">🤖 MiMo 账号管理</div>
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:12px;color:var(--text-muted)"><span id="mimo-count">0</span> 个账号</span>
+          <button class="btn btn-primary btn-sm" onclick="openAddMimoModal()">＋ 添加 MiMo 账号</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="account-grid" id="mimo-account-list"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MiMo 变量配置 -->
+  <div class="sub-page" id="mimo-variables">
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title">⚙️ MiMo 变量配置</div>
+        <button class="btn btn-primary btn-sm" onclick="saveMimoVarConfig()">💾 保存配置</button>
+      </div>
+      <div class="card-body">
+        <div id="mimo-var-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MiMo 账号添加/编辑模态框 -->
+<div class="modal-overlay" id="mimo-modal">
+  <div class="modal" style="max-width: 700px;">
+    <div class="modal-header">
+      <div class="modal-title" id="mimo-modal-title">添加 MiMo 账号</div>
+      <button class="btn btn-ghost" onclick="closeMimoModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- 顶部标签：账号配置 / 消息模板 -->
+      <div class="form-group">
+        <div class="platform-tabs">
+          <div class="platform-tab active" data-section="account" onclick="switchMimoModalSection('account')">📋 账号配置</div>
+          <div class="platform-tab" data-section="template" onclick="switchMimoModalSection('template')">📝 消息模板</div>
+        </div>
+      </div>
+
+      <!-- 账号配置部分 -->
+      <div id="mimo-account-section">
+        <div class="form-group">
+          <label class="form-label">账号名称（可选）</label>
+          <input class="form-input" id="mimo-field-name" placeholder="如：我的MiMo账号">
+        </div>
+
+        <!-- 登录方式选择 -->
+        <div class="form-group">
+          <label class="form-label">登录方式</label>
+          <div class="platform-tabs">
+            <div class="platform-tab active" data-method="password" onclick="switchMimoLoginMethod('password')">账号密码</div>
+            <div class="platform-tab" data-method="passtoken" onclick="switchMimoLoginMethod('passtoken')">PassToken</div>
+            <div class="platform-tab" data-method="token" onclick="switchMimoLoginMethod('token')">ServiceToken</div>
+          </div>
+        </div>
+
+        <!-- 账号密码登录 -->
+        <div id="mimo-password-section">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">小米账号 *</label>
+              <input class="form-input" id="mimo-field-account" placeholder="手机号或邮箱">
+            </div>
+            <div class="form-group">
+              <label class="form-label">密码 *</label>
+              <div class="password-wrapper">
+                <input class="form-input" id="mimo-field-password" type="password" placeholder="密码">
+                <button class="password-toggle" onclick="toggleMimoPassword()">👁</button>
+              </div>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">设备标识</label>
+              <input class="form-input" id="mimo-field-device-id" placeholder="留空使用默认值">
+            </div>
+            <div class="form-group">
+              <label class="form-label">User-Agent</label>
+              <input class="form-input" id="mimo-field-ua" placeholder="留空使用默认值">
+            </div>
+          </div>
+          <!-- OTP 验证码 -->
+          <div class="form-group" id="mimo-otp-section" style="display: none;">
+            <label class="form-label">短信验证码</label>
+            <input class="form-input" id="mimo-field-otp" placeholder="6位数字验证码" maxlength="6">
+            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+              验证码已发送到您的手机，请输入6位数字验证码
+            </div>
+          </div>
+        </div>
+
+        <!-- ServiceToken 登录 -->
+        <div id="mimo-token-section" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">ServiceToken *</label>
+            <input class="form-input" id="mimo-field-service-token" placeholder="粘贴 ServiceToken" style="font-family: monospace; font-size: 12px;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">User ID *</label>
+            <input class="form-input" id="mimo-field-user-id" placeholder="小米用户 ID">
+          </div>
+        </div>
+
+        <!-- PassToken 登录 -->
+        <div id="mimo-passtoken-section" style="display: none;">
+          <div class="form-group">
+            <label class="form-label">PassToken *</label>
+            <input class="form-input" id="mimo-field-passtoken" placeholder="粘贴 PassToken" style="font-family: monospace; font-size: 12px;">
+          </div>
+          <div class="form-group">
+            <label class="form-label">User ID *</label>
+            <input class="form-input" id="mimo-field-passtoken-user-id" placeholder="小米用户 ID">
+          </div>
+          <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">
+            PassToken 必须配合 User ID 使用，查询时会自动换取 ServiceToken
+          </div>
+        </div>
+
+        <div id="mimo-login-status" style="margin-top: 12px; padding: 10px; border-radius: 8px; display: none;"></div>
+      </div>
+
+      <!-- 消息模板部分 -->
+      <div id="mimo-template-section" style="display: none;">
+        <div class="form-group">
+          <div class="template-header">
+            <label class="form-label" style="margin-bottom:0">消息模板</label>
+            <button class="btn btn-ghost btn-sm" onclick="resetMimoFieldTemplate()">↺ 恢复默认</button>
+          </div>
+          <div class="template-layout">
+            <div class="template-editor">
+              <div class="template-label">模板编辑</div>
+              <textarea class="form-textarea" id="mimo-field-template" oninput="syncMimoPreviewHeight()" style="min-height: 300px;"></textarea>
+            </div>
+            <div class="template-preview-box">
+              <div class="template-label">预览效果</div>
+              <div class="template-preview" id="mimo-field-template-preview" style="min-height: 300px;"></div>
+            </div>
+          </div>
+          <div class="variable-tags" id="mimo-field-variable-tags"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeMimoModal()">取消</button>
+      <button class="btn btn-secondary" id="mimo-test-btn" onclick="testMimoAccount()">🧪 测试</button>
+      <button class="btn btn-primary" id="mimo-save-btn" onclick="saveMimoAccount()">💾 保存</button>
+    </div>
+  </div>
+</div>
