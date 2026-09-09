@@ -685,8 +685,8 @@
         defaultTemplates = templates || {};
         const varsData = await bridge.apiGet('template-vars');
         templateVars = varsData || {};
-        // 加载 JM 配置
-        const jmData = await bridge.apiGet('jm-config');
+        // 加载 JM 配置（路径是 jm/config，不是 jm-config）
+        const jmData = await bridge.apiGet('jm/config');
         if (jmData) renderJmConfig(jmData);
       } catch (e) {
         console.error('加载默认配置失败:', e);

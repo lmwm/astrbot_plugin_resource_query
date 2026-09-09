@@ -1,0 +1,32 @@
+index-Ck-h8V3_.js:1514 🌍 新i18n系统初始化完成
+FullLayout-YreLcPOe.js:1 Initial save bot route: /plugin-page/astrbot_plugin_resource_query/template-editor
+:6185/#/plugin-page/astrbot_plugin_resource_query/template-editor:1 [Intervention] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: http://127.0.0.1:6185/assets/materialdesignicons-webfont-subset-Bf1r-IpU.woff2
+index-Ck-h8V3_.js:16 SSE stream opened
+content-script-start.js:11278 SecurityError: Failed to read the 'cookie' property from 'Document': The document is sandboxed and lacks the 'allow-same-origin' flag.
+    at CookieController.applyRules (content-script-start.js:3840:18)
+    at CookieController.apply (content-script-start.js:3782:14)
+    at content_script_mv3_CookieController.applyCookieRules (content-script-start.js:11274:30)
+    at content_script_mv3_CookieController.process (content-script-start.js:11244:18)
+applyCookieRules @ content-script-start.js:11278
+process @ content-script-start.js:11244
+await in process
+init @ content-script-start.js:11231
+（匿名） @ content-script-start.js:11431
+（匿名） @ content-script-start.js:14824
+（匿名） @ content-script-start.js:14826
+template-editor/?asset_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFzdHJib3QiLCJ0b2tlbl90eXBlIjoicGx1Z2luX3BhZ2VfYXNzZXQiLCJwbHVnaW5fbmFtZSI6ImFzdHJib3RfcGx1Z2luX3Jlc291cmNlX3F1ZXJ5IiwicGFnZV9uYW1lIjoidGVtcGxhdGUtZWRpdG9yIiwibG9jYWxlIjoiemgtQ04iLCJpYXQiOjE3ODg5MzM2NDIsImV4cCI6MTc4ODkzMzcwMn0.4VkYVLtR8vA1rur2ScrTq-v2l02XC8HEKFeTeGsY0k4&theme=light:692 加载默认配置失败: Error: 未找到该路由
+    at bridge-sdk.js?asset_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFzdHJib3QiLCJ0b2tlbl90eXBlIjoicGx1Z2luX3BhZ2VfYXNzZXQiLCJwbHVnaW5fbmFtZSI6ImFzdHJib3RfcGx1Z2luX3Jlc291cmNlX3F1ZXJ5IiwicGFnZV9uYW1lIjoidGVtcGxhdGUtZWRpdG9yIiwibG9jYWxlIjoiemgtQ04iLCJpYXQiOjE3ODg5MzM2NDIsImV4cCI6MTc4ODkzMzcwMn0.4VkYVLtR8vA1rur2ScrTq-v2l02XC8HEKFeTeGsY0k4&theme=light:177:11
+loadDefaults @ template-editor/?asset_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFzdHJib3QiLCJ0b2tlbl90eXBlIjoicGx1Z2luX3BhZ2VfYXNzZXQiLCJwbHVnaW5fbmFtZSI6ImFzdHJib3RfcGx1Z2luX3Jlc291cmNlX3F1ZXJ5IiwicGFnZV9uYW1lIjoidGVtcGxhdGUtZWRpdG9yIiwibG9jYWxlIjoiemgtQ04iLCJpYXQiOjE3ODg5MzM2NDIsImV4cCI6MTc4ODkzMzcwMn0.4VkYVLtR8vA1rur2ScrTq-v2l02XC8HEKFeTeGsY0k4&theme=light:692
+await in loadDefaults
+（匿名） @ template-editor/?asset_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6ImFzdHJib3QiLCJ0b2tlbl90eXBlIjoicGx1Z2luX3BhZ2VfYXNzZXQiLCJwbHVnaW5fbmFtZSI6ImFzdHJib3RfcGx1Z2luX3Jlc291cmNlX3F1ZXJ5IiwicGFnZV9uYW1lIjoidGVtcGxhdGUtZWRpdG9yIiwibG9jYWxlIjoiemgtQ04iLCJpYXQiOjE3ODg5MzM2NDIsImV4cCI6MTc4ODkzMzcwMn0.4VkYVLtR8vA1rur2ScrTq-v2l02XC8HEKFeTeGsY0k4&theme=light:676
+content_main.js:5258 Uncaught (in promise) SyntaxError: Failed to execute 'postMessage' on 'Window': Invalid target origin 'null' in a call to 'postMessage'.
+    at a (content_main.js:5258:13726)
+a @ content_main.js:5258
+await in a
+PV.globalThis.addEventListener.capture @ content_main.js:5258
+content_main.js:5258 This page uses Chrome's Built-In AI features (LanguageDetector)! We're always improving our models; please submit your feedback here: https://issues.chromium.org/issues/new?component=1583316
+content_main.js:5258 Uncaught (in promise) SyntaxError: Failed to execute 'postMessage' on 'Window': Invalid target origin 'null' in a call to 'postMessage'.
+    at a (content_main.js:5258:13726)
+a @ content_main.js:5258
+await in a
+PV.globalThis.addEventListener.capture @ content_main.js:5258

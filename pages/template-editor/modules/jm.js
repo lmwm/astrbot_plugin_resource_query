@@ -32,7 +32,7 @@ async function saveJmConfig() {
     jm_max_concurrent: Math.max(1, Math.min(3, parseInt(document.getElementById('jm-max-concurrent').value) || 1)),
   };
   try {
-    await bridge.apiPost('jm-config', payload);
+    await bridge.apiPost('jm/config', payload);
     showToast('JM 配置已保存');
   } catch (e) {
     showToast('保存失败: ' + (e.message || '未知错误'), 'error');
