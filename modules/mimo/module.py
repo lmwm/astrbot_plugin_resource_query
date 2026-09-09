@@ -510,26 +510,31 @@ class MimoModule(ModuleBase):
 
         # /mimo otp <验证码> — 提交 OTP 验证码
         if args and args[0].lower() == "otp":
-            await self._handle_otp_command(args, event, accounts)
+            async for result in self._handle_otp_command(args, event, accounts):
+                yield result
             return
 
         # /mimo ls — 列出所有账号
         if args and args[0].lower() == "ls":
-            self._handle_ls_command(event, accounts)
+            async for result in self._handle_ls_command(event, accounts):
+                yield result
             return
 
         # /mimo del <序号或名称> — 删除指定账号
         if args and args[0].lower() == "del":
-            self._handle_del_command(args, event, accounts)
+            async for result in self._handle_del_command(args, event, accounts):
+                yield result
             return
 
         # /mimo — 查询所有账号
         if not args:
-            await self._handle_query_all(event, accounts)
+            async for result in self._handle_query_all(event, accounts):
+                yield result
             return
 
         # /mimo <名称> — 查询指定账号
-        await self._handle_query_one(args[0], event, accounts)
+        async for result in self._handle_query_one(args[0], event, accounts):
+            yield result
 
     async def _handle_otp_command(self, args: list[str], event, accounts: list[dict]):
         """处理 OTP 验证码提交"""
