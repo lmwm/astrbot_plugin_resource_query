@@ -126,7 +126,25 @@ class MimoModule(ModuleBase):
         template = self.get_account_template(account)
 
         try:
+            # 记录查询前的凭证状态
+            old_service_token = account.get("serviceToken", "")
+            old_pass_token = account.get("passToken", "")
+            old_user_id = account.get("userId", "")
+
             result_data = await self._manager.query_one(account)
+
+            # 检查凭证是否有更新
+            new_service_token = account.get("serviceToken", "")
+            new_pass_token = account.get("passToken", "")
+            new_user_id = account.get("userId", "")
+
+            if (
+                new_service_token != old_service_token
+                or new_pass_token != old_pass_token
+                or new_user_id != old_user_id
+            ):
+                # 凭证有更新，保存到配置文件
+                self._save_account_credentials(account)
 
             if "error" in result_data:
                 return {
@@ -149,6 +167,30 @@ class MimoModule(ModuleBase):
                 "error": str(e),
                 "template": template,
             }
+
+    def _save_account_credentials(self, account: dict) -> None:
+        """保存账号凭证到配置文件
+
+        Args:
+            account: 账号配置（包含更新后的凭证）
+        """
+        # 获取所有账号
+        accounts = self.get_accounts()
+
+        # 查找并更新对应的账号
+        account_name = account.get("name", "")
+        account_id = account.get("account", "")
+
+        for i, acc in enumerate(accounts):
+            if acc.get("name") == account_name and acc.get("account") == account_id:
+                # 更新凭证字段
+                for key in ["serviceToken", "passToken", "userId"]:
+                    if key in account:
+                        acc[key] = account[key]
+                break
+
+        # 保存到配置文件
+        self.save_accounts(accounts)
 
     # ══════════════════════════════════════════
     #  登录相关（委托给内部管理器）
