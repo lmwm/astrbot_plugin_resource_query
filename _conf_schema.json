@@ -1,4 +1,28 @@
 {
+    "modules": {
+        "description": "模块启用设置",
+        "type": "object",
+        "items": {
+            "mimo_enabled": {
+                "description": "启用 MiMo 模块",
+                "type": "bool",
+                "default": true,
+                "hint": "小米 MiMo 平台用量查询功能"
+            },
+            "wasu_enabled": {
+                "description": "启用华数模块",
+                "type": "bool",
+                "default": true,
+                "hint": "华数广电流量/话费查询功能"
+            },
+            "jm_enabled": {
+                "description": "启用 JM 模块",
+                "type": "bool",
+                "default": true,
+                "hint": "JMComic 漫画下载功能"
+            }
+        }
+    },
     "proxy": {
         "description": "GitHub 更新代理",
         "type": "string",

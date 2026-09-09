@@ -245,13 +245,13 @@
 
       <!-- 顶部导航 -->
       <div class="nav-tabs">
-        <button class="nav-tab active" onclick="switchPage('mimo', event)">🤖 MiMo 账号</button>
-        <button class="nav-tab" onclick="switchPage('wasu', event)">📺 华数账号</button>
-        <button class="nav-tab" onclick="switchPage('jm', event)">🎮 JM 设置</button>
+        <button class="nav-tab active" data-module="mimo" onclick="switchPage('mimo', event)">🤖 MiMo 账号</button>
+        <button class="nav-tab" data-module="wasu" onclick="switchPage('wasu', event)">📺 华数账号</button>
+        <button class="nav-tab" data-module="jm" onclick="switchPage('jm', event)">🎮 JM 设置</button>
       </div>
 
       <!-- MiMo 账号管理页面 -->
-      <div class="page active" id="page-mimo">
+      <div class="page active" id="page-mimo" data-module="mimo">
         <div class="sub-tabs">
           <button class="sub-tab active" onclick="switchSubPage('mimo', 'accounts', event)">📋 账号管理</button>
           <button class="sub-tab" onclick="switchSubPage('mimo', 'variables', event)">⚙️ 变量配置</button>
@@ -284,7 +284,7 @@
       </div>
 
       <!-- 华数账号管理页面 -->
-      <div class="page" id="page-wasu">
+      <div class="page" id="page-wasu" data-module="wasu">
         <div class="sub-tabs">
           <button class="sub-tab active" onclick="switchSubPage('wasu', 'accounts', event)">📋 账号管理</button>
           <button class="sub-tab" onclick="switchSubPage('wasu', 'variables', event)">⚙️ 变量配置</button>
@@ -317,7 +317,7 @@
       </div>
 
       <!-- JM 设置页面 -->
-      <div class="page" id="page-jm">
+      <div class="page" id="page-jm" data-module="jm">
         <div class="card">
           <div class="card-header">
             <div class="card-title">🎮 JMComic 下载配置</div>
@@ -671,13 +671,55 @@
       }
     }
 
+    // 模块启用状态
+    let modulesEnabled = { mimo: true, wasu: true, jm: true };
+
     document.addEventListener('DOMContentLoaded', async () => {
       await bridge.ready();
+      await loadModulesConfig();
       await loadDefaults();
       await loadAccounts();
       renderMimoVarList();
       renderWasuVarList();
     });
+
+    // 加载模块启用配置
+    async function loadModulesConfig() {
+      try {
+        const config = await bridge.apiGet('modules');
+        if (config) {
+          modulesEnabled = config;
+          updateModuleVisibility();
+        }
+      } catch (e) {
+        console.error('加载模块配置失败:', e);
+      }
+    }
+
+    // 根据模块启用状态更新页面可见性
+    function updateModuleVisibility() {
+      // 隐藏禁用模块的导航标签
+      document.querySelectorAll('.nav-tab[data-module]').forEach(tab => {
+        const moduleName = tab.dataset.module;
+        tab.style.display = modulesEnabled[moduleName] ? '' : 'none';
+      });
+
+      // 隐藏禁用模块的页面
+      document.querySelectorAll('.page[data-module]').forEach(page => {
+        const moduleName = page.dataset.module;
+        page.style.display = modulesEnabled[moduleName] ? '' : 'none';
+      });
+
+      // 如果当前激活的模块被禁用，切换到第一个启用的模块
+      const activeTab = document.querySelector('.nav-tab.active');
+      if (activeTab && activeTab.style.display === 'none') {
+        const firstEnabledTab = document.querySelector('.nav-tab[data-module]:not([style*="display: none"])');
+        if (firstEnabledTab) {
+          const moduleName = firstEnabledTab.dataset.module;
+          switchPage(moduleName);
+        }
+      }
+    }
 
     async function loadDefaults() {
       try {

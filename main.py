@@ -78,18 +78,24 @@ class ResourceQueryPlugin(Star):
         self._register_web_apis(context)
 
     def _register_modules(self):
-        """注册所有功能模块"""
+        """注册所有功能模块（根据配置决定是否启用）"""
+        # 获取模块启用配置
+        modules_config = self.config.get("modules", {})
+
         # 注册 MiMo 模块
-        mimo_module = MimoModule(self._plugin_dir, _PLUGIN_NAME)
-        self._manager.register_module(mimo_module)
+        if modules_config.get("mimo_enabled", True):
+            mimo_module = MimoModule(self._plugin_dir, _PLUGIN_NAME)
+            self._manager.register_module(mimo_module)
 
         # 注册华数广电模块
-        wasu_module = WasuModule(self._plugin_dir, _PLUGIN_NAME)
-        self._manager.register_module(wasu_module)
+        if modules_config.get("wasu_enabled", True):
+            wasu_module = WasuModule(self._plugin_dir, _PLUGIN_NAME)
+            self._manager.register_module(wasu_module)
 
         # 注册 JMComic 模块
-        jm_module = JMModule(self._plugin_dir, _PLUGIN_NAME)
-        self._manager.register_module(jm_module)
+        if modules_config.get("jm_enabled", True):
+            jm_module = JMModule(self._plugin_dir, _PLUGIN_NAME)
+            self._manager.register_module(jm_module)
 
     def _register_web_apis(self, context: Context):
         """注册 Web API"""
@@ -112,6 +118,9 @@ class ResourceQueryPlugin(Star):
         context.register_web_api(
             f"/{_PLUGIN_NAME}/template-vars", self.save_template_vars, ["POST"], "保存模板变量定义"
         )
+        context.register_web_api(
+            f"/{_PLUGIN_NAME}/modules", self.get_modules_config, ["GET"], "获取模块启用配置"
+        )
 
         # 注册模块特有的 Web API
         for module in self._manager.get_all_modules():
@@ -129,6 +138,16 @@ class ResourceQueryPlugin(Star):
     # ══════════════════════════════════════════
     #  Pages API
     # ══════════════════════════════════════════
+
+    async def get_modules_config(self):
+        """获取模块启用配置"""
+        from astrbot.api.web import json_response
+        modules_config = self.config.get("modules", {})
+        return json_response({
+            "mimo": modules_config.get("mimo_enabled", True),
+            "wasu": modules_config.get("wasu_enabled", True),
+            "jm": modules_config.get("jm_enabled", True),
+        })
 
     async def get_config(self):
         """获取配置"""
