@@ -1,0 +1,52 @@
+{
+  "variables": [
+    {
+      "name": "label",
+      "desc": "账号名称",
+      "default": "MiMo账号",
+      "show": true
+    },
+    {
+      "name": "balance",
+      "desc": "余额",
+      "default": "177.40",
+      "show": true
+    },
+    {
+      "name": "gift_balance",
+      "desc": "赠送余额",
+      "default": "177.40",
+      "show": true
+    },
+    {
+      "name": "input_token",
+      "desc": "输入Token（自动格式化）",
+      "default": "10.3亿",
+      "show": true
+    },
+    {
+      "name": "output_token",
+      "desc": "输出Token（自动格式化）",
+      "default": "324.0万",
+      "show": true
+    },
+    {
+      "name": "cache_token",
+      "desc": "缓存Token（自动格式化）",
+      "default": "9.8亿",
+      "show": true
+    },
+    {
+      "name": "monthly_cost",
+      "desc": "本月费用",
+      "default": "120.93",
+      "show": true
+    },
+    {
+      "name": "total_cost",
+      "desc": "累计费用",
+      "default": "132.60",
+      "show": true
+    }
+  ]
+}

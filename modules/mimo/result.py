@@ -1,7 +1,10 @@
 """MiMo 查询结果类"""
 
+import logging
+
 from ...base import QueryResult
-from .utils import fmt_num, get_config_value
+
+logger = logging.getLogger(__name__)
 
 
 class MimoResult(QueryResult):
@@ -26,45 +29,73 @@ class MimoResult(QueryResult):
 
     def _format_data(self) -> str:
         """格式化 MiMo 查询结果"""
-        # 兼容不同的数据结构
-        # 结构1: {"balance": {"data": {...}}, "usage": {"data": {...}}}
-        # 结构2: {"balance": {...}, "usage": {...}}
-        balance_data = self.data.get("balance", {})
-        usage_data = self.data.get("usage", {})
+        try:
+            logger.info(f"[MiMoResult] 开始格式化, data keys: {list(self.data.keys())}")
 
-        # 如果有嵌套的 data 属性，使用它
-        if isinstance(balance_data, dict) and "data" in balance_data:
-            balance_data = balance_data["data"]
-        if isinstance(usage_data, dict) and "data" in usage_data:
-            usage_data = usage_data["data"]
+            # 兼容不同的数据结构
+            balance_data = self.data.get("balance", {})
+            usage_data = self.data.get("usage", {})
 
-        # 获取各个字段
-        tok = usage_data.get("tokenUsage", {})
-        cost = usage_data.get("costUsage", {})
-        limit = usage_data.get("accountRateLimit", {})
+            # 如果有嵌套的 data 属性，使用它
+            if isinstance(balance_data, dict) and "data" in balance_data:
+                balance_data = balance_data["data"]
+            if isinstance(usage_data, dict) and "data" in usage_data:
+                usage_data = usage_data["data"]
 
-        # 安全获取数值
-        def safe_get(d, key, default=0):
-            val = d.get(key, default)
-            if val is None:
-                return default
-            return val
+            # 获取各个字段
+            tok = usage_data.get("tokenUsage", {})
+            cost = usage_data.get("costUsage", {})
 
-        tpm = safe_get(limit, "tpm", 0)
-        rpm = safe_get(limit, "rpm", 0)
-        concurrency = limit.get("concurrency")
+            logger.info(f"[MiMoResult] tok: {tok}")
+            logger.info(f"[MiMoResult] cost: {cost}")
 
-        tpl = self.template or get_config_value("template.default", "")
-        return tpl.format(
-            label=self.account_name or "MiMo用量",
-            balance=safe_get(balance_data, "balance", "?"),
-            gift_balance=safe_get(balance_data, "giftBalance", "?"),
-            input_token=fmt_num(safe_get(tok, "inputToken", 0)),
-            output_token=fmt_num(safe_get(tok, "outputToken", 0)),
-            cache_token=fmt_num(safe_get(tok, "cacheToken", 0)),
-            monthly_cost=safe_get(cost, "currentMonthCost", "?"),
-            total_cost=safe_get(cost, "totalCost", "?"),
-            tpm=fmt_num(tpm),
-            rpm=fmt_num(rpm),
-            concurrency=concurrency or "-",
-        )
+            # 获取数值并转换为字符串
+            def get_str(d, key, default="?"):
+                val = d.get(key, default)
+                if val is None:
+                    return default
+                return str(val)
+
+            # 格式化大数字
+            def fmt_num(n):
+                try:
+                    if isinstance(n, str):
+                        if any(c in n for c in ['万', '亿', ',']):
+                            return n
+                        n = int(float(n))
+                    else:
+                        n = int(n)
+                except (ValueError, TypeError):
+                    return str(n)
+
+                if n >= 100_000_000:
+                    return f"{n / 100_000_000:.1f}亿"
+                if n >= 10_000:
+                    return f"{n / 10_000:.1f}万"
+                return str(n)
+
+            # 准备变量
+            variables = {
+                "label": str(self.account_name or "MiMo用量"),
+                "balance": get_str(balance_data, "balance"),
+                "gift_balance": get_str(balance_data, "giftBalance"),
+                "input_token": fmt_num(tok.get("inputToken", 0)),
+                "output_token": fmt_num(tok.get("outputToken", 0)),
+                "cache_token": fmt_num(tok.get("cacheToken", 0)),
+                "monthly_cost": get_str(cost, "currentMonthCost"),
+                "total_cost": get_str(cost, "totalCost"),
+            }
+
+            logger.info(f"[MiMoResult] variables: {variables}")
+
+            # 获取模板
+            tpl = self.template or "📋 {label}\n────────────────\n  余额        {balance}元\n  赠送        {gift_balance}元\n  输入        {input_token}\n  输出        {output_token}\n  缓存        {cache_token}\n  本月费用    {monthly_cost}元\n  累计费用    {total_cost}元"
+
+            # 格式化
+            result = tpl.format(**variables)
+            logger.info(f"[MiMoResult] 格式化成功, 长度: {len(result)}")
+            return result
+
+        except Exception as e:
+            logger.error(f"[MiMoResult] 错误: {type(e).__name__}: {e}")
+            return f"📋 {self.account_name}\n❌ 格式化错误: {e}"

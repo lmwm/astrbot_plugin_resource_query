@@ -1,0 +1,58 @@
+{
+  "variables": [
+    {
+      "name": "label",
+      "desc": "账号名称",
+      "default": "138****8888",
+      "show": true
+    },
+    {
+      "name": "balance",
+      "desc": "余额",
+      "default": "¥56.80",
+      "show": true
+    },
+    {
+      "name": "month_fee",
+      "desc": "当月话费",
+      "default": "¥38.50",
+      "show": true
+    },
+    {
+      "name": "arrears",
+      "desc": "欠费",
+      "default": "¥0.00",
+      "show": true
+    },
+    {
+      "name": "total_used",
+      "desc": "本月累计使用",
+      "default": "15.62 GB",
+      "show": true
+    },
+    {
+      "name": "total",
+      "desc": "总流量",
+      "default": "30.00 GB",
+      "show": true
+    },
+    {
+      "name": "used",
+      "desc": "已用流量",
+      "default": "15.62 GB",
+      "show": true
+    },
+    {
+      "name": "remain",
+      "desc": "剩余流量",
+      "default": "14.38 GB",
+      "show": true
+    },
+    {
+      "name": "query_time",
+      "desc": "查询时间",
+      "default": "2026-08-21 23:00",
+      "show": true
+    }
+  ]
+}
