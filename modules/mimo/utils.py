@@ -35,8 +35,42 @@ def fmt_num(n) -> str:
     return str(n)
 
 
+def _convert_value(value: str):
+    """将 YAML 值字符串转换为合适的 Python 类型
+
+    Args:
+        value: YAML 值字符串
+
+    Returns:
+        转换后的值（int、float、bool、None 或 str）
+    """
+    if not value:
+        return ""
+    # 布尔值
+    if value.lower() in ("true", "yes", "on"):
+        return True
+    if value.lower() in ("false", "no", "off"):
+        return False
+    # null
+    if value.lower() in ("null", "~"):
+        return None
+    # 整数
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    # 浮点数
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+
 def _parse_yaml_simple(text: str) -> dict:
-    """简单的 YAML 解析器（支持基本的键值对和嵌套）
+    """简单的 YAML 解析器（支持基本的键值对、嵌套和块标量）
+
+    支持 |- / |+ / > 等块标量指示符。
 
     Args:
         text: YAML 文本内容
@@ -49,10 +83,14 @@ def _parse_yaml_simple(text: str) -> dict:
     current_subsection = None
     base_indent = 0
 
-    for line in text.split("\n"):
+    lines = text.split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         # 跳过空行和注释
         stripped = line.strip()
         if not stripped or stripped.startswith("#"):
+            i += 1
             continue
 
         # 计算缩进级别
@@ -75,17 +113,58 @@ def _parse_yaml_simple(text: str) -> dict:
                     if (value.startswith('"') and value.endswith('"')) or \
                        (value.startswith("'") and value.endswith("'")):
                         value = value[1:-1]
-                    result[key] = value
+                    result[key] = _convert_value(value)
                 else:
                     result[key] = {}
+                i += 1
                 continue
 
             # 子键（缩进大于0）
             if current_section and indent > base_indent:
-                # 处理多行字符串
-                if value == "|":
+                # 处理多行字符串（支持 |、|-、|+、>、>-、>+）
+                if value and re.match(r'^[|>][+-]?$', value):
                     current_subsection = key
-                    result[current_section][key] = ""
+                    block_lines = []
+                    # 记录块内容的基准缩进（取后续第一行的缩进）
+                    block_base_indent = None
+                    i += 1
+                    while i < len(lines):
+                        bline = lines[i]
+                        bstripped = bline.strip()
+                        # 空行保留
+                        if not bstripped:
+                            block_lines.append("")
+                            i += 1
+                            continue
+                        bindent = len(bline) - len(bline.lstrip())
+                        # 如果缩进小于等于父级键的缩进，块结束
+                        if bindent <= indent:
+                            break
+                        if block_base_indent is None:
+                            block_base_indent = bindent
+                        # 去掉块基准缩进
+                        content = bline[block_base_indent:] if block_base_indent else bstripped
+                        block_lines.append(content)
+                        i += 1
+                    # 根据块标量类型决定连接方式
+                    if value.startswith(">"):
+                        # 折叠模式：空行分段，非空行用空格连接
+                        paragraphs = []
+                        current_para = []
+                        for bl in block_lines:
+                            if bl == "":
+                                if current_para:
+                                    paragraphs.append(" ".join(current_para))
+                                    current_para = []
+                            else:
+                                current_para.append(bl)
+                        if current_para:
+                            paragraphs.append(" ".join(current_para))
+                        result[current_section][key] = "\n".join(paragraphs)
+                    else:
+                        # 字面模式（|）：保留换行
+                        result[current_section][key] = "\n".join(block_lines)
+                    # 不递增 i，while 循环已经推进到了块结束位置
                     continue
 
                 if value:
@@ -93,19 +172,19 @@ def _parse_yaml_simple(text: str) -> dict:
                     if (value.startswith('"') and value.endswith('"')) or \
                        (value.startswith("'") and value.endswith("'")):
                         value = value[1:-1]
-                    result[current_section][key] = value
+                    result[current_section][key] = _convert_value(value)
                 else:
                     current_subsection = key
                     result[current_section][key] = {}
 
-        # 处理多行字符串内容
+        # 处理多行字符串内容（兼容旧的无块标量写法）
         elif current_subsection and current_section:
             if isinstance(result[current_section].get(current_subsection), str):
                 if result[current_section][current_subsection]:
                     result[current_section][current_subsection] += "\n"
-                # 去掉前导空格，但保留相对缩进
-                content_indent = len(line) - len(line.lstrip())
                 result[current_section][current_subsection] += stripped
+
+        i += 1
 
     return result
 
