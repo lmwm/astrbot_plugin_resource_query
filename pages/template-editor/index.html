@@ -627,21 +627,23 @@
 
     // 页面切换
     function switchPage(page, eventObj) {
-      const evt = eventObj || event;
+      // 移除所有页面的 active 状态
       document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
       document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-      document.getElementById('page-' + page).classList.add('active');
-      if (evt && evt.target) {
-        evt.target.classList.add('active');
-      } else {
-        document.querySelectorAll('.nav-tab').forEach(t => {
-          if (t.getAttribute('onclick')?.includes(`'${page}'`)) {
-            t.classList.add('active');
-          }
-        });
-      }
-      // 激活对应的子页面
+
+      // 激活目标页面
       const pageEl = document.getElementById('page-' + page);
+      if (pageEl) {
+        pageEl.classList.add('active');
+      }
+
+      // 激活对应的导航标签（通过 data-module 属性查找）
+      const targetTab = document.querySelector(`.nav-tab[data-module="${page}"]`);
+      if (targetTab) {
+        targetTab.classList.add('active');
+      }
+
+      // 激活对应的子页面
       if (pageEl) {
         pageEl.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
         pageEl.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
