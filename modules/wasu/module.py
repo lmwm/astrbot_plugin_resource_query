@@ -99,7 +99,7 @@ class WasuModule(ModuleBase):
             }
 
         try:
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             data = await loop.run_in_executor(
                 None, self._do_query, user_key, token, phone, sign, ua
             )

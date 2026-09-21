@@ -367,11 +367,8 @@ class JMModule(ModuleBase):
         def progress_callback(current: int, total: int, msg: str):
             """同步回调，转换为异步发送"""
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(send_progress(current, total, msg))
-                else:
-                    loop.run_until_complete(send_progress(current, total, msg))
+                loop = asyncio.get_running_loop()
+                asyncio.ensure_future(send_progress(current, total, msg))
             except Exception:
                 pass
 

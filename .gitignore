@@ -1,7 +1,19 @@
+# Python 缓存
 __pycache__/
 *.pyc
 *.pyo
+
+# 系统文件
 .DS_Store
+Thumbs.db
+
+# JMComic 下载产物
 jm_pdf/
 jm_images/
+
+# 运行时生成的配置文件
+modules/*/var_config.json
+
+# 调试/临时文件
+新建 文本文档.txt
 

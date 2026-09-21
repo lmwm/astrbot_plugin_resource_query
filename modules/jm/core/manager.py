@@ -125,7 +125,7 @@ class JMManager:
         # 从网络获取信息
         try:
             import jmcomic
-            album = await asyncio.get_event_loop().run_in_executor(
+            album = await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: jmcomic.get_album_detail(str(album_id))
             )
@@ -240,7 +240,7 @@ class JMManager:
 
                 return downloaded
 
-            image_paths = await asyncio.get_event_loop().run_in_executor(None, _download)
+            image_paths = await asyncio.get_running_loop().run_in_executor(None, _download)
 
             if not image_paths:
                 return DownloadResult(

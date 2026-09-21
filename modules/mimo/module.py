@@ -141,28 +141,22 @@ class MimoModule(ModuleBase):
     def get_accounts(self) -> list[dict]:
         """获取所有 MiMo 账号
 
-        覆盖基类方法，添加 MiMo 特有的默认字段填充。
+        覆盖基类方法，为缺少 device_id 和 ua 的账号填充默认值（仅内存填充，不写入磁盘）。
 
         Returns:
             账号配置列表
         """
         accounts = super().get_accounts()
 
-        # 为缺少 device_id 和 ua 的账号填充默认值
-        changed = False
+        # 为缺少 device_id 和 ua 的账号填充默认值（仅内存，不触发磁盘写入）
         default_device_id = self._config.get("default_device_id", "wb_MIQUERY000001")
         default_ua = self._config.get("default_ua", "")
 
         for acc in accounts:
             if not acc.get("device_id"):
                 acc["device_id"] = default_device_id
-                changed = True
             if not acc.get("ua"):
                 acc["ua"] = default_ua
-                changed = True
-
-        if changed:
-            self.save_accounts(accounts)
 
         return accounts
 
@@ -410,7 +404,7 @@ class MimoModule(ModuleBase):
 
         # 执行登录
         try:
-            result = await asyncio.get_event_loop().run_in_executor(
+            result = await asyncio.get_running_loop().run_in_executor(
                 None,
                 lambda: self.login_account(acc, otp_code=otp_code if otp_code else None)
             )
@@ -670,9 +664,6 @@ class MimoModule(ModuleBase):
 
     async def _handle_query_one(self, identifier: str, event, accounts: list[dict]):
         """查询指定账号"""
-        import logging
-        logger = logging.getLogger(__name__)
-
         # 按名称查找
         acc = self._find_account(accounts, identifier)
         if acc:
@@ -688,10 +679,7 @@ class MimoModule(ModuleBase):
                     data=result.get("data", {}),
                     template=result.get("template")
                 )
-                logger.info(f"[MiMo] mr.to_text() 调用前")
-                text = mr.to_text()
-                logger.info(f"[MiMo] mr.to_text() 返回: {repr(text[:100])}")
-                yield event.plain_result(text)
+                yield event.plain_result(mr.to_text())
             return
 
         yield event.plain_result(f"❌ 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号")

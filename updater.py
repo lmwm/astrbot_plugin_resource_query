@@ -90,7 +90,7 @@ async def check_update(config, force: bool = False) -> dict:
         except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
             return {"latest": "", "current": current_version, "error": str(e)}
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, _fetch)
     result["has_update"] = bool(
         force or (result["latest"] and result["latest"] != current_version)
@@ -178,7 +178,7 @@ async def do_update(config) -> str:
         except (OSError, TimeoutError, zipfile.BadZipFile, shutil.Error) as e:
             return f"❌ 更新失败: {e}"
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _download_and_extract)
 
 
@@ -228,5 +228,5 @@ async def reload_plugin(context) -> str:
         except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
             return f"⚠️ 自动重载失败: {e}。请手动在 WebUI 重载插件。"
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _do_reload)

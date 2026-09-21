@@ -43,12 +43,12 @@ class MimoManager:
 
     async def ensure_account(self, acc: dict) -> dict:
         """异步：确保账号有可用凭据"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._sync_ensure_account, acc)
 
     async def re_login_account(self, acc: dict) -> dict:
         """异步：查询失败后重新登录"""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._sync_re_login_account, acc)
 
     def login_account(self, acc: dict, otp_code: str | None = None) -> dict:
@@ -82,7 +82,6 @@ class MimoManager:
         mi = MiAccount(
             device_id=device_id,
             ua=acc.get("ua", ""),
-            account_base=self._config.get("api", {}).get("account_base"),
         )
         self._mi_account_cache[cache_key] = mi
         return mi

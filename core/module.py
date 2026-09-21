@@ -169,7 +169,7 @@ class ModuleBase(ABC):
         Returns:
             是否保存成功
         """
-        from ..common.utils import save_json_file, save_text_file
+        from ..common.utils import save_json_file
         config_path = self.get_config_path()
         config_path.mkdir(parents=True, exist_ok=True)
 
@@ -179,19 +179,18 @@ class ModuleBase(ABC):
             filename = self._get_account_filename(acc)
             filepath = config_path / filename
 
-            # 保存账号配置（移除内部字段）
+            # 保存账号配置（保留 template 字段，移除内部字段）
             save_acc = {
                 k: v for k, v in acc.items()
-                if not k.startswith("_") and k != "template" and k != "platform"
+                if not k.startswith("_") and k != "platform"
             }
             save_json_file(filepath, save_acc)
             existing_files.add(filename)
 
-            # 保存模板文件
-            template = acc.get("template", "")
-            if template:
-                template_file = filepath.with_suffix(".txt")
-                save_text_file(template_file, template)
+            # 清理旧的 .txt 模板文件（如果存在）
+            old_template_file = filepath.with_suffix(".txt")
+            if old_template_file.exists():
+                old_template_file.unlink(missing_ok=True)
 
         # 删除不在列表中的旧文件
         for old_file in config_path.glob("*.json"):
@@ -199,9 +198,10 @@ class ModuleBase(ABC):
                 continue
             if old_file.name not in existing_files:
                 old_file.unlink(missing_ok=True)
-                template_file = old_file.with_suffix(".txt")
-                if template_file.exists():
-                    template_file.unlink(missing_ok=True)
+                # 清理旧的 .txt 模板文件
+                old_template_file = old_file.with_suffix(".txt")
+                if old_template_file.exists():
+                    old_template_file.unlink(missing_ok=True)
 
         return True
 

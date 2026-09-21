@@ -38,7 +38,7 @@ async def query_mimo(
                 results[key] = {"code": -1, "error": str(e)}
         return results
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _query)
 
 

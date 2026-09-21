@@ -56,6 +56,21 @@ from .updater import check_update, do_update, reload_plugin
 _PLUGIN_NAME = "astrbot_plugin_resource_query"
 
 
+def _get_plugin_version() -> str:
+    """从 metadata.yaml 动态读取版本号"""
+    try:
+        metadata_path = Path(__file__).parent / "metadata.yaml"
+        if metadata_path.exists():
+            content = metadata_path.read_text(encoding="utf-8")
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("version:"):
+                    return line.split(":", 1)[1].strip().strip('"').strip("'")
+    except Exception:
+        pass
+    return "0.0.0"
+
+
 class ResourceQueryPlugin(Star):
     """资源查询插件主类
 
@@ -199,14 +214,12 @@ class ResourceQueryPlugin(Star):
         """获取默认模板"""
         from astrbot.api.web import json_response
         templates = {}
-        templates_dir = self._plugin_dir / "templates"
-        if templates_dir.exists():
-            for txt_file in templates_dir.glob("*.txt"):
-                platform = txt_file.stem.replace("_default", "")
-                try:
-                    templates[platform] = txt_file.read_text(encoding="utf-8")
-                except OSError:
-                    pass
+        # 从各模块获取默认模板
+        for module in self._manager.get_all_modules():
+            platform = module.module_name
+            default_template = module.get_default_template()
+            if default_template:
+                templates[platform] = default_template
         return json_response(templates)
 
     async def get_template_vars(self):
@@ -258,26 +271,13 @@ class ResourceQueryPlugin(Star):
 
         result = {}
 
-        # 获取各模块的默认模板（从 config.yaml 或 templates 目录）
+        # 从各模块获取默认模板
         templates = {}
-
-        # 尝试从 templates 目录读取
-        templates_dir = self._plugin_dir / "templates"
-        if templates_dir.exists():
-            for txt_file in templates_dir.glob("*.txt"):
-                platform = txt_file.stem.replace("_default", "")
-                try:
-                    templates[platform] = txt_file.read_text(encoding="utf-8")
-                except OSError:
-                    pass
-
-        # 如果 templates 目录没有模板，从模块获取默认模板
         for module in self._manager.get_all_modules():
             platform = module.module_name
-            if platform not in templates:
-                default_template = module.get_default_template()
-                if default_template:
-                    templates[platform] = default_template
+            default_template = module.get_default_template()
+            if default_template:
+                templates[platform] = default_template
 
         # 处理每个平台的变量
         for platform, content in templates.items():
@@ -333,6 +333,8 @@ class ResourceQueryPlugin(Star):
             if module:
                 var_config_path = module.get_config_path() / "var_config.json"
                 try:
+                    # 确保目录存在
+                    var_config_path.parent.mkdir(parents=True, exist_ok=True)
                     var_config_path.write_text(
                         json.dumps(config_data, ensure_ascii=False, indent=2),
                         encoding="utf-8"
@@ -353,7 +355,8 @@ class ResourceQueryPlugin(Star):
 
         if len(args) == 1:
             # 显示帮助信息
-            help_text = "📊 资源查询插件 v4.0.0（模块化架构）\n"
+            version = _get_plugin_version()
+            help_text = f"📊 资源查询插件 v{version}（模块化架构）\n"
             help_text += "────────────────\n"
             help_text += "用法:\n"
 

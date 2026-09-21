@@ -8,6 +8,20 @@ let wasuEditingIndex = -1;
 
 // ==================== 华数账号管理 ====================
 
+function switchWasuModalSection(section) {
+  document.querySelectorAll('#wasu-modal .platform-tab[data-section]').forEach(tab => {
+    tab.classList.toggle('active', tab.dataset.section === section);
+  });
+  document.getElementById('wasu-account-section').style.display = section === 'account' ? 'block' : 'none';
+  document.getElementById('wasu-template-section').style.display = section === 'template' ? 'block' : 'none';
+
+  // 切换到模板时更新预览
+  if (section === 'template') {
+    updateWasuVariableTags();
+    updateWasuTemplatePreview();
+  }
+}
+
 function openAddWasuModal() {
   wasuEditingIndex = -1;
   document.getElementById('wasu-modal-title').textContent = '添加华数账号';
@@ -17,8 +31,10 @@ function openAddWasuModal() {
   document.getElementById('wasu-field-token').value = '';
   document.getElementById('wasu-field-sign').value = '';
   document.getElementById('wasu-field-template').value = defaultTemplates['wasu'] || '';
-  updateWasuVariableTags();
-  updateWasuTemplatePreview();
+
+  // 默认显示账号配置部分
+  switchWasuModalSection('account');
+
   document.getElementById('wasu-modal').classList.add('active');
 }
 
@@ -32,8 +48,10 @@ function editWasuAccount(globalIndex) {
   document.getElementById('wasu-field-token').value = acc.token || '';
   document.getElementById('wasu-field-sign').value = acc.sign || '';
   document.getElementById('wasu-field-template').value = acc.template || defaultTemplates['wasu'] || '';
-  updateWasuVariableTags();
-  updateWasuTemplatePreview();
+
+  // 默认显示账号配置部分
+  switchWasuModalSection('account');
+
   document.getElementById('wasu-modal').classList.add('active');
 }
 
