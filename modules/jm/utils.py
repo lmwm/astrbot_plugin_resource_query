@@ -42,6 +42,7 @@ _FALLBACK_DEFAULTS: dict = {
     "jm_enabled": True,
     "jm_send_file": True,
     "jm_show_info": False,
+    "jm_info_after_download": False,
     "jm_max_file_size": 10,
     "jm_jpeg_quality": 75,
     "jm_max_concurrent": 1,
@@ -58,6 +59,7 @@ _FALLBACK_FIELDS: list[dict] = [
     {"key": "jm_enabled", "label": "启用下载功能", "type": "bool"},
     {"key": "jm_send_file", "label": "下载后发送 PDF", "type": "bool"},
     {"key": "jm_show_info", "label": "发送漫画信息", "type": "bool"},
+    {"key": "jm_info_after_download", "label": "详情在下载完成后发送", "type": "bool"},
     {"key": "jm_max_file_size", "label": "文件大小上限（MB）", "type": "int"},
 ]
 

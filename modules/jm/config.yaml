@@ -12,6 +12,7 @@ defaults:
   jm_enabled: true
   jm_send_file: true
   jm_show_info: false
+  jm_info_after_download: false
 
   # 文件与画质
   jm_max_file_size: 10
@@ -45,7 +46,12 @@ fields:
   jm_show_info:
     label: 发送漫画信息
     type: bool
-    hint: 开启后下载前会单独发送一条漫画信息（ID、标题、作者、页数、简介）；关闭则不发送该条消息
+    hint: 是否单独发送一条漫画详情（ID、标题、作者、页数、简介）；使用本地缓存时同样会发送
+
+  jm_info_after_download:
+    label: 详情在下载完成后发送
+    type: bool
+    hint: 关闭则在下载前发送（首次下载时接口不提供页数，该行显示为未知）；开启则下载完成后发送，页数必然准确
 
   jm_max_file_size:
     label: 文件大小上限（MB）

@@ -179,18 +179,21 @@ class JMModule(ModuleBase):
         config = self.load_module_config()
         send_file = bool(config.get("jm_send_file", True))
         show_info = bool(config.get("jm_show_info", False))
+        info_after = bool(config.get("jm_info_after_download", False))
         max_size_mb = _to_int(config.get("jm_max_file_size", 10), 10)
 
         info = await self._downloader.get_album_info(album_id)
 
-        # 1) 漫画信息单独一条消息（可在模块设置中关闭）
-        if show_info:
+        # 1) 详情在下载前发送
+        if show_info and not info_after:
             yield event.plain_result(self._info_message(album_id, info))
 
-        # 2) 命中本地缓存时直接发送
+        # 2) 命中本地缓存时直接发送（详情同样会发送，仅受开关控制）
         if not force:
             cached = self._downloader.check_local(str(album_id))
             if cached and cached.get("has_pdf"):
+                if show_info and info_after:
+                    yield event.plain_result(self._info_message(album_id, info))
                 yield event.plain_result(f"JM{album_id} 使用本地缓存…")
                 async for r in self._send_pdf(
                     event,
@@ -228,6 +231,11 @@ class JMModule(ModuleBase):
         if not result.get("success"):
             yield event.plain_result(result.get("message", "下载失败"))
             return
+
+        # 4) 详情在下载完成后发送（此时页数已按实际图片数修正）
+        if show_info and info_after:
+            info.page_count = int(result.get("image_count") or info.page_count or 0)
+            yield event.plain_result(self._info_message(album_id, info))
 
         pdf_path = result.get("pdf_path")
         if not pdf_path:
@@ -283,9 +291,10 @@ class JMModule(ModuleBase):
 
     @staticmethod
     def _info_message(album_id: int, info) -> str:
-        """构建漫画信息消息
+        """构建漫画详情消息
 
-        标题优先使用简短名；作者取首位；页数与简介为空时不显示该行。
+        固定五行：ID、标题、作者、页数、简介；
+        缺失字段用占位符补齐，保证格式稳定与字段对齐。
 
         Args:
             album_id: 漫画 ID。
@@ -294,25 +303,22 @@ class JMModule(ModuleBase):
         Returns:
             多行文本。
         """
-        lines = [f"JM{album_id}"]
+        title = JMModule._short_title(info) or "未知"
 
-        title = JMModule._short_title(info)
-        if title:
-            lines.append(f"标题：{title}")
-
-        author = str(getattr(info, "author", "") or "").strip()
-        if author and author != "未知":
-            lines.append(f"作者：{author}")
+        author = str(getattr(info, "author", "") or "").strip() or "未知"
 
         pages = int(getattr(info, "page_count", 0) or 0)
-        if pages:
-            lines.append(f"页数：{pages}")
+        page_text = str(pages) if pages else "未知"
 
-        description = str(getattr(info, "description", "") or "").strip()
-        if description:
-            lines.append(f"简介：{description}")
+        description = str(getattr(info, "description", "") or "").strip() or "空"
 
-        return "\n".join(lines)
+        return "\n".join([
+            f"ID  ：{album_id}",
+            f"标题：{title}",
+            f"作者：{author}",
+            f"页数：{page_text}",
+            f"简介：{description}",
+        ])
 
     @staticmethod
     def _short_title(info) -> str:
