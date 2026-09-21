@@ -619,7 +619,7 @@ class JMManager:
         for old_pdf in album_root.glob("*.pdf"):
             old_pdf.unlink(missing_ok=True)
 
-        quality = max(1, min(95, self._int("jm_jpeg_quality", 80)))
+        quality = max(1, min(95, self._int("jm_jpeg_quality", 75)))
         payloads = self._compress_images(images, quality)
 
         pdf_name = self._safe_name(f"JM{album_id}-{album_info.name}")
