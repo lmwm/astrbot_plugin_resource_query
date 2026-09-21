@@ -573,7 +573,7 @@
 
     return '<div class="pw-wrapper">' + input +
       '<button type="button" class="pw-toggle" data-action="toggle-password" ' +
-      'data-target="' + esc(id) + '" title="显示 / 隐藏">👁</button>' +
+      'data-target="' + esc(id) + '" title="显示 / 隐藏">显示</button>' +
       '</div>';
   }
 
@@ -971,7 +971,7 @@
         if (input) {
           const showing = input.type === 'text';
           input.type = showing ? 'password' : 'text';
-          target.textContent = showing ? '👁' : '🙈';
+          target.textContent = showing ? '显示' : '隐藏';
         }
         break;
       }

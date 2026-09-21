@@ -164,7 +164,7 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
             extracted = [d for d in tmp_dir.iterdir() if d.is_dir()]
             if not extracted:
                 shutil.rmtree(tmp_dir, ignore_errors=True)
-                return "❌ 解压失败：未找到插件目录"
+                return "× 解压失败：未找到插件目录"
 
             source_dir = extracted[0]
 
@@ -188,10 +188,10 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
                     shutil.copy2(item, destination)
 
             shutil.rmtree(tmp_dir, ignore_errors=True)
-            return f"✅ 更新完成，新版本已下载（commit: {sha[:7]}）"
+            return f"√ 更新完成，新版本已下载（commit: {sha[:7]}）"
 
         except (OSError, TimeoutError, zipfile.BadZipFile, shutil.Error) as e:
-            return f"❌ 更新失败: {e}"
+            return f"× 更新失败: {e}"
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _download_and_extract)
@@ -219,7 +219,7 @@ async def reload_plugin(context) -> str:
             jwt_secret = dashboard.get("jwt_secret")
 
             if not username or not jwt_secret:
-                return "⚠️ Dashboard 未配置账号密钥，请手动在 WebUI 重载插件"
+                return "! Dashboard 未配置账号密钥，请手动在 WebUI 重载插件"
 
             payload = {
                 "username": username,
@@ -244,12 +244,12 @@ async def reload_plugin(context) -> str:
                 result = json.loads(response.read())
 
             if result.get("status") == "ok":
-                return "✅ 插件已自动重载，新版本已生效"
+                return "√ 插件已自动重载，新版本已生效"
 
-            return f"⚠️ 重载返回: {result.get('message', result)}"
+            return f"! 重载返回: {result.get('message', result)}"
 
         except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
-            return f"⚠️ 自动重载失败: {e}，请手动在 WebUI 重载插件"
+            return f"! 自动重载失败: {e}，请手动在 WebUI 重载插件"
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _do_reload)

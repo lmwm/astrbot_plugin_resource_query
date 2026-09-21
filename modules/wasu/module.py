@@ -61,7 +61,7 @@ class WasuModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return "📱"
+        return "◎"
 
     @property
     def module_desc(self) -> str:
@@ -376,7 +376,7 @@ class WasuModule(ModuleBase):
     async def _cmd_list(self, event, accounts: list[dict]):
         """列出全部账号"""
         if not accounts:
-            yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
+            yield event.plain_result("× 还没有配置华数账号\n请在网页管理界面添加账号")
             return
 
         lines = [f"共 {len(accounts)} 个华数账号:"]
@@ -406,24 +406,24 @@ class WasuModule(ModuleBase):
                     break
 
         if not account:
-            yield event.plain_result(f"❌ 未找到账号: {target}")
+            yield event.plain_result(f"× 未找到账号: {target}")
             return
 
         deleted = self.delete_account(str(account.get("_filename", "")))
         if not deleted:
-            yield event.plain_result("❌ 删除失败")
+            yield event.plain_result("× 删除失败")
             return
 
         name = deleted.get("name") or deleted.get("phone") or target
-        yield event.plain_result(f"✅ 已删除: {name}")
+        yield event.plain_result(f"√ 已删除: {name}")
 
     async def _cmd_query_all(self, event, accounts: list[dict]):
         """查询全部账号"""
         if not accounts:
-            yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
+            yield event.plain_result("× 还没有配置华数账号\n请在网页管理界面添加账号")
             return
 
-        yield event.plain_result("🔍 正在查询所有华数账号...")
+        yield event.plain_result("正在查询所有华数账号...")
 
         for acc in accounts:
             yield event.plain_result(self.render(await self.query(acc)))
@@ -437,10 +437,10 @@ class WasuModule(ModuleBase):
                 break
 
         if not account:
-            yield event.plain_result(f"❌ 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号")
+            yield event.plain_result(f"× 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号")
             return
 
-        yield event.plain_result("🔍 正在查询...")
+        yield event.plain_result("正在查询...")
         yield event.plain_result(self.render(await self.query(account)))
 
     # ══════════════════════════════════════════

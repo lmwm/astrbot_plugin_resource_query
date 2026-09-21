@@ -70,7 +70,7 @@ class JMModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return "📚"
+        return "⇩"
 
     @property
     def module_desc(self) -> str:
@@ -238,7 +238,7 @@ class JMModule(ModuleBase):
 
         pdf_path = result.get("pdf_path")
         if not pdf_path:
-            yield event.plain_result("⚠️ 下载完成但未生成 PDF 文件")
+            yield event.plain_result("! 下载完成但未生成 PDF 文件")
             return
 
         async for r in self._send_pdf(
@@ -274,19 +274,19 @@ class JMModule(ModuleBase):
             消息结果。
         """
         if not send_file:
-            yield event.plain_result("✅ 下载完成")
+            yield event.plain_result("√ 下载完成")
             return
 
         if max_size_mb > 0 and size_mb > max_size_mb:
             yield event.plain_result(
-                f"⚠️ 文件 {size_mb:.1f} MB 超过上限 {max_size_mb} MB，未发送"
+                f"! 文件 {size_mb:.1f} MB 超过上限 {max_size_mb} MB，未发送"
             )
             return
 
         try:
             yield event.chain_result([File(name=pdf_name or "comic.pdf", file=pdf_path)])
         except Exception as e:
-            yield event.plain_result(f"❌ 发送失败: {e}")
+            yield event.plain_result(f"× 发送失败: {e}")
 
     @staticmethod
     def _info_message(album_id: int, info) -> str:

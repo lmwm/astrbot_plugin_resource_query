@@ -292,7 +292,7 @@ class ResourceQueryPlugin(Star):
 
         if not module:
             enabled = "、".join(self._manager.get_module_names()) or "（无）"
-            yield event.plain_result(f"❌ 未知功能: {name}\n已启用: {enabled}")
+            yield event.plain_result(f"× 未知功能: {name}\n已启用: {enabled}")
             return
 
         async for result in module.handle_command(name, args[1:], event):
@@ -328,7 +328,7 @@ class ResourceQueryPlugin(Star):
         """
         module = self._manager.get_module(name)
         if not module:
-            yield event.plain_result(f"❌ 模块「{name}」未启用")
+            yield event.plain_result(f"× 模块「{name}」未启用")
             return
 
         args = self._parse_args(event, name)
@@ -362,7 +362,7 @@ class ResourceQueryPlugin(Star):
             帮助信息文本。
         """
         lines = [
-            f"📊 资源查询插件 v{get_current_version()}",
+            f"▤ 资源查询插件 v{get_current_version()}",
             "────────────────",
             "用法:",
         ]

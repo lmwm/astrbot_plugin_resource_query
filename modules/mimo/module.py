@@ -93,7 +93,7 @@ class MimoModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return "📊"
+        return "▤"
 
     @property
     def module_desc(self) -> str:
@@ -376,12 +376,12 @@ class MimoModule(ModuleBase):
     async def _cmd_list(self, event, accounts: list[dict]):
         """列出全部账号"""
         if not accounts:
-            yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
+            yield event.plain_result("× 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
             return
 
         lines = [f"共 {len(accounts)} 个 MiMo 账号:"]
         for i, acc in enumerate(accounts, start=1):
-            status = "✅" if acc.get("serviceToken") else "❌"
+            status = "√" if acc.get("serviceToken") else "×"
             name = acc.get("name") or acc.get("account") or f"MiMo账号{i}"
             lines.append(f"  {i}. {status} {name}")
 
@@ -404,16 +404,16 @@ class MimoModule(ModuleBase):
             account = self._find_account(accounts, target)
 
         if not account:
-            yield event.plain_result(f"❌ 未找到账号: {target}")
+            yield event.plain_result(f"× 未找到账号: {target}")
             return
 
         deleted = self.delete_account(str(account.get("_filename", "")))
         if not deleted:
-            yield event.plain_result("❌ 删除失败")
+            yield event.plain_result("× 删除失败")
             return
 
         name = deleted.get("name") or deleted.get("account") or target
-        yield event.plain_result(f"✅ 已删除: {name}")
+        yield event.plain_result(f"√ 已删除: {name}")
 
     async def _cmd_otp(self, args: list[str], event, accounts: list[dict]):
         """提交 OTP 验证码"""
@@ -423,7 +423,7 @@ class MimoModule(ModuleBase):
 
         pending = self._manager.get_pending_otp_account()
         if not pending:
-            yield event.plain_result("❌ 没有等待 OTP 验证的账号")
+            yield event.plain_result("× 没有等待 OTP 验证的账号")
             return
 
         yield event.plain_result("正在提交验证码...")
@@ -431,28 +431,28 @@ class MimoModule(ModuleBase):
         try:
             credentials = self._manager.submit_otp(args[1].strip())
         except Exception as e:
-            yield event.plain_result(f"❌ OTP 验证失败: {e}")
+            yield event.plain_result(f"× OTP 验证失败: {e}")
             return
 
         account = self._find_account(accounts, pending)
         if account:
             self.update_credentials(account, credentials)
 
-        yield event.plain_result(f"✅ OTP 验证成功，账号 {pending} 已登录")
+        yield event.plain_result(f"√ OTP 验证成功，账号 {pending} 已登录")
 
         # 登录成功后自动查询一次
         target = self._find_account(self.get_accounts(), pending)
         if target:
-            yield event.plain_result("🔍 正在查询...")
+            yield event.plain_result("正在查询...")
             yield event.plain_result(self.render(await self.query(target)))
 
     async def _cmd_query_all(self, event, accounts: list[dict]):
         """查询全部账号"""
         if not accounts:
-            yield event.plain_result("❌ 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
+            yield event.plain_result("× 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
             return
 
-        yield event.plain_result("🔍 正在查询所有 MiMo 账号...")
+        yield event.plain_result("正在查询所有 MiMo 账号...")
 
         for acc in accounts:
             yield event.plain_result(self.render(await self.query(acc)))
@@ -461,10 +461,10 @@ class MimoModule(ModuleBase):
         """查询指定账号"""
         account = self._find_account(accounts, identifier)
         if not account:
-            yield event.plain_result(f"❌ 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号")
+            yield event.plain_result(f"× 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号")
             return
 
-        yield event.plain_result("🔍 正在查询...")
+        yield event.plain_result("正在查询...")
         yield event.plain_result(self.render(await self.query(account)))
 
     # ══════════════════════════════════════════

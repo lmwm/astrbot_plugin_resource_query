@@ -54,7 +54,7 @@ class UpdateModule(ModuleBase):
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return "⬆️"
+        return "⇧"
 
     @property
     def module_desc(self) -> str:
@@ -121,13 +121,13 @@ class UpdateModule(ModuleBase):
 
         check = await check_update(proxy, max_retries, force=True)
         if check.get("error"):
-            yield event.plain_result(f"❌ 检查更新失败: {check['error']}")
+            yield event.plain_result(f"× 检查更新失败: {check['error']}")
             return
 
         yield event.plain_result(f"远端版本 v{check['latest']}，正在重新安装...")
 
         result = await do_update(proxy, max_retries)
-        if "✅" not in result:
+        if "√" not in result:
             yield event.plain_result(result)
             return
 

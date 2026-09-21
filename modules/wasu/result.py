@@ -60,7 +60,7 @@ class WasuResult(QueryResult):
             for item in items
         )
         voice_detail = "".join(
-            "\n📞 语音: {name}: {total}分钟 | 剩余 {remain}分钟".format(
+            "\n语音: {name}: {total}分钟 | 剩余 {remain}分钟".format(
                 name=item.get("name", ""),
                 total=item.get("total", ""),
                 remain=item.get("remain", ""),
