@@ -175,11 +175,42 @@ class JMManager:
         """
         return self.album_root(album_id) / "info.json"
 
+    def _current_image_dir(self, album_id: str) -> Path | None:
+        """取该漫画当前使用的图片目录
+
+        命名规则变化后可能残留多个 `JM<ID>-` 目录，此时取最近修改的一个，
+        避免同一部漫画的图片被重复收录。
+
+        Args:
+            album_id: 漫画 ID。
+
+        Returns:
+            图片目录；不存在时返回 None。
+        """
+        root = self.album_root(album_id)
+        if not root.exists():
+            return None
+
+        prefix = f"jm{album_id}-"
+        try:
+            candidates = [
+                item
+                for item in root.iterdir()
+                if item.is_dir() and item.name.lower().startswith(prefix)
+            ]
+        except OSError:
+            return None
+
+        if not candidates:
+            return None
+
+        return max(candidates, key=lambda path: path.stat().st_mtime)
+
     def _list_images(self, album_id: str) -> list[Path]:
         """列出该漫画图片目录中的图片
 
-        只扫描以 `JM<ID>-` 命名的子目录，避免把历史结构（`images/` 等）
-        中的旧图片重复计入，导致生成的 PDF 出现重复页。
+        只扫描当前使用的图片目录（`JM<ID>-<标题>`），因此历史结构
+        （`images/`、旧命名的目录）不会导致 PDF 出现重复页。
 
         Args:
             album_id: 漫画 ID。
@@ -187,29 +218,18 @@ class JMManager:
         Returns:
             排序后的图片路径列表。
         """
-        root = self.album_root(album_id)
-        if not root.exists():
+        target = self._current_image_dir(album_id)
+        if target is None:
             return []
 
-        try:
-            subdirs = [item for item in root.iterdir() if item.is_dir()]
-        except OSError:
-            return []
-
-        prefix = f"jm{album_id}-"
-        images: list[Path] = []
-
-        for subdir in subdirs:
-            if not subdir.name.lower().startswith(prefix):
-                continue
-            images.extend(
-                path
-                for path in subdir.rglob("*")
-                if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
-            )
+        images = [
+            path
+            for path in target.rglob("*")
+            if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
+        ]
 
         # 同一张图可能残留多种格式（历史 webp 与当前 jpg），
-        # 按文件名去重并保留最新的一份，避免 PDF 出现重复页
+        # 按文件名去重并保留最新的一份
         latest: dict[str, Path] = {}
         for path in images:
             previous = latest.get(path.stem)
@@ -218,24 +238,41 @@ class JMManager:
 
         return sorted(latest.values())
 
-    def _cleanup_legacy_layout(self, album_id: str) -> None:
-        """清理历史目录结构，避免与新结构重复占用磁盘
+    def _cleanup_legacy_layout(self, album_id: str, keep_dir: Path | None = None) -> None:
+        """清理历史遗留目录，避免同一部漫画重复占用磁盘
 
-        仅当新结构的图片目录已存在且包含图片时才清理，
+        清理对象包括旧版结构（`images/`、`pdf/`）以及命名规则变更后
+        残留的其它 `JM<ID>-` 目录；仅当保留目录中确实有图片时才执行，
         确保不会误删唯一副本。
 
         Args:
             album_id: 漫画 ID。
+            keep_dir: 需要保留的图片目录；为空时以最新修改的目录为准。
         """
         root = self.album_root(album_id)
+        if not root.exists():
+            return
 
-        if not root.exists() or not self._list_images(album_id):
+        current = keep_dir or self._current_image_dir(album_id)
+        if current is None or not self._list_images(album_id):
             return
 
         for name in _LEGACY_SUBDIRS:
             legacy = root / name
             if legacy.is_dir():
                 shutil.rmtree(legacy, ignore_errors=True)
+
+        prefix = f"jm{album_id}-"
+        try:
+            subdirs = [item for item in root.iterdir() if item.is_dir()]
+        except OSError:
+            return
+
+        for subdir in subdirs:
+            if subdir == current:
+                continue
+            if subdir.name.lower().startswith(prefix):
+                shutil.rmtree(subdir, ignore_errors=True)
 
     # ══════════════════════════════════════════
     #  配置构建
@@ -405,7 +442,7 @@ class JMManager:
         except (json.JSONDecodeError, OSError):
             return None
 
-        return AlbumInfo(
+        info = AlbumInfo(
             id=str(data.get("id", album_id)),
             name=str(data.get("name", "未知")),
             author=str(data.get("author", "未知")),
@@ -417,6 +454,12 @@ class JMManager:
             actors=list(data.get("actors", []) or []),
             tags=list(data.get("tags", []) or []),
         )
+
+        # 名称无效说明这条缓存是早期获取失败时写入的，视为无缓存重新获取
+        if not info.name or info.name == "未知" or info.name.startswith(("获取失败", "未知（")):
+            return None
+
+        return info
 
     def _save_cached_info(self, info: AlbumInfo) -> None:
         """写入漫画信息缓存
@@ -585,7 +628,10 @@ class JMManager:
             )
 
             # 清理历史目录结构，避免同一漫画重复占用磁盘
-            await loop.run_in_executor(None, self._cleanup_legacy_layout, str(album_id))
+            image_dir = self._ensure_image_dir(str(album_id), album_info)
+            await loop.run_in_executor(
+                None, self._cleanup_legacy_layout, str(album_id), image_dir
+            )
 
             # 用实际下载的图片数修正页数（接口返回的 page_count 常为 0）
             album_info.page_count = len(images)

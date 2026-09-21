@@ -19,9 +19,9 @@ defaults:
   jm_jpeg_quality: 75
 
   # 并发
-  jm_max_concurrent: 1
-  jm_image_threads: 16
-  jm_photo_threads: 4
+  jm_max_concurrent: 2
+  jm_image_threads: 10
+  jm_photo_threads: 2
 
   # 网络
   jm_timeout: 20
