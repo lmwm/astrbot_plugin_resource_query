@@ -14,6 +14,29 @@ from ...common.yaml_utils import get_config_value, load_yaml_config
 _MODULE_DIR = Path(__file__).parent
 _CONFIG_FILE = _MODULE_DIR / "config.yaml"
 
+# 中文字符匹配（用于判断简短名是否适合作为展示名）
+CN_CHAR_PATTERN = re.compile(r"[\u4e00-\u9fff]")
+
+
+def pick_display_name(oname: str, fallback: str) -> str:
+    """选择展示名称：优先使用含中文的简短名
+
+    站点提供的 oname（原始名）通常更简洁，但可能是日文/英文；
+    只有在它非空且包含中文时才采用，否则退回完整标题。
+
+    Args:
+        oname: 首选名称（原始名）。
+        fallback: 回退名称（完整标题）。
+
+    Returns:
+        选中的名称（未做非法字符清洗）。
+    """
+    preferred = str(oname or "").strip()
+    if preferred and CN_CHAR_PATTERN.search(preferred):
+        return preferred
+
+    return str(fallback or "").strip()
+
 # config.yaml 缺失时的兜底默认值
 _FALLBACK_DEFAULTS: dict = {
     "jm_enabled": True,
@@ -34,7 +57,7 @@ _FALLBACK_DEFAULTS: dict = {
 _FALLBACK_FIELDS: list[dict] = [
     {"key": "jm_enabled", "label": "启用下载功能", "type": "bool"},
     {"key": "jm_send_file", "label": "下载后发送 PDF", "type": "bool"},
-    {"key": "jm_show_info", "label": "返回漫画信息", "type": "bool"},
+    {"key": "jm_show_info", "label": "发送漫画信息", "type": "bool"},
     {"key": "jm_max_file_size", "label": "文件大小上限（MB）", "type": "int"},
 ]
 

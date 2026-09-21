@@ -43,9 +43,9 @@ fields:
     hint: 关闭后不发送文件
 
   jm_show_info:
-    label: 返回漫画信息
+    label: 发送漫画信息
     type: bool
-    hint: 关闭后消息中只显示漫画 ID，避免不适宜的标题被发送到聊天
+    hint: 开启后下载前会单独发送一条漫画信息（ID、标题、作者、页数、简介）；关闭则不发送该条消息
 
   jm_max_file_size:
     label: 文件大小上限（MB）

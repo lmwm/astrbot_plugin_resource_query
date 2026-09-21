@@ -19,7 +19,7 @@ from astrbot.api.message_components import File
 from ...core.module import ModuleBase
 from .downloader import JMDownloader
 from .utils import get_config_fields as _load_config_fields
-from .utils import normalize_album_id
+from .utils import normalize_album_id, pick_display_name
 
 
 def _to_int(value, default: int) -> int:
@@ -178,15 +178,20 @@ class JMModule(ModuleBase):
         """
         config = self.load_module_config()
         send_file = bool(config.get("jm_send_file", True))
+        show_info = bool(config.get("jm_show_info", False))
         max_size_mb = _to_int(config.get("jm_max_file_size", 10), 10)
 
         info = await self._downloader.get_album_info(album_id)
-        summary = self._summary(album_id, info, bool(config.get("jm_show_info", False)))
 
-        # 命中本地缓存时直接发送
+        # 1) 漫画信息单独一条消息（可在模块设置中关闭）
+        if show_info:
+            yield event.plain_result(self._info_message(album_id, info))
+
+        # 2) 命中本地缓存时直接发送
         if not force:
             cached = self._downloader.check_local(str(album_id))
             if cached and cached.get("has_pdf"):
+                yield event.plain_result(f"JM{album_id} 使用本地缓存…")
                 async for r in self._send_pdf(
                     event,
                     cached["pdf_path"],
@@ -194,13 +199,12 @@ class JMModule(ModuleBase):
                     cached.get("pdf_size_mb", 0),
                     send_file,
                     max_size_mb,
-                    summary,
-                    cached=True,
                 ):
                     yield r
                 return
 
-        yield event.plain_result(f"{summary}\n开始下载...")
+        # 3) 开始下载
+        yield event.plain_result(f"JM{album_id} 开始下载…")
 
         loop = asyncio.get_running_loop()
         last = {"text": ""}
@@ -227,7 +231,7 @@ class JMModule(ModuleBase):
 
         pdf_path = result.get("pdf_path")
         if not pdf_path:
-            yield event.plain_result(f"{summary}\n⚠️ 下载完成但未生成 PDF 文件")
+            yield event.plain_result("⚠️ 下载完成但未生成 PDF 文件")
             return
 
         async for r in self._send_pdf(
@@ -237,7 +241,6 @@ class JMModule(ModuleBase):
             result.get("file_size_mb", 0),
             send_file,
             max_size_mb,
-            summary,
         ):
             yield r
 
@@ -249,8 +252,6 @@ class JMModule(ModuleBase):
         size_mb: float,
         send_file: bool,
         max_size_mb: int,
-        summary: str,
-        cached: bool = False,
     ):
         """发送 PDF 文件（含大小上限判断）
 
@@ -261,54 +262,80 @@ class JMModule(ModuleBase):
             size_mb: 文件大小（MB）。
             send_file: 是否发送文件。
             max_size_mb: 大小上限（MB），0 表示不限制。
-            summary: 漫画信息摘要。
-            cached: 是否来自本地缓存。
 
         Yields:
             消息结果。
         """
         if not send_file:
-            yield event.plain_result(f"{summary}\n✅ 文件已就绪")
+            yield event.plain_result("✅ 下载完成")
             return
 
         if max_size_mb > 0 and size_mb > max_size_mb:
             yield event.plain_result(
-                f"{summary}\n⚠️ 文件 {size_mb:.1f} MB 超过上限 {max_size_mb} MB，未发送"
+                f"⚠️ 文件 {size_mb:.1f} MB 超过上限 {max_size_mb} MB，未发送"
             )
             return
 
         try:
             yield event.chain_result([File(name=pdf_name or "comic.pdf", file=pdf_path)])
         except Exception as e:
-            yield event.plain_result(f"{summary}\n❌ 发送失败: {e}")
+            yield event.plain_result(f"❌ 发送失败: {e}")
 
     @staticmethod
-    def _summary(album_id, info, show_info: bool) -> str:
-        """构建漫画信息摘要
+    def _info_message(album_id: int, info) -> str:
+        """构建漫画信息消息
+
+        标题优先使用简短名；作者取首位；页数与简介为空时不显示该行。
 
         Args:
             album_id: 漫画 ID。
             info: AlbumInfo 实例。
-            show_info: 是否包含漫画标题与页数；关闭时只显示漫画 ID。
 
         Returns:
-            形如 "JM123456 | 标题 | 20P" 的摘要。
+            多行文本。
         """
-        label = f"JM{album_id}"
-        if not show_info:
-            return label
+        lines = [f"JM{album_id}"]
 
-        parts = [label]
+        title = JMModule._short_title(info)
+        if title:
+            lines.append(f"标题：{title}")
 
-        name = str(getattr(info, "name", "") or "")
-        if name and name != "未知" and not name.startswith(("获取失败", "未知（")):
-            parts.append(name)
+        author = str(getattr(info, "author", "") or "").strip()
+        if author and author != "未知":
+            lines.append(f"作者：{author}")
 
         pages = int(getattr(info, "page_count", 0) or 0)
         if pages:
-            parts.append(f"{pages}P")
+            lines.append(f"页数：{pages}")
 
-        return " | ".join(parts)
+        description = str(getattr(info, "description", "") or "").strip()
+        if description:
+            lines.append(f"简介：{description}")
+
+        return "\n".join(lines)
+
+    @staticmethod
+    def _short_title(info) -> str:
+        """消息中显示的简短标题
+
+        优先使用含中文的 oname，否则用完整标题；限制在 20 字符以内。
+        消息不是文件名，因此不做非法字符清洗。
+
+        Args:
+            info: AlbumInfo 实例。
+
+        Returns:
+            截断后的标题。
+        """
+        title = pick_display_name(
+            getattr(info, "oname", ""),
+            getattr(info, "name", ""),
+        )
+
+        if len(title) > 20:
+            title = title[:19] + "…"
+
+        return title
 
     async def _send_progress(self, event, text: str) -> None:
         """发送进度提示（失败不影响下载）

@@ -30,6 +30,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 
+from ..utils import pick_display_name
 from .models import AlbumInfo, DownloadResult
 
 # 图片文件后缀
@@ -40,9 +41,6 @@ _INVALID_FILENAME_CHARS = set('\\/:*?"<>|')
 
 # 历史版本的子目录（新结构启用后不再使用）
 _LEGACY_SUBDIRS = ("images", "pdf")
-
-# 图片目录命名规则：JM<ID>-<漫画名>（jmcomic 的 f-string 目录规则）
-_IMAGE_DIR_RULE = "JM{Aid}-{Atitle}"
 
 # 进度回调签名：callback(current, total, message)
 ProgressCallback = Callable[[int, int, str], None]
@@ -123,6 +121,48 @@ class JMManager:
 
         target.mkdir(parents=True, exist_ok=True)
         return target
+
+    @staticmethod
+    def display_title(info: AlbumInfo) -> str:
+        """选择用于文件与目录命名的标题
+
+        优先使用含中文的简短名（oname），否则退回完整标题，
+        并清洗掉 Windows 不允许的字符。
+
+        Args:
+            info: 漫画信息。
+
+        Returns:
+            清洗后的标题。
+        """
+        title = pick_display_name(info.oname, info.name)
+        return JMManager._safe_name(title) or f"JM{info.id}"
+
+    def image_dir_name(self, album_id: str, info: AlbumInfo) -> str:
+        """图片目录名
+
+        Args:
+            album_id: 漫画 ID。
+            info: 漫画信息。
+
+        Returns:
+            形如 `JM<ID>-<标题>` 的目录名。
+        """
+        return f"JM{album_id}-{self.display_title(info)}"
+
+    def _ensure_image_dir(self, album_id: str, info: AlbumInfo) -> Path:
+        """确保图片目录存在并返回
+
+        Args:
+            album_id: 漫画 ID。
+            info: 漫画信息。
+
+        Returns:
+            图片保存目录 `<漫画根目录>/JM<ID>-<标题>`。
+        """
+        image_dir = self._ensure_album_root(album_id) / self.image_dir_name(album_id, info)
+        image_dir.mkdir(parents=True, exist_ok=True)
+        return image_dir
 
     def _info_file(self, album_id: str) -> Path:
         """漫画信息缓存文件路径
@@ -216,11 +256,11 @@ class JMManager:
         except (TypeError, ValueError):
             return default
 
-    def _build_option(self, album_root: Path):
+    def _build_option(self, image_dir: Path):
         """按用户配置构建 jmcomic 的 JmOption
 
         Args:
-            album_root: 该漫画的根目录。
+            image_dir: 图片保存目录（由调用方算好，不交给 jmcomic 拼名）。
 
         Returns:
             JmOption 实例。
@@ -254,11 +294,8 @@ class JMManager:
         if cookies:
             meta["cookies"] = cookies
 
-        # 目录规则：<漫画根目录>/JM<ID>-<漫画名>/ 存放图片
-        raw["dir_rule"] = {
-            "rule": _IMAGE_DIR_RULE,
-            "base_dir": str(album_root),
-        }
+        # 目录规则：直接以 image_dir 作为图片保存目录
+        raw["dir_rule"] = {"rule": "Bd", "base_dir": str(image_dir)}
 
         return jmcomic.JmOption.construct(raw)
 
@@ -523,7 +560,7 @@ class JMManager:
 
         try:
             await loop.run_in_executor(
-                None, self._download_images, str(album_id), progress_callback
+                None, self._download_images, str(album_id), album_info, progress_callback
             )
 
             images = self._list_images(str(album_id))
@@ -577,19 +614,20 @@ class JMManager:
     def _download_images(
         self,
         album_id: str,
+        info: AlbumInfo,
         progress_callback: ProgressCallback | None,
     ) -> None:
         """下载漫画图片（同步，在线程池中执行）
 
-        图片由 jmcomic 按目录规则写入
-        `<漫画根目录>/JM<ID>-<漫画名>/`。
+        图片写入 `<漫画根目录>/JM<ID>-<标题>/`。
 
         Args:
             album_id: 漫画 ID。
+            info: 漫画信息（用于决定目录名）。
             progress_callback: 进度回调。
         """
-        album_root = self._ensure_album_root(album_id)
-        option = self._build_option(album_root)
+        image_dir = self._ensure_image_dir(album_id, info)
+        option = self._build_option(image_dir)
         downloader = _make_progress_downloader(progress_callback)(option)
         downloader.download_album(album_id)
 
@@ -622,7 +660,7 @@ class JMManager:
         quality = max(1, min(95, self._int("jm_jpeg_quality", 75)))
         payloads = self._compress_images(images, quality)
 
-        pdf_name = self._safe_name(f"JM{album_id}-{album_info.name}")
+        pdf_name = f"JM{album_id}-{self.display_title(album_info)}"
         pdf_path = album_root / f"{pdf_name}.pdf"
         pdf_path.write_bytes(converter(payloads))
         return pdf_path
