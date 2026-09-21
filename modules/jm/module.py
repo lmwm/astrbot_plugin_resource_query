@@ -232,9 +232,8 @@ class JMModule(ModuleBase):
             yield event.plain_result(result.get("message", "下载失败"))
             return
 
-        # 4) 详情在下载完成后发送（此时页数已按实际图片数修正）
+        # 4) 详情在下载完成后发送
         if show_info and info_after:
-            info.page_count = int(result.get("image_count") or info.page_count or 0)
             yield event.plain_result(self._info_message(album_id, info))
 
         pdf_path = result.get("pdf_path")
@@ -293,8 +292,8 @@ class JMModule(ModuleBase):
     def _info_message(album_id: int, info) -> str:
         """构建漫画详情消息
 
-        固定五行：ID、标题、作者、页数、简介；
-        缺失字段用占位符补齐，保证格式稳定与字段对齐。
+        固定三行（ID / 标题 / 作者），标签按全角宽度对齐；
+        缺失的字段用占位符补齐。
 
         Args:
             album_id: 漫画 ID。
@@ -303,45 +302,33 @@ class JMModule(ModuleBase):
         Returns:
             多行文本。
         """
-        title = JMModule._short_title(info) or "未知"
-
         author = str(getattr(info, "author", "") or "").strip() or "未知"
 
-        pages = int(getattr(info, "page_count", 0) or 0)
-        page_text = str(pages) if pages else "未知"
-
-        description = str(getattr(info, "description", "") or "").strip() or "空"
-
         return "\n".join([
-            f"ID  ：{album_id}",
-            f"标题：{title}",
+            f"I  D：{album_id}",
+            f"标题：{JMModule._message_title(info)}",
             f"作者：{author}",
-            f"页数：{page_text}",
-            f"简介：{description}",
         ])
 
     @staticmethod
-    def _short_title(info) -> str:
-        """消息中显示的简短标题
+    def _message_title(info) -> str:
+        """消息中显示的标题
 
-        优先使用含中文的 oname，否则用完整标题；限制在 20 字符以内。
-        消息不是文件名，因此不做非法字符清洗。
+        优先使用含中文的 oname，否则用完整标题。
+        消息只用于展示，因此既不截断也不做非法字符清洗。
 
         Args:
             info: AlbumInfo 实例。
 
         Returns:
-            截断后的标题。
+            完整标题文本。
         """
         title = pick_display_name(
             getattr(info, "oname", ""),
             getattr(info, "name", ""),
         )
 
-        if len(title) > 20:
-            title = title[:19] + "…"
-
-        return title
+        return title or "未知"
 
     async def _send_progress(self, event, text: str) -> None:
         """发送进度提示（失败不影响下载）

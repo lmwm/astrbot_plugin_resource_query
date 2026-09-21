@@ -51,7 +51,7 @@ fields:
   jm_info_after_download:
     label: 详情在下载完成后发送
     type: bool
-    hint: 关闭则在下载前发送（首次下载时接口不提供页数，该行显示为未知）；开启则下载完成后发送，页数必然准确
+    hint: 关闭则在发送「开始下载」之前先发送详情；开启则等下载完成后再发送详情
 
   jm_max_file_size:
     label: 文件大小上限（MB）
