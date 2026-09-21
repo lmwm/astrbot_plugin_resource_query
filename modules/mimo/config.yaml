@@ -16,7 +16,7 @@ device:
   default_device_id: "wb_MIQUERY000001"
 
   # 默认 User-Agent（登录、OTP 验证、查询共用）
-  default_ua: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+  default_ua: "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv)"
 
 # ══════════════════════════════════════════
 #  默认消息模板
@@ -25,10 +25,27 @@ template:
   default: |-
     {label}
     ────────────────
-      余额        {balance}元
-      赠送        {gift_balance}元
-      输入        {input_token}
-      输出        {output_token}
-      缓存        {cache_token}
-      本月费用    {monthly_cost}元
-      累计费用    {total_cost}元
+      余      额        {balance}元
+      赠      送        {gift_balance}元
+      输      入        {input_token}
+      输      出        {output_token}
+      缓      存        {cache_token}
+      本月费用       {monthly_cost}元
+      累计费用       {total_cost}元
+
+# ══════════════════════════════════════════
+#  模板变量说明（Pages 变量面板展示用）
+#  在此增删即可调整变量列表，不影响用户已保存的变量配置
+# ══════════════════════════════════════════
+variables:
+  label: 账号名称
+  balance: 余额
+  gift_balance: 赠送余额
+  input_token: 输入 Token
+  output_token: 输出 Token
+  cache_token: 缓存 Token
+  monthly_cost: 本月费用
+  total_cost: 累计费用
+  tpm: TPM 限额
+  rpm: RPM 限额
+  concurrency: 并发限额

@@ -23,3 +23,20 @@ template:
        总流量: {total} | 已用: {used} | 剩余: {remain}
 
     查询时间: {query_time}
+
+# ══════════════════════════════════════════
+#  模板变量说明（Pages 变量面板展示用）
+#  在此增删即可调整变量列表，不影响用户已保存的变量配置
+# ══════════════════════════════════════════
+variables:
+  label: 账号名称
+  balance: 账户余额
+  month_fee: 当月话费
+  arrears: 欠费
+  total_used: 本月累计使用
+  total: 总流量
+  used: 已用流量
+  remain: 剩余流量
+  query_time: 查询时间
+  traffic_detail: 流量明细（多行）
+  voice_detail: 语音明细（多行）

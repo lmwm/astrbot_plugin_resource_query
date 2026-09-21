@@ -17,21 +17,7 @@ from ...core.module import ModuleBase
 from .manager import MimoManager
 from .result import MimoResult
 from .utils import get_default_device_id, get_default_template, get_default_ua
-
-# 模板变量说明（Pages 变量面板展示用）
-_VAR_DEFINITIONS = {
-    "label": "账号名称",
-    "balance": "余额",
-    "gift_balance": "赠送余额",
-    "input_token": "输入 Token",
-    "output_token": "输出 Token",
-    "cache_token": "缓存 Token",
-    "monthly_cost": "本月费用",
-    "total_cost": "累计费用",
-    "tpm": "TPM 限额",
-    "rpm": "RPM 限额",
-    "concurrency": "并发限额",
-}
+from .utils import get_var_definitions as _load_var_definitions
 
 # 账号字段分组：三种凭据方式作为标签页，设备信息作为内联区块
 _ACCOUNT_GROUPS = [
@@ -57,8 +43,7 @@ _ACCOUNT_GROUPS = [
         "key": "device",
         "label": "设备信息（可选）",
         "mode": "inline",
-        "hint": "留空时保存会自动填充插件默认值",
-        "resettable": True,
+        "hint": "留空时保存会自动填充插件默认值，可点字段右侧的「↺」单独恢复默认",
     },
 ]
 
@@ -180,12 +165,12 @@ class MimoModule(ModuleBase):
         return fields
 
     def get_var_definitions(self) -> dict[str, str]:
-        """模板变量说明
+        """模板变量说明（来自 modules/mimo/config.yaml）
 
         Returns:
             变量名到中文描述的映射。
         """
-        return _VAR_DEFINITIONS
+        return _load_var_definitions()
 
     def get_default_template(self) -> str:
         """默认消息模板

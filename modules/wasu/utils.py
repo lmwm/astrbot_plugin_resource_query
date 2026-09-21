@@ -34,6 +34,19 @@ def get_default_template() -> str:
     return get_config_value(_config(), "template.default", _FALLBACK_TEMPLATE)
 
 
+def get_var_definitions() -> dict[str, str]:
+    """获取模板变量说明（Pages 变量面板展示用）
+
+    Returns:
+        变量名到中文描述的映射；config.yaml 未定义时返回空字典。
+    """
+    variables = get_config_value(_config(), "variables", None)
+    if not isinstance(variables, dict):
+        return {}
+
+    return {str(key): str(value) for key, value in variables.items()}
+
+
 def fmt_gb(value) -> str:
     """把接口返回的 KB 数值格式化为 GB 字符串
 

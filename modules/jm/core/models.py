@@ -12,22 +12,30 @@ class AlbumInfo:
 
     Attributes:
         id: 漫画 ID。
-        name: 漫画标题。
-        author: 作者。
+        name: 完整标题（含汉化组、语言、版本等标记）。
+        author: 作者（首位）。
+        oname: 原始名称（已剥离汉化组等后缀）。
+        description: 简介。
         chapter_count: 章节数。
-        image_count: 总页数。
-        tags: 标签列表。
+        page_count: 页数；接口未提供时以下载到的图片数为准。
+        works: 所属作品系列。
+        actors: 登场人物。
+        tags: 标签。
     """
 
     id: str
     name: str
     author: str = "未知"
+    oname: str = ""
+    description: str = ""
     chapter_count: int = 0
-    image_count: int = 0
+    page_count: int = 0
+    works: list[str] = field(default_factory=list)
+    actors: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        """转换为字典
+        """转换为字典（info.json 的内容）
 
         Returns:
             漫画信息的字典表示。
@@ -35,9 +43,13 @@ class AlbumInfo:
         return {
             "id": self.id,
             "name": self.name,
+            "oname": self.oname,
             "author": self.author,
+            "description": self.description,
             "chapter_count": self.chapter_count,
-            "image_count": self.image_count,
+            "page_count": self.page_count,
+            "works": self.works,
+            "actors": self.actors,
             "tags": self.tags,
         }
 

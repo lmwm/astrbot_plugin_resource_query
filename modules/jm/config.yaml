@@ -1,0 +1,91 @@
+# JMComic 下载模块配置
+#
+# 本文件只提供「默认值」与「Pages 配置项定义」。
+# 修改这里可以调整默认行为，**不会覆盖用户在 Pages 中已保存的配置**；
+# 用户保存过的项以 config/jm/config.json 为准。
+
+# ══════════════════════════════════════════
+#  默认值
+# ══════════════════════════════════════════
+defaults:
+  # 功能开关
+  jm_enabled: true
+  jm_send_file: true
+  jm_show_info: false
+
+  # 文件与画质
+  jm_max_file_size: 10
+  jm_jpeg_quality: 75
+
+  # 并发
+  jm_max_concurrent: 1
+  jm_image_threads: 16
+  jm_photo_threads: 4
+
+  # 网络
+  jm_timeout: 20
+  jm_retry_times: 3
+  jm_proxy: ""
+  jm_cookies: ""
+
+# ══════════════════════════════════════════
+#  Pages 配置项定义（顺序即显示顺序）
+# ══════════════════════════════════════════
+fields:
+  jm_enabled:
+    label: 启用下载功能
+    type: bool
+    hint: 关闭后 /jm 指令不可用
+
+  jm_send_file:
+    label: 下载后发送 PDF
+    type: bool
+    hint: 关闭后不发送文件
+
+  jm_show_info:
+    label: 返回漫画信息
+    type: bool
+    hint: 关闭后消息中只显示漫画 ID，避免不适宜的标题被发送到聊天
+
+  jm_max_file_size:
+    label: 文件大小上限（MB）
+    type: int
+    hint: 超过则不发送，0 表示不限制
+
+  jm_jpeg_quality:
+    label: PDF 画质（JPEG 质量）
+    type: int
+    hint: 取值 1-95，越大越清晰体积越大。原图为 webp，生成 PDF 时二次压缩为 JPEG；实测 26 页：50→5.7MB、75→7.7MB、90→11.3MB
+
+  jm_max_concurrent:
+    label: 同时下载任务数
+    type: int
+    hint: 限制并发下载的漫画数量
+
+  jm_image_threads:
+    label: 图片并发数
+    type: int
+    hint: 单章节内的图片下载并发
+
+  jm_photo_threads:
+    label: 章节并发数
+    type: int
+    hint: 章节之间的下载并发
+
+  jm_timeout:
+    label: 请求超时（秒）
+    type: int
+
+  jm_retry_times:
+    label: 重试次数
+    type: int
+
+  jm_proxy:
+    label: 代理地址
+    type: text
+    hint: 如 127.0.0.1:7890 或 http://127.0.0.1:7890，留空不使用代理
+
+  jm_cookies:
+    label: Cookie
+    type: password
+    hint: 格式 k=v; k2=v2，用于访问登录可见内容

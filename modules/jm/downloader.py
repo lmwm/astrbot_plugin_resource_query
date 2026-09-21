@@ -11,24 +11,10 @@ from pathlib import Path
 from ...common.utils import load_json_file, save_json_file
 from .core import JMManager
 from .core.models import ProgressCallback
+from .utils import get_default_config
 
 # 配置文件名（与模块配置目录中的文件名一致）
 CONFIG_FILE = "config.json"
-
-# 默认下载配置
-DEFAULT_CONFIG: dict = {
-    "jm_enabled": True,
-    "jm_send_file": True,
-    "jm_show_info": False,
-    "jm_max_file_size": 10,
-    "jm_cookies": "",
-    "jm_proxy": "",
-    "jm_timeout": 20,
-    "jm_retry_times": 3,
-    "jm_image_threads": 16,
-    "jm_photo_threads": 4,
-    "jm_max_concurrent": 1,
-}
 
 
 class JMDownloader:
@@ -46,12 +32,14 @@ class JMDownloader:
         self._manager = self._create_manager()
 
     def load_config(self) -> dict:
-        """加载配置（默认值与已保存值合并）
+        """加载配置
+
+        默认值来自 `modules/jm/config.yaml`，用户经 Pages 保存的配置优先。
 
         Returns:
             配置字典。
         """
-        config = dict(DEFAULT_CONFIG)
+        config = get_default_config()
         saved = load_json_file(self._config_path / CONFIG_FILE)
         if saved:
             config.update(saved)

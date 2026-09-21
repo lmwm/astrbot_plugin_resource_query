@@ -18,75 +18,8 @@ from astrbot.api.message_components import File
 
 from ...core.module import ModuleBase
 from .downloader import JMDownloader
+from .utils import get_config_fields as _load_config_fields
 from .utils import normalize_album_id
-
-# 模块配置字段（Pages 通用渲染）
-_CONFIG_FIELDS = [
-    {
-        "key": "jm_enabled",
-        "label": "启用下载功能",
-        "type": "bool",
-        "hint": "关闭后 /jm 指令不可用",
-    },
-    {
-        "key": "jm_send_file",
-        "label": "下载后发送 PDF",
-        "type": "bool",
-        "hint": "关闭后不发送文件",
-    },
-    {
-        "key": "jm_show_info",
-        "label": "返回漫画信息",
-        "type": "bool",
-        "hint": "关闭后消息中只显示漫画 ID，避免不适宜的标题被发送到聊天",
-    },
-    {
-        "key": "jm_max_file_size",
-        "label": "文件大小上限（MB）",
-        "type": "int",
-        "hint": "超过则不发送，0 表示不限制",
-    },
-    {
-        "key": "jm_max_concurrent",
-        "label": "同时下载任务数",
-        "type": "int",
-        "hint": "限制并发下载的漫画数量",
-    },
-    {
-        "key": "jm_image_threads",
-        "label": "图片并发数",
-        "type": "int",
-        "hint": "单张图片的下载并发",
-    },
-    {
-        "key": "jm_photo_threads",
-        "label": "章节并发数",
-        "type": "int",
-        "hint": "章节之间的下载并发",
-    },
-    {
-        "key": "jm_timeout",
-        "label": "请求超时（秒）",
-        "type": "int",
-    },
-    {
-        "key": "jm_retry_times",
-        "label": "重试次数",
-        "type": "int",
-    },
-    {
-        "key": "jm_proxy",
-        "label": "代理地址",
-        "type": "text",
-        "hint": "如 http://127.0.0.1:7890，留空不使用代理",
-    },
-    {
-        "key": "jm_cookies",
-        "label": "Cookie",
-        "type": "password",
-        "hint": "格式 k=v; k2=v2，用于访问登录可见内容",
-    },
-]
 
 
 def _to_int(value, default: int) -> int:
@@ -157,12 +90,12 @@ class JMModule(ModuleBase):
         return self._downloader.load_config()
 
     def get_config_fields(self) -> list[dict]:
-        """模块配置字段定义
+        """模块配置字段定义（来自 modules/jm/config.yaml）
 
         Returns:
             字段列表。
         """
-        return _CONFIG_FIELDS
+        return _load_config_fields()
 
     def save_module_config(self, config: dict) -> bool:
         """保存模块配置并让下载器立即生效
@@ -371,7 +304,7 @@ class JMModule(ModuleBase):
         if name and name != "未知" and not name.startswith(("获取失败", "未知（")):
             parts.append(name)
 
-        pages = int(getattr(info, "image_count", 0) or 0)
+        pages = int(getattr(info, "page_count", 0) or 0)
         if pages:
             parts.append(f"{pages}P")
 

@@ -25,6 +25,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 
@@ -32,6 +34,12 @@ from .models import AlbumInfo, DownloadResult
 
 # 图片文件后缀
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+# Windows 文件名非法字符
+_INVALID_FILENAME_CHARS = set('\\/:*?"<>|')
+
+# 历史版本的子目录（新结构启用后不再使用）
+_LEGACY_SUBDIRS = ("images", "pdf")
 
 # 图片目录命名规则：JM<ID>-<漫画名>（jmcomic 的 f-string 目录规则）
 _IMAGE_DIR_RULE = "JM{Aid}-{Atitle}"
@@ -67,7 +75,7 @@ class JMManager:
     # ══════════════════════════════════════════
 
     def album_root(self, album_id: str) -> Path:
-        """获取漫画根目录
+        """获取漫画根目录（不创建）
 
         Args:
             album_id: 漫画 ID。
@@ -76,6 +84,45 @@ class JMManager:
             形如 `<JMDownload>/JM<ID>` 的目录路径。
         """
         return self._download_dir / f"JM{album_id}"
+
+    def _ensure_album_root(self, album_id: str) -> Path:
+        """获取漫画根目录，并确保目录名以大写 `JM` 开头
+
+        Windows 下目录名大小写不敏感，历史遗留的小写目录需要显式改名，
+        因此这里做一次规范化后再使用。
+
+        Args:
+            album_id: 漫画 ID。
+
+        Returns:
+            已存在的漫画根目录。
+        """
+        target = self.album_root(album_id)
+
+        if target.exists():
+            actual = None
+            try:
+                actual = next(
+                    (
+                        item
+                        for item in self._download_dir.iterdir()
+                        if item.is_dir() and item.name.lower() == target.name.lower()
+                    ),
+                    None,
+                )
+            except OSError:
+                actual = None
+
+            if actual is not None and actual.name != target.name:
+                temp = self._download_dir / f"{target.name}__renaming"
+                try:
+                    actual.rename(temp)
+                    temp.rename(target)
+                except OSError:
+                    pass
+
+        target.mkdir(parents=True, exist_ok=True)
+        return target
 
     def _info_file(self, album_id: str) -> Path:
         """漫画信息缓存文件路径
@@ -88,23 +135,67 @@ class JMManager:
         """
         return self.album_root(album_id) / "info.json"
 
-    def _list_images(self, album_root: Path) -> list[Path]:
-        """列出漫画目录下的图片（递归）
+    def _list_images(self, album_id: str) -> list[Path]:
+        """列出该漫画图片目录中的图片
+
+        只扫描以 `JM<ID>-` 命名的子目录，避免把历史结构（`images/` 等）
+        中的旧图片重复计入，导致生成的 PDF 出现重复页。
 
         Args:
-            album_root: 漫画根目录。
+            album_id: 漫画 ID。
 
         Returns:
             排序后的图片路径列表。
         """
-        if not album_root.exists():
+        root = self.album_root(album_id)
+        if not root.exists():
             return []
 
-        return sorted(
-            path
-            for path in album_root.rglob("*")
-            if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
-        )
+        try:
+            subdirs = [item for item in root.iterdir() if item.is_dir()]
+        except OSError:
+            return []
+
+        prefix = f"jm{album_id}-"
+        images: list[Path] = []
+
+        for subdir in subdirs:
+            if not subdir.name.lower().startswith(prefix):
+                continue
+            images.extend(
+                path
+                for path in subdir.rglob("*")
+                if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
+            )
+
+        # 同一张图可能残留多种格式（历史 webp 与当前 jpg），
+        # 按文件名去重并保留最新的一份，避免 PDF 出现重复页
+        latest: dict[str, Path] = {}
+        for path in images:
+            previous = latest.get(path.stem)
+            if previous is None or path.stat().st_mtime > previous.stat().st_mtime:
+                latest[path.stem] = path
+
+        return sorted(latest.values())
+
+    def _cleanup_legacy_layout(self, album_id: str) -> None:
+        """清理历史目录结构，避免与新结构重复占用磁盘
+
+        仅当新结构的图片目录已存在且包含图片时才清理，
+        确保不会误删唯一副本。
+
+        Args:
+            album_id: 漫画 ID。
+        """
+        root = self.album_root(album_id)
+
+        if not root.exists() or not self._list_images(album_id):
+            return
+
+        for name in _LEGACY_SUBDIRS:
+            legacy = root / name
+            if legacy.is_dir():
+                shutil.rmtree(legacy, ignore_errors=True)
 
     # ══════════════════════════════════════════
     #  配置构建
@@ -139,9 +230,14 @@ class JMManager:
         raw = jmcomic.JmOption.default().deconstruct()
 
         # 下载并发
-        threading = raw.setdefault("download", {}).setdefault("threading", {})
+        download = raw.setdefault("download", {})
+        threading = download.setdefault("threading", {})
         threading["image"] = max(1, self._int("jm_image_threads", 16))
         threading["photo"] = max(1, self._int("jm_photo_threads", 4))
+
+        # 解码后保留站点原图格式（通常为 webp），
+        # 生成 PDF 时再由 _compress_images 统一二次压缩为 JPEG。
+        download["image"] = {"decode": True}
 
         # 网络参数
         client = raw.setdefault("client", {})
@@ -216,7 +312,11 @@ class JMManager:
         Yields:
             PDF 文件路径。
         """
-        yield from sorted(self.album_root(album_id).glob("*.pdf"))
+        root = self.album_root(album_id)
+        yield from sorted(root.glob("*.pdf"))
+        # 历史结构：<漫画根目录>/pdf/*.pdf
+        yield from sorted((root / "pdf").glob("*.pdf"))
+        # 过渡版本：<JMDownload>/ready/*.pdf
         yield from sorted((self._download_dir / "ready").glob(f"JM{album_id}-*.pdf"))
 
     def check_local(self, album_id: str) -> dict | None:
@@ -239,7 +339,7 @@ class JMManager:
                 "album_id": album_id,
             }
 
-        images = self._list_images(self.album_root(album_id))
+        images = self._list_images(album_id)
         if images:
             return {
                 "has_pdf": False,
@@ -272,8 +372,12 @@ class JMManager:
             id=str(data.get("id", album_id)),
             name=str(data.get("name", "未知")),
             author=str(data.get("author", "未知")),
+            oname=str(data.get("oname", "") or ""),
+            description=str(data.get("description", "") or ""),
             chapter_count=int(data.get("chapter_count", 0) or 0),
-            image_count=int(data.get("image_count", 0) or 0),
+            page_count=int(data.get("page_count", data.get("image_count", 0)) or 0),
+            works=list(data.get("works", []) or []),
+            actors=list(data.get("actors", []) or []),
             tags=list(data.get("tags", []) or []),
         )
 
@@ -316,18 +420,52 @@ class JMManager:
         except ImportError:
             return AlbumInfo(id=str(album_id), name="未知（jmcomic 未安装）")
         except Exception as e:
-            return AlbumInfo(id=str(album_id), name=f"获取失败: {e}")
+            return AlbumInfo(id=str(album_id), name=self._describe_error(e))
 
         info = AlbumInfo(
             id=str(album_id),
             name=str(getattr(album, "name", "") or "未知"),
             author=str(getattr(album, "author", "") or "未知"),
+            oname=str(getattr(album, "oname", "") or ""),
+            description=str(getattr(album, "description", "") or ""),
             chapter_count=len(getattr(album, "episode_list", None) or []),
-            image_count=int(getattr(album, "page_count", 0) or 0),
+            page_count=int(getattr(album, "page_count", 0) or 0),
+            works=list(getattr(album, "works", None) or []),
+            actors=list(getattr(album, "actors", None) or []),
             tags=list(getattr(album, "tags", None) or []),
         )
         self._save_cached_info(info)
         return info
+
+    @staticmethod
+    def _describe_error(error: Exception) -> str:
+        """把下载异常翻译成用户可读的提示
+
+        Args:
+            error: 捕获到的异常。
+
+        Returns:
+            面向用户的提示文本。
+        """
+        try:
+            from jmcomic.jm_exception import (
+                MissingAlbumPhotoException,
+                PartialDownloadFailedException,
+                RequestRetryAllFailException,
+            )
+        except ImportError:
+            return f"下载失败: {error}"
+
+        if isinstance(error, MissingAlbumPhotoException):
+            return "没有找到该漫画，请检查 ID；若内容仅登录可见，请在模块设置中填写 Cookie"
+
+        if isinstance(error, RequestRetryAllFailException):
+            return "JMComic 站点连接失败，请稍后重试或在模块设置中配置代理"
+
+        if isinstance(error, PartialDownloadFailedException):
+            return "部分图片下载失败，未生成不完整的 PDF，请稍后重试"
+
+        return f"下载失败: {type(error).__name__}: {error}"
 
     def _fetch_album(self, album_id: str) -> Any:
         """获取 album 详情（同步，需在线程池中调用）
@@ -381,7 +519,6 @@ class JMManager:
                 )
 
         album_info = await self.get_album_info(album_id)
-        album_root = self.album_root(str(album_id))
         loop = asyncio.get_running_loop()
 
         try:
@@ -389,7 +526,7 @@ class JMManager:
                 None, self._download_images, str(album_id), progress_callback
             )
 
-            images = self._list_images(album_root)
+            images = self._list_images(str(album_id))
             if not images:
                 return DownloadResult(
                     success=False,
@@ -409,10 +546,17 @@ class JMManager:
                 images,
                 img2pdf_convert,
             )
+
+            # 清理历史目录结构，避免同一漫画重复占用磁盘
+            await loop.run_in_executor(None, self._cleanup_legacy_layout, str(album_id))
+
+            # 用实际下载的图片数修正页数（接口返回的 page_count 常为 0）
+            album_info.page_count = len(images)
+            self._save_cached_info(album_info)
         except Exception as e:
             return DownloadResult(
                 success=False,
-                message=f"下载失败: {e}",
+                message=self._describe_error(e),
                 album_id=album_id,
                 album_info=album_info,
             )
@@ -444,9 +588,7 @@ class JMManager:
             album_id: 漫画 ID。
             progress_callback: 进度回调。
         """
-        album_root = self.album_root(album_id)
-        album_root.mkdir(parents=True, exist_ok=True)
-
+        album_root = self._ensure_album_root(album_id)
         option = self._build_option(album_root)
         downloader = _make_progress_downloader(progress_callback)(option)
         downloader.download_album(album_id)
@@ -458,7 +600,7 @@ class JMManager:
         images: list[Path],
         converter,
     ) -> Path:
-        """把图片合成为 PDF（同步，在线程池中执行）
+        """把图片二次压缩后合成为 PDF（同步，在线程池中执行）
 
         PDF 放在漫画根目录下，与图片目录同级。
 
@@ -471,30 +613,70 @@ class JMManager:
         Returns:
             PDF 文件路径。
         """
-        album_root = self.album_root(album_id)
-        album_root.mkdir(parents=True, exist_ok=True)
+        album_root = self._ensure_album_root(album_id)
 
         # 同一漫画只保留一份 PDF（名称可能随漫画标题变化）
         for old_pdf in album_root.glob("*.pdf"):
             old_pdf.unlink(missing_ok=True)
 
+        quality = max(1, min(95, self._int("jm_jpeg_quality", 80)))
+        payloads = self._compress_images(images, quality)
+
         pdf_name = self._safe_name(f"JM{album_id}-{album_info.name}")
         pdf_path = album_root / f"{pdf_name}.pdf"
-        pdf_path.write_bytes(converter([str(path) for path in images]))
+        pdf_path.write_bytes(converter(payloads))
         return pdf_path
+
+    @staticmethod
+    def _compress_images(images: list[Path], quality: int) -> list[bytes]:
+        """把图片统一二次压缩为 JPEG 字节流
+
+        站点原图多为 webp，PDF 直接嵌入会被无损转码，体积膨胀数倍；
+        因此先用 Pillow 按指定质量转成 JPEG，再交给 img2pdf 直接嵌入。
+        单张转换失败会被跳过，不影响其余页面。
+
+        Args:
+            images: 图片路径列表。
+            quality: JPEG 质量（1-95）。
+
+        Returns:
+            JPEG 字节流列表。
+        """
+        from PIL import Image
+
+        payloads: list[bytes] = []
+
+        for path in images:
+            try:
+                with Image.open(path) as raw:
+                    buffer = BytesIO()
+                    raw.convert("RGB").save(
+                        buffer, format="JPEG", quality=quality, optimize=True
+                    )
+                payloads.append(buffer.getvalue())
+            except Exception:
+                continue
+
+        return payloads
 
     @staticmethod
     def _safe_name(raw: str) -> str:
         """生成安全的文件名
 
+        只剔除 Windows 不允许的字符，保留中英文与方括号等可读字符，
+        使 PDF 文件名与图片目录名保持一致。
+
         Args:
             raw: 原始名称。
 
         Returns:
-            过滤掉非法字符后的名称。
+            处理后的名称。
         """
-        name = "".join(c for c in raw[:80] if c.isalnum() or c in "-_. ")
-        return name.strip() or "JM"
+        name = "".join(
+            "_" if (c in _INVALID_FILENAME_CHARS or ord(c) < 32) else c
+            for c in raw[:120]
+        )
+        return name.strip().strip(".") or "JM"
 
 
 def _make_progress_downloader(progress_callback: ProgressCallback | None):

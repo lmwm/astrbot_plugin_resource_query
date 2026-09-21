@@ -22,21 +22,7 @@ from ...http_utils import new_opener
 from .constants import DEFAULT_BASE_URL, DEFAULT_HEADERS
 from .result import WasuResult
 from .utils import fmt_gb, fmt_yuan, get_default_template
-
-# 模板变量说明
-_VAR_DEFINITIONS = {
-    "label": "账号名称",
-    "balance": "账户余额",
-    "month_fee": "当月话费",
-    "arrears": "欠费",
-    "total_used": "本月累计使用",
-    "total": "总流量",
-    "used": "已用流量",
-    "remain": "剩余流量",
-    "query_time": "查询时间",
-    "traffic_detail": "流量明细（多行）",
-    "voice_detail": "语音明细（多行）",
-}
+from .utils import get_var_definitions as _load_var_definitions
 
 # 账号表单字段
 _ACCOUNT_FIELDS = [
@@ -107,33 +93,6 @@ class WasuModule(ModuleBase):
         return True
 
     # ══════════════════════════════════════════
-    #  模块配置
-    # ══════════════════════════════════════════
-
-    def get_default_config(self) -> dict:
-        """模块默认配置
-
-        Returns:
-            接口地址默认值。
-        """
-        return {"base_url": DEFAULT_BASE_URL}
-
-    def get_config_fields(self) -> list[dict]:
-        """模块配置字段定义
-
-        Returns:
-            字段列表。
-        """
-        return [
-            {
-                "key": "base_url",
-                "label": "接口地址",
-                "type": "text",
-                "hint": f"默认 {DEFAULT_BASE_URL}，一般无需修改",
-            },
-        ]
-
-    # ══════════════════════════════════════════
     #  字段定义
     # ══════════════════════════════════════════
 
@@ -146,12 +105,12 @@ class WasuModule(ModuleBase):
         return _ACCOUNT_FIELDS
 
     def get_var_definitions(self) -> dict[str, str]:
-        """模板变量说明
+        """模板变量说明（来自 modules/wasu/config.yaml）
 
         Returns:
             变量名到中文描述的映射。
         """
-        return _VAR_DEFINITIONS
+        return _load_var_definitions()
 
     def get_default_template(self) -> str:
         """默认消息模板
@@ -253,7 +212,7 @@ class WasuModule(ModuleBase):
         Raises:
             WasuApiError: 接口返回业务错误或缺少数据。
         """
-        base_url = str(self.load_module_config().get("base_url") or DEFAULT_BASE_URL)
+        base_url = DEFAULT_BASE_URL
         headers = {**DEFAULT_HEADERS, "x-sign": sign}
         if ua:
             headers["User-Agent"] = ua

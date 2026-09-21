@@ -131,14 +131,18 @@ def _fold_block_scalar(text: str) -> str:
 def parse_yaml(text: str) -> dict:
     """解析简易 YAML 文本
 
+    基于缩进栈实现，支持任意层级嵌套（键值对可以一直往下缩进），
+    以及 `|` / `>` 系列块标量。
+
     Args:
         text: YAML 文本内容。
 
     Returns:
         解析后的嵌套字典；无法识别的行会被忽略。
     """
-    result: dict = {}
-    current_section: str | None = None
+    root: dict = {}
+    # 栈元素为 (该层缩进, 对应字典)，栈底是根字典
+    stack: list[tuple[int, dict]] = [(-1, root)]
     lines = text.split("\n")
     i = 0
 
@@ -150,43 +154,40 @@ def parse_yaml(text: str) -> dict:
             i += 1
             continue
 
-        indent = len(line) - len(line.lstrip())
         match = _KEY_RE.match(stripped)
         if not match:
             i += 1
             continue
 
+        indent = len(line) - len(line.lstrip())
         key = match.group(1)
         raw_value = match.group(2).strip() if match.group(2) else ""
 
-        # 顶层键
-        if indent == 0:
-            current_section = key
-            result[key] = _convert_value(_unquote(raw_value)) if raw_value else {}
-            i += 1
-            continue
-
-        if not current_section:
-            i += 1
-            continue
-
-        section = result.get(current_section)
-        if not isinstance(section, dict):
-            section = {}
-            result[current_section] = section
+        # 回退到当前缩进对应的父容器
+        while len(stack) > 1 and indent <= stack[-1][0]:
+            stack.pop()
+        parent = stack[-1][1]
 
         # 块标量
         if raw_value and _BLOCK_SCALAR_RE.match(raw_value):
             block_text, i = _read_block_scalar(lines, i + 1, indent)
-            section[key] = (
+            parent[key] = (
                 _fold_block_scalar(block_text) if raw_value.startswith(">") else block_text
             )
             continue
 
-        section[key] = _convert_value(_unquote(raw_value)) if raw_value else {}
+        if raw_value:
+            parent[key] = _convert_value(_unquote(raw_value))
+            i += 1
+            continue
+
+        # 空值表示这是一个新的子层级
+        child: dict = {}
+        parent[key] = child
+        stack.append((indent, child))
         i += 1
 
-    return result
+    return root
 
 
 def load_yaml_config(path: Path) -> dict:

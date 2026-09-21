@@ -15,10 +15,7 @@ _CONFIG_FILE = _MODULE_DIR / "config.yaml"
 
 # config.yaml 缺失时的兜底值
 _FALLBACK_DEVICE_ID = "wb_MIQUERY000001"
-_FALLBACK_UA = (
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
-)
+_FALLBACK_UA = "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv)"
 _FALLBACK_TEMPLATE = "{label}\n  余额: {balance}元\n  赠送: {gift_balance}元"
 
 
@@ -82,3 +79,16 @@ def get_default_template() -> str:
         默认模板文本。
     """
     return get_config_value(_config(), "template.default", _FALLBACK_TEMPLATE)
+
+
+def get_var_definitions() -> dict[str, str]:
+    """获取模板变量说明（Pages 变量面板展示用）
+
+    Returns:
+        变量名到中文描述的映射；config.yaml 未定义时返回空字典。
+    """
+    variables = get_config_value(_config(), "variables", None)
+    if not isinstance(variables, dict):
+        return {}
+
+    return {str(key): str(value) for key, value in variables.items()}

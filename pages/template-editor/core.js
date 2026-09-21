@@ -365,18 +365,16 @@
       const id = 'cfg-' + mod.name + '-' + field.key;
 
       if (field.type === 'bool') {
-        return '<div class="form-group">' +
-          '<label class="switch"><input type="checkbox" id="' + esc(id) + '"' + (value ? ' checked' : '') + '>' +
-          esc(field.label) + '</label>' +
+        return '<div class="form-group">' + fieldInputHtml(id, field, value) +
           (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
           '</div>';
       }
 
-      const type = field.type === 'password' ? 'password' : (field.type === 'int' ? 'number' : 'text');
+      const label = '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>';
 
       return '<div class="form-group">' +
-        '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
-        '<input class="form-input" type="' + type + '" id="' + esc(id) + '" value="' + esc(value) + '">' +
+        label +
+        fieldInputHtml(id, field, value) +
         (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
         '</div>';
     }).join('');
@@ -400,8 +398,9 @@
         ? '<span class="badge ok">已登录</span>'
         : (mod.supports_login ? '<span class="badge off">未登录</span>' : '');
 
-      return '<div class="account-card">' +
-        '<div class="account-main" data-action="edit-account" data-module="' + esc(mod.name) + '" data-file="' + esc(acc._filename || '') + '">' +
+      return '<div class="account-card" data-action="edit-account" ' +
+          'data-module="' + esc(mod.name) + '" data-file="' + esc(acc._filename || '') + '">' +
+        '<div class="account-main">' +
           '<div class="account-title">' + esc(label) + ' ' + badge + '</div>' +
           (sub ? '<div class="account-sub">' + esc(sub) + '</div>' : '') +
         '</div>' +
@@ -534,13 +533,7 @@
 
     accountInlineGroups(mod).forEach((group) => {
       parts.push('<div class="field-block">');
-      parts.push(
-        '<div class="field-block-head"><span>' + esc(group.label) + '</span>' +
-        (group.resettable
-          ? '<button class="btn btn-ghost btn-sm" data-action="reset-group" data-group="' + esc(group.key) + '">↺ 恢复默认</button>'
-          : '') +
-        '</div>'
-      );
+      parts.push('<div class="field-block-head"><span>' + esc(group.label) + '</span></div>');
       if (group.hint) parts.push('<div class="hint">' + esc(group.hint) + '</div>');
       parts.push(fieldsInGroup(fields, group.key).map((field) => buildAccountFieldHtml(mod, field)).join(''));
       parts.push('</div>');
@@ -549,23 +542,53 @@
     $('account-form').innerHTML = parts.join('');
   }
 
+  /** 字段标签行（字段带默认值时附带「恢复默认」按钮） */
+  function fieldLabelHtml(id, field) {
+    const reset = field.default !== undefined
+      ? '<button class="btn btn-ghost btn-sm field-reset" data-action="reset-field" ' +
+        'data-key="' + esc(field.key) + '" title="恢复为插件默认值">↺ 恢复默认</button>'
+      : '';
+
+    return '<div class="form-label-row">' +
+      '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
+      reset +
+      '</div>';
+  }
+
+  /** 输入控件；密码类型带显示 / 隐藏切换 */
+  function fieldInputHtml(id, field, value) {
+    if (field.type === 'bool') {
+      return '<label class="switch"><input type="checkbox" id="' + esc(id) + '"' +
+        (value ? ' checked' : '') + '>' + esc(field.label) + '</label>';
+    }
+
+    const isPassword = field.type === 'password';
+    const type = isPassword ? 'password' : (field.type === 'int' ? 'number' : 'text');
+    const extra = isPassword ? ' autocomplete="new-password"' : '';
+
+    const input = '<input class="form-input" type="' + type + '" id="' + esc(id) + '" value="' +
+      esc(value) + '"' + extra + '>';
+
+    if (!isPassword) return input;
+
+    return '<div class="pw-wrapper">' + input +
+      '<button type="button" class="pw-toggle" data-action="toggle-password" ' +
+      'data-target="' + esc(id) + '" title="显示 / 隐藏">👁</button>' +
+      '</div>';
+  }
+
   function buildAccountFieldHtml(mod, field) {
     const id = 'acc-' + mod.name + '-' + field.key;
     const raw = state.editing.account[field.key];
     const value = raw === undefined || raw === null ? '' : raw;
 
     if (field.type === 'bool') {
-      return '<div class="form-group"><label class="switch">' +
-        '<input type="checkbox" id="' + esc(id) + '"' + (value ? ' checked' : '') + '>' +
-        esc(field.label) + '</label></div>';
+      return '<div class="form-group">' + fieldInputHtml(id, field, value) + '</div>';
     }
 
-    const type = field.type === 'password' ? 'password' : (field.type === 'int' ? 'number' : 'text');
-    const extra = field.type === 'password' ? ' autocomplete="new-password"' : '';
-
     return '<div class="form-group">' +
-      '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
-      '<input class="form-input" type="' + type + '" id="' + esc(id) + '" value="' + esc(value) + '"' + extra + '>' +
+      fieldLabelHtml(id, field) +
+      fieldInputHtml(id, field, value) +
       (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
       '</div>';
   }
@@ -615,20 +638,16 @@
     renderAccountModalBody();
   }
 
-  /** 把某个内联分组的字段恢复为插件默认值 */
-  function resetGroup(groupKey) {
+  /** 把单个字段恢复为插件默认值（设备标识、User-Agent 可分别重置） */
+  function resetField(fieldKey) {
     const editing = state.editing;
     if (!editing) return;
 
-    const mod = editing.module;
+    const field = (editing.module.account_fields || []).find((f) => f.key === fieldKey);
+    if (!field || field.default === undefined) return;
+
     syncAccountForm();
-
-    fieldsInGroup(mod.account_fields || [], groupKey).forEach((field) => {
-      if (field.default !== undefined) {
-        editing.account[field.key] = field.default;
-      }
-    });
-
+    editing.account[fieldKey] = field.default;
     renderAccountForm();
     toast('已恢复默认值');
   }
@@ -943,9 +962,19 @@
         selectGroup(target.dataset.group);
         break;
 
-      case 'reset-group':
-        resetGroup(target.dataset.group);
+      case 'reset-field':
+        resetField(target.dataset.key);
         break;
+
+      case 'toggle-password': {
+        const input = $(target.dataset.target);
+        if (input) {
+          const showing = input.type === 'text';
+          input.type = showing ? 'password' : 'text';
+          target.textContent = showing ? '👁' : '🙈';
+        }
+        break;
+      }
 
       case 'reload':
         await reloadAll();
