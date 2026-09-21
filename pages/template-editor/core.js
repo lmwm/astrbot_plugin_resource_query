@@ -3,8 +3,8 @@
  *
  * 设计原则：界面完全由后端返回的模块 schema 驱动。
  * 新增功能模块时，后端实现 ModuleBase 并声明 schema 即可，
- * 本文件无需任何改动 —— 导航、配置表单、账号管理、模板编辑器
- * 都会按模块声明的能力自动渲染。
+ * 本文件无需任何改动 —— 导航、页面标签、配置表单、账号管理、
+ * 凭据分组与模板编辑器都会按模块声明的能力自动渲染。
  *
  * 安全约定：所有插入 innerHTML 的外部数据一律经过 esc() 转义；
  * 所有交互通过 data-action 事件委托绑定，不使用内联事件属性。
@@ -24,7 +24,8 @@
     accounts: [],
     vars: {},
     activeModule: '',
-    editing: null,        // { module, filename, account }
+    subTabs: {},          // 模块名 → 当前页面标签（accounts / variables / settings）
+    editing: null,        // { module, filename, account, activeTab, activeGroup }
     pendingDelete: null,  // { module, filename, name }
     toastTimer: null,
   };
@@ -171,8 +172,32 @@
     return (mod && mod.default_template) || '';
   };
 
+  /** 字段所属分组（支持字符串或数组） */
+  function groupsOfField(field) {
+    if (!field.group) return [];
+    return Array.isArray(field.group) ? field.group : [field.group];
+  }
+
+  const fieldsInGroup = (fields, key) =>
+    (fields || []).filter((f) => groupsOfField(f).includes(key));
+
+  /** 未归入任何已声明分组的字段（始终显示在账号配置顶部） */
+  function ungroupedFields(mod) {
+    const known = (mod.account_groups || []).map((g) => g.key);
+    return (mod.account_fields || []).filter((f) => {
+      const groups = groupsOfField(f);
+      return groups.length === 0 || groups.every((k) => !known.includes(k));
+    });
+  }
+
+  const accountTabGroups = (mod) =>
+    (mod.account_groups || []).filter((g) => (g.mode || 'tab') === 'tab');
+
+  const accountInlineGroups = (mod) =>
+    (mod.account_groups || []).filter((g) => g.mode === 'inline');
+
   // ══════════════════════════════════════════
-  //  渲染：导航与页面
+  //  渲染：导航
   // ══════════════════════════════════════════
 
   function renderNav() {
@@ -187,6 +212,39 @@
       btn.dataset.module = mod.name;
       nav.appendChild(btn);
     });
+  }
+
+  function selectModule(name) {
+    state.activeModule = name;
+
+    document.querySelectorAll('.nav-tab').forEach((tab) => {
+      tab.classList.toggle('active', tab.dataset.module === name);
+    });
+
+    document.querySelectorAll('.page').forEach((page) => {
+      page.classList.toggle('active', page.id === 'page-' + name);
+    });
+  }
+
+  // ══════════════════════════════════════════
+  //  渲染：模块页面（含页面标签）
+  // ══════════════════════════════════════════
+
+  /** 模块可用的页面标签 */
+  function moduleTabs(mod) {
+    const tabs = [];
+    if (mod.supports_accounts) tabs.push({ key: 'accounts', label: '账号管理' });
+    if (Object.keys(mod.variables || {}).length) tabs.push({ key: 'variables', label: '模板变量' });
+    if ((mod.config_fields || []).length) tabs.push({ key: 'settings', label: '模块设置' });
+    return tabs;
+  }
+
+  function currentSubTab(mod) {
+    const tabs = moduleTabs(mod);
+    if (!tabs.length) return '';
+
+    const saved = state.subTabs[mod.name];
+    return tabs.some((t) => t.key === saved) ? saved : tabs[0].key;
   }
 
   function renderPages() {
@@ -213,7 +271,6 @@
     });
   }
 
-  /** 按模块声明的能力拼装页面骨架 */
   function buildPageHtml(mod) {
     const parts = [
       '<div class="module-head">' +
@@ -222,46 +279,81 @@
       '</div>',
     ];
 
-    if (mod.supports_accounts) {
-      parts.push(
-        '<div class="card">' +
-          '<div class="card-header">' +
-            '<span class="card-title">账号管理</span>' +
-            '<button class="btn btn-primary btn-sm" data-action="add-account" data-module="' + esc(mod.name) + '">＋ 添加账号</button>' +
-          '</div>' +
-          '<div class="card-body"><div class="account-grid" id="list-' + esc(mod.name) + '"></div></div>' +
-        '</div>'
-      );
+    const tabs = moduleTabs(mod);
+
+    if (!tabs.length) {
+      parts.push('<div class="card"><div class="card-body"><div class="empty">该模块没有可配置的内容</div></div></div>');
+      return parts.join('');
     }
 
-    if ((mod.config_fields || []).length) {
-      parts.push(
-        '<div class="card">' +
-          '<div class="card-header">' +
-            '<span class="card-title">模块设置</span>' +
-            '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存设置</button>' +
-          '</div>' +
-          '<div class="card-body">' + buildConfigFieldsHtml(mod) + '</div>' +
-        '</div>'
-      );
-    }
+    const active = currentSubTab(mod);
 
-    if (Object.keys(mod.variables || {}).length) {
+    parts.push('<div class="sub-tabs">' + tabs.map((t) =>
+      '<button class="sub-tab' + (t.key === active ? ' active' : '') + '"' +
+      ' data-action="select-subtab" data-module="' + esc(mod.name) + '" data-tab="' + esc(t.key) + '">' +
+      esc(t.label) + '</button>'
+    ).join('') + '</div>');
+
+    tabs.forEach((t) => {
       parts.push(
-        '<div class="card">' +
-          '<div class="card-header">' +
-            '<span class="card-title">模板变量</span>' +
-            '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' +
-          '</div>' +
-          '<div class="card-body"><div class="table-scroll"><table class="var-table">' +
-            '<thead><tr><th>变量名</th><th>说明</th><th>示例值</th><th>显示</th><th></th></tr></thead>' +
-            '<tbody id="vars-' + esc(mod.name) + '"></tbody>' +
-          '</table></div></div>' +
+        '<div class="sub-page' + (t.key === active ? ' active' : '') + '"' +
+        ' id="sub-' + esc(mod.name) + '-' + esc(t.key) + '">' +
+        buildSubPageHtml(mod, t.key) +
         '</div>'
       );
-    }
+    });
 
     return parts.join('');
+  }
+
+  function buildSubPageHtml(mod, tabKey) {
+    if (tabKey === 'accounts') {
+      return '<div class="card">' +
+        '<div class="card-header">' +
+          '<span class="card-title">账号列表</span>' +
+          '<button class="btn btn-primary btn-sm" data-action="add-account" data-module="' + esc(mod.name) + '">＋ 添加账号</button>' +
+        '</div>' +
+        '<div class="card-body"><div class="account-grid" id="list-' + esc(mod.name) + '"></div></div>' +
+        '</div>';
+    }
+
+    if (tabKey === 'variables') {
+      return '<div class="card">' +
+        '<div class="card-header">' +
+          '<span class="card-title">模板变量</span>' +
+          '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' +
+        '</div>' +
+        '<div class="card-body"><div class="table-scroll"><table class="var-table">' +
+          '<thead><tr><th>变量名</th><th>说明</th><th>示例值</th><th>显示</th><th></th></tr></thead>' +
+          '<tbody id="vars-' + esc(mod.name) + '"></tbody>' +
+        '</table></div></div>' +
+        '</div>';
+    }
+
+    return '<div class="card">' +
+      '<div class="card-header">' +
+        '<span class="card-title">模块设置</span>' +
+        '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存设置</button>' +
+      '</div>' +
+      '<div class="card-body">' + buildConfigFieldsHtml(mod) + '</div>' +
+      '</div>';
+  }
+
+  function selectSubTab(moduleName, tabKey) {
+    state.subTabs[moduleName] = tabKey;
+
+    const mod = moduleByName(moduleName);
+    if (!mod) return;
+
+    moduleTabs(mod).forEach((t) => {
+      const btn = document.querySelector(
+        '.sub-tab[data-action="select-subtab"][data-module="' + moduleName + '"][data-tab="' + t.key + '"]'
+      );
+      if (btn) btn.classList.toggle('active', t.key === tabKey);
+
+      const pane = $('sub-' + moduleName + '-' + t.key);
+      if (pane) pane.classList.toggle('active', t.key === tabKey);
+    });
   }
 
   function buildConfigFieldsHtml(mod) {
@@ -341,18 +433,6 @@
     '</tr>').join('');
   }
 
-  function selectModule(name) {
-    state.activeModule = name;
-
-    document.querySelectorAll('.nav-tab').forEach((tab) => {
-      tab.classList.toggle('active', tab.dataset.module === name);
-    });
-
-    document.querySelectorAll('.page').forEach((page) => {
-      page.classList.toggle('active', page.id === 'page-' + name);
-    });
-  }
-
   // ══════════════════════════════════════════
   //  账号模态框
   // ══════════════════════════════════════════
@@ -365,17 +445,21 @@
       ? accountsOf(moduleName).find((a) => a._filename === filename)
       : null;
 
-    state.editing = { module: mod, filename: filename || '', account: account || {} };
+    const tabGroups = accountTabGroups(mod);
+
+    state.editing = {
+      module: mod,
+      filename: filename || '',
+      account: Object.assign({}, account || {}),
+      activeTab: 'config',
+      activeGroup: tabGroups.length ? tabGroups[0].key : '',
+    };
 
     $('account-modal-title').textContent = (account ? '编辑 ' : '添加 ') + mod.title + ' 账号';
 
     setStatus('');
     $('account-otp').value = '';
     $('account-otp-row').style.display = 'none';
-
-    $('account-form').innerHTML = (mod.account_fields || [])
-      .map((field) => buildAccountFieldHtml(mod, field))
-      .join('');
 
     const btnLogin = $('btn-login');
     btnLogin.style.display = mod.supports_login ? '' : 'none';
@@ -384,17 +468,85 @@
 
     $('btn-test').style.display = mod.supports_test ? '' : 'none';
 
-    const templateSection = $('account-template-section');
-    if (mod.supports_template) {
-      templateSection.style.display = '';
-      $('account-template').value = state.editing.account.template || defaultTemplate(moduleName);
-      renderTemplateTags(moduleName);
-      updateTemplatePreview(moduleName);
+    renderAccountModalBody();
+    $('account-modal').classList.add('active');
+  }
+
+  /** 模态框骨架：账号配置 / 消息模板 两个标签 */
+  function renderAccountModalBody() {
+    const editing = state.editing;
+    if (!editing) return;
+
+    const mod = editing.module;
+    const tabs = [{ key: 'config', label: '账号配置' }];
+    if (mod.supports_template) tabs.push({ key: 'template', label: '消息模板' });
+
+    $('account-tabs').innerHTML = tabs.map((t) =>
+      '<button class="sub-tab' + (t.key === editing.activeTab ? ' active' : '') + '"' +
+      ' data-action="select-account-tab" data-tab="' + esc(t.key) + '">' + esc(t.label) + '</button>'
+    ).join('');
+
+    $('account-pane-config').style.display = editing.activeTab === 'config' ? '' : 'none';
+    $('account-pane-template').style.display = editing.activeTab === 'template' ? '' : 'none';
+
+    if (editing.activeTab === 'config') {
+      renderAccountForm();
     } else {
-      templateSection.style.display = 'none';
+      $('account-template').value = editing.account.template || defaultTemplate(mod.name);
+      renderTemplateTags(mod.name);
+      updateTemplatePreview(mod.name);
+    }
+  }
+
+  /** 渲染账号配置：顶部为公共字段，中间为凭据方式标签，底部为内联分组 */
+  function renderAccountForm() {
+    const editing = state.editing;
+    if (!editing) return;
+
+    const mod = editing.module;
+    const fields = mod.account_fields || [];
+    const parts = [];
+
+    const base = ungroupedFields(mod);
+    if (base.length) {
+      parts.push(base.map((field) => buildAccountFieldHtml(mod, field)).join(''));
     }
 
-    $('account-modal').classList.add('active');
+    const tabGroups = accountTabGroups(mod);
+    if (tabGroups.length) {
+      let active = tabGroups.find((g) => g.key === editing.activeGroup);
+      if (!active) {
+        active = tabGroups[0];
+        editing.activeGroup = active.key;
+      }
+
+      parts.push('<div class="sub-tabs">' + tabGroups.map((g) =>
+        '<button class="sub-tab' + (g.key === active.key ? ' active' : '') + '"' +
+        ' data-action="select-group" data-group="' + esc(g.key) + '">' + esc(g.label) + '</button>'
+      ).join('') + '</div>');
+
+      if (active.hint) {
+        parts.push('<div class="group-hint">' + esc(active.hint) + '</div>');
+      }
+
+      parts.push(fieldsInGroup(fields, active.key).map((field) => buildAccountFieldHtml(mod, field)).join(''));
+    }
+
+    accountInlineGroups(mod).forEach((group) => {
+      parts.push('<div class="field-block">');
+      parts.push(
+        '<div class="field-block-head"><span>' + esc(group.label) + '</span>' +
+        (group.resettable
+          ? '<button class="btn btn-ghost btn-sm" data-action="reset-group" data-group="' + esc(group.key) + '">↺ 恢复默认</button>'
+          : '') +
+        '</div>'
+      );
+      if (group.hint) parts.push('<div class="hint">' + esc(group.hint) + '</div>');
+      parts.push(fieldsInGroup(fields, group.key).map((field) => buildAccountFieldHtml(mod, field)).join(''));
+      parts.push('</div>');
+    });
+
+    $('account-form').innerHTML = parts.join('');
   }
 
   function buildAccountFieldHtml(mod, field) {
@@ -418,28 +570,67 @@
       '</div>';
   }
 
-  function collectAccountForm(mod) {
-    const account = {};
+  /** 把当前已渲染的输入值写回数据模型（切换标签前必须调用，避免取值丢失） */
+  function syncAccountForm() {
+    const editing = state.editing;
+    if (!editing) return;
+
+    const mod = editing.module;
 
     (mod.account_fields || []).forEach((field) => {
       const el = $('acc-' + mod.name + '-' + field.key);
       if (!el) return;
 
       if (field.type === 'bool') {
-        account[field.key] = el.checked;
+        editing.account[field.key] = el.checked;
       } else if (field.type === 'int') {
-        account[field.key] = toInt(el.value, 0);
+        editing.account[field.key] = toInt(el.value, 0);
       } else {
-        account[field.key] = el.value.trim();
+        editing.account[field.key] = el.value.trim();
       }
     });
 
     if (mod.supports_template) {
       const textarea = $('account-template');
-      if (textarea) account.template = textarea.value;
+      if (textarea) editing.account.template = textarea.value;
     }
+  }
 
-    return account;
+  /** 以当前数据模型重建「账号配置」内容（切换凭据方式时调用） */
+  function selectGroup(groupKey) {
+    const editing = state.editing;
+    if (!editing) return;
+
+    syncAccountForm();
+    editing.activeGroup = groupKey;
+    renderAccountForm();
+  }
+
+  function selectAccountTab(tabKey) {
+    const editing = state.editing;
+    if (!editing) return;
+
+    syncAccountForm();
+    editing.activeTab = tabKey;
+    renderAccountModalBody();
+  }
+
+  /** 把某个内联分组的字段恢复为插件默认值 */
+  function resetGroup(groupKey) {
+    const editing = state.editing;
+    if (!editing) return;
+
+    const mod = editing.module;
+    syncAccountForm();
+
+    fieldsInGroup(mod.account_fields || [], groupKey).forEach((field) => {
+      if (field.default !== undefined) {
+        editing.account[field.key] = field.default;
+      }
+    });
+
+    renderAccountForm();
+    toast('已恢复默认值');
   }
 
   /** 保存账号；失败时保持窗口打开并如实提示，不会出现"假成功" */
@@ -447,8 +638,11 @@
     const editing = state.editing;
     if (!editing) return false;
 
+    syncAccountForm();
+
     const mod = editing.module;
-    const account = collectAccountForm(mod);
+    const account = Object.assign({}, editing.account);
+    delete account._filename;
 
     const list = accountsOf(mod.name).slice();
     const index = list.findIndex((a) => a._filename === editing.filename);
@@ -484,11 +678,13 @@
       return;
     }
 
-    const payload = { filename: editing.filename };
-    ['account', 'password'].forEach((key) => {
-      const el = $('acc-' + mod.name + '-' + key);
-      if (el) payload[key] = el.value.trim();
-    });
+    syncAccountForm();
+
+    const payload = {
+      filename: editing.filename,
+      account: editing.account.account || '',
+      password: editing.account.password || '',
+    };
 
     const otp = $('account-otp').value.trim();
     if (otp) payload.otp_code = otp;
@@ -516,10 +712,15 @@
     if (!editing) return;
 
     const mod = editing.module;
+    syncAccountForm();
+
+    const payload = Object.assign({}, editing.account);
+    delete payload._filename;
+
     setStatus('正在测试...', 'warn');
 
     try {
-      const result = await api.post(mod.name + '/test', collectAccountForm(mod));
+      const result = await api.post(mod.name + '/test', payload);
       setStatus(result.message || '测试成功', result.status === 'ok' ? 'ok' : 'error');
     } catch (e) {
       setStatus('测试失败：' + e.message, 'error');
@@ -527,7 +728,7 @@
   }
 
   // ══════════════════════════════════════════
-  //  模板编辑（统一 id，不再按平台拼 id，避免取不到元素）
+  //  模板编辑
   // ══════════════════════════════════════════
 
   function renderTemplateTags(moduleName) {
@@ -728,6 +929,22 @@
     switch (action) {
       case 'select-module':
         selectModule(moduleName);
+        break;
+
+      case 'select-subtab':
+        selectSubTab(moduleName, target.dataset.tab);
+        break;
+
+      case 'select-account-tab':
+        selectAccountTab(target.dataset.tab);
+        break;
+
+      case 'select-group':
+        selectGroup(target.dataset.group);
+        break;
+
+      case 'reset-group':
+        resetGroup(target.dataset.group);
         break;
 
       case 'reload':

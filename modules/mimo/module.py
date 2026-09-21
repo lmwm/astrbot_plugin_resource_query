@@ -33,16 +33,45 @@ _VAR_DEFINITIONS = {
     "concurrency": "并发限额",
 }
 
-# 账号表单字段（Pages 通用渲染）
+# 账号字段分组：三种凭据方式作为标签页，设备信息作为内联区块
+_ACCOUNT_GROUPS = [
+    {
+        "key": "password",
+        "label": "账号密码登录",
+        "mode": "tab",
+        "hint": "输入小米账号与密码，首次登录可能需要短信验证码",
+    },
+    {
+        "key": "passtoken",
+        "label": "PassToken",
+        "mode": "tab",
+        "hint": "已有 PassToken 时使用，插件会自动换取 ServiceToken",
+    },
+    {
+        "key": "servicetoken",
+        "label": "ServiceToken",
+        "mode": "tab",
+        "hint": "直接使用 ServiceToken 查询，无需再次登录",
+    },
+    {
+        "key": "device",
+        "label": "设备信息（可选）",
+        "mode": "inline",
+        "hint": "留空时保存会自动填充插件默认值",
+        "resettable": True,
+    },
+]
+
+# 账号表单字段；group 决定字段出现在哪个分组
 _ACCOUNT_FIELDS = [
     {"key": "name", "label": "账号名称", "type": "text", "hint": "留空则显示小米账号"},
-    {"key": "account", "label": "小米账号", "type": "text", "hint": "手机号或邮箱"},
-    {"key": "password", "label": "密码", "type": "password"},
-    {"key": "device_id", "label": "设备标识", "type": "text", "hint": "留空使用模块默认值"},
-    {"key": "ua", "label": "User-Agent", "type": "text", "hint": "留空使用模块默认值"},
-    {"key": "userId", "label": "User ID", "type": "text", "hint": "登录后自动填充"},
-    {"key": "passToken", "label": "PassToken", "type": "password", "hint": "登录后自动填充"},
-    {"key": "serviceToken", "label": "ServiceToken", "type": "password", "hint": "登录后自动填充"},
+    {"key": "account", "label": "小米账号", "type": "text", "group": "password", "hint": "手机号或邮箱"},
+    {"key": "password", "label": "密码", "type": "password", "group": "password"},
+    {"key": "userId", "label": "User ID", "type": "text", "group": ["passtoken", "servicetoken"], "hint": "登录后自动填充"},
+    {"key": "passToken", "label": "PassToken", "type": "password", "group": "passtoken", "hint": "登录后自动填充"},
+    {"key": "serviceToken", "label": "ServiceToken", "type": "password", "group": "servicetoken", "hint": "登录后自动填充"},
+    {"key": "device_id", "label": "设备标识", "type": "text", "group": "device"},
+    {"key": "ua", "label": "User-Agent", "type": "text", "group": "device"},
 ]
 
 # 需要持久化的凭据字段
@@ -121,52 +150,34 @@ class MimoModule(ModuleBase):
         return "mimo_"
 
     # ══════════════════════════════════════════
-    #  模块配置
-    # ══════════════════════════════════════════
-
-    def get_default_config(self) -> dict:
-        """模块默认配置
-
-        Returns:
-            默认设备标识与 User-Agent。
-        """
-        return {
-            "default_device_id": get_default_device_id(),
-            "default_ua": get_default_ua(),
-        }
-
-    def get_config_fields(self) -> list[dict]:
-        """模块配置字段定义
-
-        Returns:
-            字段列表。
-        """
-        return [
-            {
-                "key": "default_device_id",
-                "label": "默认设备标识",
-                "type": "text",
-                "hint": "账号未单独配置时使用",
-            },
-            {
-                "key": "default_ua",
-                "label": "默认 User-Agent",
-                "type": "text",
-                "hint": "登录与查询共用，留空则使用配置文件内置值",
-            },
-        ]
-
-    # ══════════════════════════════════════════
     #  字段定义
     # ══════════════════════════════════════════
+
+    def get_account_groups(self) -> list[dict]:
+        """账号字段分组定义
+
+        Returns:
+            分组列表：三种凭据方式为标签页，设备信息为内联区块。
+        """
+        return _ACCOUNT_GROUPS
 
     def get_account_fields(self) -> list[dict]:
         """账号表单字段定义
 
         Returns:
-            字段列表。
+            字段列表；设备字段附带插件默认值，供「恢复默认」按钮使用。
         """
-        return _ACCOUNT_FIELDS
+        fields = [dict(field) for field in _ACCOUNT_FIELDS]
+        defaults = {
+            "device_id": get_default_device_id(),
+            "ua": get_default_ua(),
+        }
+
+        for field in fields:
+            if field["key"] in defaults:
+                field["default"] = defaults[field["key"]]
+
+        return fields
 
     def get_var_definitions(self) -> dict[str, str]:
         """模板变量说明
@@ -192,12 +203,11 @@ class MimoModule(ModuleBase):
         """读取账号并补齐默认设备信息（仅内存，不落盘）
 
         Returns:
-            账号配置列表。
+            账号配置列表；设备字段为空时填入插件默认值供前端展示。
         """
         accounts = super().get_accounts()
-        config = self.load_module_config()
-        default_device_id = config.get("default_device_id") or get_default_device_id()
-        default_ua = config.get("default_ua") or get_default_ua()
+        default_device_id = get_default_device_id()
+        default_ua = get_default_ua()
 
         for acc in accounts:
             if not acc.get("device_id"):
@@ -206,6 +216,30 @@ class MimoModule(ModuleBase):
                 acc["ua"] = default_ua
 
         return accounts
+
+    def save_accounts(self, accounts: list[dict]) -> bool:
+        """保存账号：空白的设备字段自动填充默认值
+
+        Args:
+            accounts: 账号配置列表。
+
+        Returns:
+            是否保存成功。
+        """
+        defaults = {
+            "device_id": get_default_device_id(),
+            "ua": get_default_ua(),
+        }
+        normalized = []
+
+        for acc in accounts:
+            item = dict(acc)
+            for key, value in defaults.items():
+                if not str(item.get(key) or "").strip():
+                    item[key] = value
+            normalized.append(item)
+
+        return super().save_accounts(normalized)
 
     def update_credentials(self, account: dict, credentials: dict) -> bool:
         """把刷新后的凭据写回账号文件

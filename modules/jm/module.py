@@ -32,7 +32,13 @@ _CONFIG_FIELDS = [
         "key": "jm_send_file",
         "label": "下载后发送 PDF",
         "type": "bool",
-        "hint": "关闭后只提示文件位置",
+        "hint": "关闭后不发送文件",
+    },
+    {
+        "key": "jm_show_info",
+        "label": "返回漫画信息",
+        "type": "bool",
+        "hint": "关闭后消息中只显示漫画 ID，避免不适宜的标题被发送到聊天",
     },
     {
         "key": "jm_max_file_size",
@@ -242,7 +248,7 @@ class JMModule(ModuleBase):
         max_size_mb = _to_int(config.get("jm_max_file_size", 10), 10)
 
         info = await self._downloader.get_album_info(album_id)
-        summary = self._summary(album_id, info)
+        summary = self._summary(album_id, info, bool(config.get("jm_show_info", False)))
 
         # 命中本地缓存时直接发送
         if not force:
@@ -329,34 +335,37 @@ class JMModule(ModuleBase):
             消息结果。
         """
         if not send_file:
-            yield event.plain_result(f"{summary}\n✅ 文件已就绪\n位置：{pdf_path}")
+            yield event.plain_result(f"{summary}\n✅ 文件已就绪")
             return
 
         if max_size_mb > 0 and size_mb > max_size_mb:
             yield event.plain_result(
-                f"{summary}\n"
-                f"⚠️ 文件 {size_mb:.1f} MB 超过上限 {max_size_mb} MB，未发送\n"
-                f"位置：{pdf_path}"
+                f"{summary}\n⚠️ 文件 {size_mb:.1f} MB 超过上限 {max_size_mb} MB，未发送"
             )
             return
 
         try:
             yield event.chain_result([File(name=pdf_name or "comic.pdf", file=pdf_path)])
         except Exception as e:
-            yield event.plain_result(f"{summary}\n❌ 发送失败: {e}\n位置：{pdf_path}")
+            yield event.plain_result(f"{summary}\n❌ 发送失败: {e}")
 
     @staticmethod
-    def _summary(album_id, info) -> str:
+    def _summary(album_id, info, show_info: bool) -> str:
         """构建漫画信息摘要
 
         Args:
             album_id: 漫画 ID。
             info: AlbumInfo 实例。
+            show_info: 是否包含漫画标题与页数；关闭时只显示漫画 ID。
 
         Returns:
             形如 "JM123456 | 标题 | 20P" 的摘要。
         """
-        parts = [f"JM{album_id}"]
+        label = f"JM{album_id}"
+        if not show_info:
+            return label
+
+        parts = [label]
 
         name = str(getattr(info, "name", "") or "")
         if name and name != "未知" and not name.startswith(("获取失败", "未知（")):

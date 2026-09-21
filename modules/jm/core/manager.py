@@ -2,14 +2,23 @@
 
 负责漫画下载、PDF 生成与本地缓存判定。
 
+目录结构（每部漫画一个根目录，PDF 与信息文件与图片目录同级）：
+
+    JMDownload/
+    └── JM1083382/
+        ├── JM1083382-漫画名称/        ← 下载的图片
+        │   ├── 00001.jpg
+        │   └── ...
+        ├── JM1083382-漫画名称.pdf     ← 生成的 PDF
+        └── info.json                  ← 漫画信息缓存
+
 实现要点：
-  1. 下载完全交给 jmcomic 原生下载器，用户的并发 / 代理 / Cookie / 超时 /
-     重试配置通过 JmOption 下发；不再自行遍历图片（旧实现误把
-     `episode_list` 的元组当对象使用，必然抛 AttributeError）。
+  1. 下载交给 jmcomic 原生下载器，并发 / 代理 / Cookie / 超时 / 重试
+     通过 JmOption 下发；目录由 `JM{Aid}-{Atitle}` 规则决定。
   2. 进度通过继承 `JmDownloader` 的 `after_image` 钩子统计，回调在下载线程
      中执行，由调用方负责线程安全转发。
   3. 图片下载与 PDF 生成都在线程池中执行，避免阻塞 AstrBot 事件循环。
-  4. 缓存判定兼容旧版目录结构（`JMDownload/<jmID>/*.pdf`）。
+  4. 缓存判定兼容历史目录结构（`ready/*.pdf`）。
 """
 
 from __future__ import annotations
@@ -23,6 +32,9 @@ from .models import AlbumInfo, DownloadResult
 
 # 图片文件后缀
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
+
+# 图片目录命名规则：JM<ID>-<漫画名>（jmcomic 的 f-string 目录规则）
+_IMAGE_DIR_RULE = "JM{Aid}-{Atitle}"
 
 # 进度回调签名：callback(current, total, message)
 ProgressCallback = Callable[[int, int, str], None]
@@ -40,11 +52,7 @@ class JMManager:
         """
         self._config = config or {}
         self._download_dir = Path(download_dir)
-        self._cache_dir = self._download_dir / "cache"
-        self._ready_dir = self._download_dir / "ready"
-
-        for directory in (self._download_dir, self._cache_dir, self._ready_dir):
-            directory.mkdir(parents=True, exist_ok=True)
+        self._download_dir.mkdir(parents=True, exist_ok=True)
 
     def update_config(self, config: dict) -> None:
         """更新配置
@@ -53,6 +61,50 @@ class JMManager:
             config: 新的配置字典。
         """
         self._config = config or {}
+
+    # ══════════════════════════════════════════
+    #  路径
+    # ══════════════════════════════════════════
+
+    def album_root(self, album_id: str) -> Path:
+        """获取漫画根目录
+
+        Args:
+            album_id: 漫画 ID。
+
+        Returns:
+            形如 `<JMDownload>/JM<ID>` 的目录路径。
+        """
+        return self._download_dir / f"JM{album_id}"
+
+    def _info_file(self, album_id: str) -> Path:
+        """漫画信息缓存文件路径
+
+        Args:
+            album_id: 漫画 ID。
+
+        Returns:
+            `<漫画根目录>/info.json`。
+        """
+        return self.album_root(album_id) / "info.json"
+
+    def _list_images(self, album_root: Path) -> list[Path]:
+        """列出漫画目录下的图片（递归）
+
+        Args:
+            album_root: 漫画根目录。
+
+        Returns:
+            排序后的图片路径列表。
+        """
+        if not album_root.exists():
+            return []
+
+        return sorted(
+            path
+            for path in album_root.rglob("*")
+            if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
+        )
 
     # ══════════════════════════════════════════
     #  配置构建
@@ -73,11 +125,11 @@ class JMManager:
         except (TypeError, ValueError):
             return default
 
-    def _build_option(self, base_dir: Path):
+    def _build_option(self, album_root: Path):
         """按用户配置构建 jmcomic 的 JmOption
 
         Args:
-            base_dir: 图片保存根目录。
+            album_root: 该漫画的根目录。
 
         Returns:
             JmOption 实例。
@@ -106,8 +158,11 @@ class JMManager:
         if cookies:
             meta["cookies"] = cookies
 
-        # 保存规则：<base_dir>/<album_id>/
-        raw["dir_rule"] = {"rule": "Bd_Aid", "base_dir": str(base_dir)}
+        # 目录规则：<漫画根目录>/JM<ID>-<漫画名>/ 存放图片
+        raw["dir_rule"] = {
+            "rule": _IMAGE_DIR_RULE,
+            "base_dir": str(album_root),
+        }
 
         return jmcomic.JmOption.construct(raw)
 
@@ -151,7 +206,9 @@ class JMManager:
         return None
 
     def _iter_pdf(self, album_id: str):
-        """遍历该漫画可能的 PDF 路径（新结构优先，兼容旧结构）
+        """遍历该漫画可能的 PDF 路径
+
+        优先新结构（漫画根目录下），并兼容历史版本的 `ready/` 目录。
 
         Args:
             album_id: 漫画 ID。
@@ -159,12 +216,8 @@ class JMManager:
         Yields:
             PDF 文件路径。
         """
-        yield from sorted(self._ready_dir.glob(f"JM{album_id}-*.pdf"))
-
-        # 旧版结构：JMDownload/<jmID>/*.pdf
-        for legacy in self._download_dir.glob(f"[Jj][Mm]{album_id}"):
-            if legacy.is_dir():
-                yield from sorted(legacy.glob("*.pdf"))
+        yield from sorted(self.album_root(album_id).glob("*.pdf"))
+        yield from sorted((self._download_dir / "ready").glob(f"JM{album_id}-*.pdf"))
 
     def check_local(self, album_id: str) -> dict | None:
         """检查本地是否已有下载产物
@@ -186,8 +239,7 @@ class JMManager:
                 "album_id": album_id,
             }
 
-        album_dir = self._cache_dir / str(album_id)
-        images = self._list_images(album_dir)
+        images = self._list_images(self.album_root(album_id))
         if images:
             return {
                 "has_pdf": False,
@@ -197,35 +249,6 @@ class JMManager:
             }
 
         return None
-
-    def _list_images(self, album_dir: Path) -> list[Path]:
-        """列出目录下的图片文件（递归）
-
-        Args:
-            album_dir: 漫画图片目录。
-
-        Returns:
-            排序后的图片路径列表。
-        """
-        if not album_dir.exists():
-            return []
-
-        return sorted(
-            path
-            for path in album_dir.rglob("*")
-            if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
-        )
-
-    def _info_file(self, album_id: str) -> Path:
-        """漫画信息缓存文件路径
-
-        Args:
-            album_id: 漫画 ID。
-
-        Returns:
-            info.json 路径。
-        """
-        return self._cache_dir / str(album_id) / "info.json"
 
     def _load_cached_info(self, album_id: str) -> AlbumInfo | None:
         """读取本地缓存的漫画信息
@@ -315,7 +338,7 @@ class JMManager:
         Returns:
             jmcomic 的 JmAlbumDetail 对象。
         """
-        client = self._build_option(self._cache_dir).build_jm_client()
+        client = self._build_option(self.album_root(album_id)).build_jm_client()
         return client.get_album_detail(album_id)
 
     # ══════════════════════════════════════════
@@ -358,13 +381,15 @@ class JMManager:
                 )
 
         album_info = await self.get_album_info(album_id)
+        album_root = self.album_root(str(album_id))
         loop = asyncio.get_running_loop()
 
         try:
-            album_dir = await loop.run_in_executor(
+            await loop.run_in_executor(
                 None, self._download_images, str(album_id), progress_callback
             )
-            images = self._list_images(album_dir)
+
+            images = self._list_images(album_root)
             if not images:
                 return DownloadResult(
                     success=False,
@@ -409,23 +434,22 @@ class JMManager:
         self,
         album_id: str,
         progress_callback: ProgressCallback | None,
-    ) -> Path:
+    ) -> None:
         """下载漫画图片（同步，在线程池中执行）
+
+        图片由 jmcomic 按目录规则写入
+        `<漫画根目录>/JM<ID>-<漫画名>/`。
 
         Args:
             album_id: 漫画 ID。
             progress_callback: 进度回调。
-
-        Returns:
-            图片保存目录。
         """
-        option = self._build_option(self._cache_dir)
+        album_root = self.album_root(album_id)
+        album_root.mkdir(parents=True, exist_ok=True)
+
+        option = self._build_option(album_root)
         downloader = _make_progress_downloader(progress_callback)(option)
         downloader.download_album(album_id)
-
-        album_dir = self._cache_dir / str(album_id)
-        album_dir.mkdir(parents=True, exist_ok=True)
-        return album_dir
 
     def _make_pdf(
         self,
@@ -436,6 +460,8 @@ class JMManager:
     ) -> Path:
         """把图片合成为 PDF（同步，在线程池中执行）
 
+        PDF 放在漫画根目录下，与图片目录同级。
+
         Args:
             album_id: 漫画 ID。
             album_info: 漫画信息。
@@ -445,8 +471,15 @@ class JMManager:
         Returns:
             PDF 文件路径。
         """
+        album_root = self.album_root(album_id)
+        album_root.mkdir(parents=True, exist_ok=True)
+
+        # 同一漫画只保留一份 PDF（名称可能随漫画标题变化）
+        for old_pdf in album_root.glob("*.pdf"):
+            old_pdf.unlink(missing_ok=True)
+
         pdf_name = self._safe_name(f"JM{album_id}-{album_info.name}")
-        pdf_path = self._ready_dir / f"{pdf_name}.pdf"
+        pdf_path = album_root / f"{pdf_name}.pdf"
         pdf_path.write_bytes(converter([str(path) for path in images]))
         return pdf_path
 

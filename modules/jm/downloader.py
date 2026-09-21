@@ -19,6 +19,7 @@ CONFIG_FILE = "config.json"
 DEFAULT_CONFIG: dict = {
     "jm_enabled": True,
     "jm_send_file": True,
+    "jm_show_info": False,
     "jm_max_file_size": 10,
     "jm_cookies": "",
     "jm_proxy": "",

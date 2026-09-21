@@ -214,7 +214,23 @@ class ModuleBase(ABC):
         """账号表单的字段定义（子类覆盖）
 
         Returns:
-            字段列表，格式同 get_config_fields。
+            字段列表，格式同 get_config_fields；
+            每项可用 `group` 键（字符串或字符串列表）把字段归入某个分组，
+            未指定 group 的字段始终显示在账号配置顶部。
+        """
+        return []
+
+    def get_account_groups(self) -> list[dict]:
+        """账号字段的分组定义（子类覆盖）
+
+        Returns:
+            分组列表，每项形如：
+            {"key": "password", "label": "账号密码登录", "mode": "tab",
+             "hint": "说明文字", "resettable": False}
+
+            mode 为 "tab" 时渲染为标签页，为 "inline" 时渲染为账号配置内的
+            独立区块；resettable 为 True 的区块会显示「恢复默认」按钮。
+            返回空列表表示字段平铺显示，不做分组。
         """
         return []
 
@@ -488,6 +504,7 @@ class ModuleBase(ABC):
             "supports_test": self.supports_test,
             "config_fields": self.get_config_fields(),
             "account_fields": self.get_account_fields(),
+            "account_groups": self.get_account_groups(),
             "variables": self.get_var_definitions(),
             "default_template": self.get_default_template() if self.supports_template else "",
         }
