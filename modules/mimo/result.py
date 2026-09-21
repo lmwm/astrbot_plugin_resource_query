@@ -1,51 +1,44 @@
-"""MiMo 查询结果类"""
+"""MiMo 查询结果
 
-import logging
+模板变量覆盖余额、Token 用量、费用与限额（TPM / RPM / 并发），
+与 `modules/mimo/config.yaml` 中的默认模板保持一致。
+"""
 
-from ...base import QueryResult
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+from ...core.result import QueryResult
+from .utils import fmt_num
 
 
-def _get_str(d: dict, key: str, default: str = "?") -> str:
-    """从字典中获取值并转为字符串。
+def _get_str(data: dict, key: str, default: str = "?") -> str:
+    """从字典取值并转为字符串
 
     Args:
-        d: 数据字典。
+        data: 数据字典。
         key: 键名。
-        default: 默认值。
+        default: 缺失或为 None 时的默认值。
 
     Returns:
         字符串形式的值。
     """
-    val = d.get(key, default)
-    return default if val is None else str(val)
+    value = data.get(key, default)
+    return default if value is None else str(value)
 
 
-def _fmt_num(n) -> str:
-    """格式化数字，大数用万/亿简化。
+def _get_limit(limits: dict, key: str) -> str:
+    """读取并格式化限额字段
 
     Args:
-        n: 要格式化的数字或字符串。
+        limits: 限额数据字典（accountRateLimit）。
+        key: 字段名，如 "tpm"。
 
     Returns:
-        格式化后的字符串。
+        格式化后的字符串；字段缺失或为 0 时返回 "-"。
     """
-    try:
-        if isinstance(n, str):
-            if any(c in n for c in ['万', '亿', ',']):
-                return n
-            n = int(float(n))
-        else:
-            n = int(n)
-    except (ValueError, TypeError):
-        return str(n)
-
-    if n >= 100_000_000:
-        return f"{n / 100_000_000:.1f}亿"
-    if n >= 10_000:
-        return f"{n / 10_000:.1f}万"
-    return str(n)
+    value = limits.get(key) if isinstance(limits, dict) else None
+    if not value:
+        return "-"
+    return fmt_num(value)
 
 
 class MimoResult(QueryResult):
@@ -55,62 +48,57 @@ class MimoResult(QueryResult):
         self,
         success: bool,
         account_name: str,
-        data: dict,
+        data: dict | None = None,
         error: str = "",
         template: str | None = None,
-    ):
+    ) -> None:
+        """初始化查询结果
+
+        Args:
+            success: 是否查询成功。
+            account_name: 账号显示名称。
+            data: 查询数据（接口原始响应）。
+            error: 错误信息。
+            template: 消息模板。
+        """
         super().__init__(
             success=success,
             platform="MiMo",
             account_name=account_name,
-            data=data,
+            data=data or {},
             error=error,
+            template=template,
         )
-        self.template = template
 
-    def _format_data(self) -> str:
-        """格式化 MiMo 查询结果，将查询数据填充到模板中。
+    def build_variables(self) -> dict[str, str]:
+        """构建 MiMo 模板变量
 
         Returns:
-            格式化后的文本结果。
-
-        Raises:
-            无显式抛出，内部捕获所有异常并返回错误文本。
+            模板变量字典。
         """
-        try:
-            # 兼容不同的数据结构
-            balance_data = self.data.get("balance", {})
-            usage_data = self.data.get("usage", {})
+        balance_data = self.data.get("balance", {})
+        usage_data = self.data.get("usage", {})
 
-            # 如果有嵌套的 data 属性，使用它
-            if isinstance(balance_data, dict) and "data" in balance_data:
-                balance_data = balance_data["data"]
-            if isinstance(usage_data, dict) and "data" in usage_data:
-                usage_data = usage_data["data"]
+        # 兼容响应中嵌套一层 data 的情况
+        if isinstance(balance_data, dict) and "data" in balance_data:
+            balance_data = balance_data["data"]
+        if isinstance(usage_data, dict) and "data" in usage_data:
+            usage_data = usage_data["data"]
 
-            # 获取各个字段
-            tok = usage_data.get("tokenUsage", {})
-            cost = usage_data.get("costUsage", {})
+        token = usage_data.get("tokenUsage", {})
+        cost = usage_data.get("costUsage", {})
+        limit = usage_data.get("accountRateLimit", {})
 
-            # 准备变量
-            variables = {
-                "label": str(self.account_name or "MiMo用量"),
-                "balance": _get_str(balance_data, "balance"),
-                "gift_balance": _get_str(balance_data, "giftBalance"),
-                "input_token": _fmt_num(tok.get("inputToken", 0)),
-                "output_token": _fmt_num(tok.get("outputToken", 0)),
-                "cache_token": _fmt_num(tok.get("cacheToken", 0)),
-                "monthly_cost": _get_str(cost, "currentMonthCost"),
-                "total_cost": _get_str(cost, "totalCost"),
-            }
-
-            # 获取模板（模板应该由调用方提供，不能为空）
-            if not self.template:
-                return f"{self.account_name}\n❌ 错误：模板未配置"
-
-            # 格式化
-            return self.template.format(**variables)
-
-        except Exception as e:
-            logger.error(f"[MiMoResult] 格式化错误: {type(e).__name__}: {e}")
-            return f"{self.account_name}\n❌ 格式化错误: {e}"
+        return {
+            "label": str(self.account_name or "MiMo用量"),
+            "balance": _get_str(balance_data, "balance"),
+            "gift_balance": _get_str(balance_data, "giftBalance"),
+            "input_token": fmt_num(token.get("inputToken", 0)),
+            "output_token": fmt_num(token.get("outputToken", 0)),
+            "cache_token": fmt_num(token.get("cacheToken", 0)),
+            "monthly_cost": _get_str(cost, "currentMonthCost"),
+            "total_cost": _get_str(cost, "totalCost"),
+            "tpm": _get_limit(limit, "tpm"),
+            "rpm": _get_limit(limit, "rpm"),
+            "concurrency": _get_limit(limit, "concurrency"),
+        }

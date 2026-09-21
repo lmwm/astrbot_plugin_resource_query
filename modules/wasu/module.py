@@ -1,12 +1,16 @@
 """华数广电平台模块
 
-继承 ModuleBase，实现华数广电平台的账号管理和流量/话费查询功能。
+继承 ModuleBase，实现华数广电的账号管理与流量/话费查询。
 
-设计原则：
-1. 模块自治：华数模块管理自己的配置、账号、查询逻辑
-2. 统一接口：通过 ModuleBase 提供统一的接口供总管理模块调用
-3. 模块隔离：华数模块不直接访问其他模块，通过注册中心通信
+接口说明：
+  POST /msm-local-hub/api/v3/gd/query/fee       话费余额
+  POST /msm-local-hub/api/v3/gd/query/resource  流量与语音资源
+
+注意：接口用 `code` 字段表示业务结果，`code != 0` 时响应中**不含 data**，
+因此必须显式校验业务码，不能直接取 data。
 """
+
+from __future__ import annotations
 
 import asyncio
 import json
@@ -17,326 +21,524 @@ from ...core.module import ModuleBase
 from ...http_utils import new_opener
 from .constants import DEFAULT_BASE_URL, DEFAULT_HEADERS
 from .result import WasuResult
-from .utils import fmt_gb, fmt_yuan, load_default_template
+from .utils import fmt_gb, fmt_yuan, get_default_template
+
+# 模板变量说明
+_VAR_DEFINITIONS = {
+    "label": "账号名称",
+    "balance": "账户余额",
+    "month_fee": "当月话费",
+    "arrears": "欠费",
+    "total_used": "本月累计使用",
+    "total": "总流量",
+    "used": "已用流量",
+    "remain": "剩余流量",
+    "query_time": "查询时间",
+    "traffic_detail": "流量明细（多行）",
+    "voice_detail": "语音明细（多行）",
+}
+
+# 账号表单字段
+_ACCOUNT_FIELDS = [
+    {"key": "name", "label": "账号名称", "type": "text", "hint": "留空则显示手机号"},
+    {"key": "phone", "label": "手机号", "type": "text"},
+    {"key": "user_key", "label": "User Key", "type": "text"},
+    {"key": "token", "label": "Token", "type": "password", "hint": "失效后需重新获取"},
+    {"key": "sign", "label": "Sign", "type": "password", "hint": "可选"},
+]
+
+# 业务码：token 失效
+_CODE_TOKEN_INVALID = 14
+
+
+class WasuApiError(Exception):
+    """华数接口调用错误"""
 
 
 class WasuModule(ModuleBase):
-    """华数广电平台模块
+    """华数广电查询模块"""
 
-    继承 ModuleBase，实现华数广电平台的账号管理和流量/话费查询功能。
-    """
-
-    def __init__(self, plugin_dir: Path, plugin_name: str):
-        """初始化华数广电模块
-
-        Args:
-            plugin_dir: 插件目录路径
-            plugin_name: 插件名称
-        """
-        super().__init__(plugin_dir, plugin_name)
-        self._default_template = self._load_default_template()
+    # ══════════════════════════════════════════
+    #  元信息
+    # ══════════════════════════════════════════
 
     @property
     def module_name(self) -> str:
-        """模块名称"""
+        """模块标识"""
         return "wasu"
+
+    @property
+    def module_title(self) -> str:
+        """模块显示名"""
+        return "华数查询"
 
     @property
     def module_icon(self) -> str:
         """模块图标"""
-        return ""
+        return "📱"
 
     @property
     def module_desc(self) -> str:
         """模块描述"""
-        return "华数广电流量/话费查询"
-
-    def _load_default_template(self) -> str:
-        """从配置文件加载默认模板"""
-        return load_default_template()
-
-    def get_default_template(self) -> str:
-        """获取默认模板（覆盖基类方法）
-
-        优先从 config.yaml 加载默认模板。
-
-        Returns:
-            默认模板内容
-        """
-        return self._default_template
+        return "华数广电流量 / 话费 / 余量查询"
 
     # ══════════════════════════════════════════
-    #  查询接口（实现基类抽象方法）
+    #  能力声明
+    # ══════════════════════════════════════════
+
+    @property
+    def supports_accounts(self) -> bool:
+        """支持多账号管理"""
+        return True
+
+    @property
+    def supports_template(self) -> bool:
+        """支持消息模板"""
+        return True
+
+    @property
+    def supports_query(self) -> bool:
+        """支持查询"""
+        return True
+
+    @property
+    def supports_test(self) -> bool:
+        """支持在 Pages 中测试凭据"""
+        return True
+
+    # ══════════════════════════════════════════
+    #  模块配置
+    # ══════════════════════════════════════════
+
+    def get_default_config(self) -> dict:
+        """模块默认配置
+
+        Returns:
+            接口地址默认值。
+        """
+        return {"base_url": DEFAULT_BASE_URL}
+
+    def get_config_fields(self) -> list[dict]:
+        """模块配置字段定义
+
+        Returns:
+            字段列表。
+        """
+        return [
+            {
+                "key": "base_url",
+                "label": "接口地址",
+                "type": "text",
+                "hint": f"默认 {DEFAULT_BASE_URL}，一般无需修改",
+            },
+        ]
+
+    # ══════════════════════════════════════════
+    #  字段定义
+    # ══════════════════════════════════════════
+
+    def get_account_fields(self) -> list[dict]:
+        """账号表单字段定义
+
+        Returns:
+            字段列表。
+        """
+        return _ACCOUNT_FIELDS
+
+    def get_var_definitions(self) -> dict[str, str]:
+        """模板变量说明
+
+        Returns:
+            变量名到中文描述的映射。
+        """
+        return _VAR_DEFINITIONS
+
+    def get_default_template(self) -> str:
+        """默认消息模板
+
+        Returns:
+            来自 config.yaml 的默认模板。
+        """
+        return get_default_template()
+
+    def get_result_class(self):
+        """本模块使用的查询结果类
+
+        Returns:
+            WasuResult 类。
+        """
+        return WasuResult
+
+    # ══════════════════════════════════════════
+    #  查询
     # ══════════════════════════════════════════
 
     async def query(self, account: dict) -> dict:
-        """查询单个华数广电账号
+        """查询单个华数账号
 
         Args:
-            account: 账号配置
+            account: 账号配置。
 
         Returns:
-            查询结果字典
+            统一结果字典。
         """
         label = account.get("name") or account.get("phone") or "华数账号"
-        # 获取模板：优先使用账号自定义模板，否则使用默认模板
         template = self.get_account_template(account)
-        if not template:
-            template = self._default_template
 
-        user_key = account.get("user_key", "")
-        token = account.get("token", "")
-        phone = account.get("phone", "")
-        sign = account.get("sign", "")
-        ua = account.get("ua", "")
+        user_key = str(account.get("user_key") or "").strip()
+        token = str(account.get("token") or "").strip()
+        phone = str(account.get("phone") or "").strip()
 
         if not user_key or not token or not phone:
             return {
                 "success": False,
                 "account_name": label,
-                "error": "缺少必要参数（user_key, token, phone）",
+                "error": "缺少必要参数（User Key / Token / 手机号）",
                 "template": template,
             }
 
         try:
             loop = asyncio.get_running_loop()
             data = await loop.run_in_executor(
-                None, self._do_query, user_key, token, phone, sign, ua
+                None,
+                self._do_query,
+                user_key,
+                token,
+                phone,
+                str(account.get("sign") or ""),
+                str(account.get("ua") or ""),
             )
-            return {
-                "success": True,
-                "account_name": label,
-                "data": data,
-                "template": template,
-            }
-        except Exception as e:
+        except WasuApiError as e:
             return {
                 "success": False,
                 "account_name": label,
                 "error": str(e),
                 "template": template,
             }
+        except Exception as e:
+            return {
+                "success": False,
+                "account_name": label,
+                "error": f"{type(e).__name__}: {e}",
+                "template": template,
+            }
 
-    def _do_query(self, user_key: str, token: str, phone: str, sign: str, ua: str = "") -> dict:
-        """执行查询（同步）
+        return {
+            "success": True,
+            "account_name": label,
+            "data": data,
+            "template": template,
+        }
+
+    def _do_query(
+        self,
+        user_key: str,
+        token: str,
+        phone: str,
+        sign: str = "",
+        ua: str = "",
+    ) -> dict:
+        """执行查询（同步，在线程池中运行）
 
         Args:
-            user_key: 用户 key
-            token: 认证 token
-            phone: 手机号
-            sign: 签名
-            ua: User-Agent
+            user_key: 用户 key。
+            token: 认证 token。
+            phone: 手机号。
+            sign: 签名。
+            ua: User-Agent。
 
         Returns:
-            查询数据
+            结构化查询数据。
+
+        Raises:
+            WasuApiError: 接口返回业务错误或缺少数据。
         """
-        headers = {**DEFAULT_HEADERS}
+        base_url = str(self.load_module_config().get("base_url") or DEFAULT_BASE_URL)
+        headers = {**DEFAULT_HEADERS, "x-sign": sign}
         if ua:
             headers["User-Agent"] = ua
 
         def _post(path: str, payload: dict) -> dict:
+            """发起 POST 请求并校验业务码
+
+            Args:
+                path: 接口路径。
+                payload: 请求体。
+
+            Returns:
+                响应中的 data 字段。
+
+            Raises:
+                WasuApiError: 业务码非 0 或缺少 data。
+            """
             body = json.dumps(payload, separators=(",", ":"))
             opener, _ = new_opener()
             req = Request(
-                DEFAULT_BASE_URL + path,
+                base_url + path,
                 data=body.encode("utf-8"),
-                headers={**headers, "x-sign": sign},
+                headers=headers,
                 method="POST",
             )
             with opener.open(req, timeout=10) as r:
-                return json.loads(r.read())["data"]
+                resp = json.loads(r.read())
+
+            if not isinstance(resp, dict):
+                raise WasuApiError("接口返回格式异常")
+
+            code = resp.get("code")
+            if code not in (0, None):
+                if code == _CODE_TOKEN_INVALID:
+                    raise WasuApiError(
+                        "凭据已失效（token 错误），请在网页管理界面重新填写账号信息"
+                    )
+                message = resp.get("message") or resp.get("msg") or "未知原因"
+                raise WasuApiError(f"接口返回错误 code={code}: {message}")
+
+            data = resp.get("data")
+            if not isinstance(data, dict):
+                raise WasuApiError("接口未返回数据")
+
+            return data
 
         payload = {"userKey": user_key, "token": token, "phoneNo": phone}
-
-        # 查询话费余额
         fee = _post("/msm-local-hub/api/v3/gd/query/fee", payload)
+        resource = _post("/msm-local-hub/api/v3/gd/query/resource", payload)
 
-        # 查询流量/通话资源
-        res = _post("/msm-local-hub/api/v3/gd/query/resource", payload)
+        return self._parse_response(fee, resource)
 
-        # 解析余额
-        balance_data = {
+    @staticmethod
+    def _parse_response(fee: dict, resource: dict) -> dict:
+        """解析话费与资源接口响应
+
+        Args:
+            fee: fee 接口返回的 data。
+            resource: resource 接口返回的 data。
+
+        Returns:
+            结构化的余额、流量与语音数据。
+        """
+        balance = {
             "balance": fmt_yuan(fee.get("BALANCE", 0)),
             "month_fee": fmt_yuan(fee.get("CURREAL_FEE", 0)),
             "arrears": fmt_yuan(fee.get("SPAY_FEE", 0)),
         }
 
-        # 解析流量
-        ext = res.get("USER_EXT_RES_LIST", [{}])[0]
-        data_items = [r for r in res.get("USER_RES_LIST", []) if r.get("ITEM_TYPE_CODE") == "3"]
-        voice_items = [r for r in res.get("USER_RES_LIST", []) if r.get("ITEM_TYPE_CODE") == "2"]
+        ext_list = resource.get("USER_EXT_RES_LIST") or [{}]
+        ext = ext_list[0] if ext_list and isinstance(ext_list[0], dict) else {}
 
-        total_high = sum(int(r.get("HIGH_FEE", 0)) for r in data_items)
-        total_bal = sum(int(r.get("BALANCE", 0)) for r in data_items)
-        total_used = total_high - total_bal
+        res_items = resource.get("USER_RES_LIST") or []
+        data_items = [r for r in res_items if r.get("ITEM_TYPE_CODE") == "3"]
+        voice_items = [r for r in res_items if r.get("ITEM_TYPE_CODE") == "2"]
 
-        traffic_items = []
+        total_high = sum(int(r.get("HIGH_FEE", 0) or 0) for r in data_items)
+        total_balance = sum(int(r.get("BALANCE", 0) or 0) for r in data_items)
+
+        items = []
         for r in data_items:
-            used = int(r.get("HIGH_FEE", 0)) - int(r.get("BALANCE", 0))
-            traffic_items.append({
-                "name": r.get("DISCNT_NAME", ""),
-                "total": fmt_gb(int(r.get("HIGH_FEE", 0))),
-                "used": fmt_gb(used),
-                "remain": fmt_gb(int(r.get("BALANCE", 0))),
-                "is_carry": "结转" in r.get("DISCNT_NAME", ""),
+            high = int(r.get("HIGH_FEE", 0) or 0)
+            remain = int(r.get("BALANCE", 0) or 0)
+            name = str(r.get("DISCNT_NAME", ""))
+            items.append({
+                "name": name,
+                "total": fmt_gb(high),
+                "used": fmt_gb(high - remain),
+                "remain": fmt_gb(remain),
+                "is_carry": "结转" in name,
             })
 
-        traffic_data = {
-            "total_used": fmt_gb(ext.get("ADDUP_TOTAL_VALUE", 0)),
-            "total": fmt_gb(total_high),
-            "used": fmt_gb(total_used),
-            "remain": fmt_gb(total_bal),
-            "items": traffic_items,
-        }
-
-        # 解析语音
-        voice_data = []
-        for r in voice_items:
-            voice_data.append({
-                "name": r.get("DISCNT_NAME", ""),
+        voice = [
+            {
+                "name": str(r.get("DISCNT_NAME", "")),
                 "total": r.get("HIGH_FEE", "0"),
                 "remain": r.get("BALANCE", "0"),
-            })
+            }
+            for r in voice_items
+        ]
 
         return {
-            "balance": balance_data,
-            "traffic": traffic_data,
-            "voice": voice_data,
+            "balance": balance,
+            "traffic": {
+                "total_used": fmt_gb(ext.get("ADDUP_TOTAL_VALUE", 0)),
+                "total": fmt_gb(total_high),
+                "used": fmt_gb(total_high - total_balance),
+                "remain": fmt_gb(total_balance),
+                "items": items,
+            },
+            "voice": voice,
             "query_time": fee.get("X_SYSDATE", ""),
         }
 
     # ══════════════════════════════════════════
-    #  指令支持
+    #  指令
     # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
-        """获取华数广电模块提供的指令列表
+        """本模块指令列表
 
         Returns:
-            指令定义列表
+            指令定义列表。
         """
-        return [
-            {
-                "name": "wasu",
-                "desc": "华数广电查询指令",
-                "handler": "handle_wasu_command"
-            }
-        ]
+        return [{"name": "wasu", "desc": "华数广电查询：/wasu [ls|del|账号]"}]
 
-    async def handle_command(self, command: str, args: list[str], event) -> None:
-        """处理华数广电指令
+    async def handle_command(self, command: str, args: list[str], event):
+        """处理 /wasu 指令
 
         Args:
-            command: 指令名称
-            args: 指令参数
-            event: AstrBot 事件对象
-        """
-        if command == "wasu":
-            async for result in self._handle_wasu_command(args, event):
-                yield result
+            command: 指令名称。
+            args: 参数列表。
+            event: 消息事件。
 
-    async def _handle_wasu_command(self, args: list[str], event):
-        """处理华数广电指令的具体实现
-
-        Args:
-            args: 指令参数
-            event: AstrBot 事件对象
+        Yields:
+            消息结果。
         """
+        if command != "wasu":
+            return
+
         accounts = self.get_accounts()
 
-        # /wasu ls — 列出所有账号
         if args and args[0].lower() == "ls":
-            if not accounts:
-                yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
-                return
-            lines = [f"共 {len(accounts)} 个华数账号:"]
-            for i, acc in enumerate(accounts):
-                name = acc.get("name") or acc.get("phone") or f"华数账号{i+1}"
-                lines.append(f"  {i + 1}. {name} | 手机号: {acc.get('phone', '无')}")
-            yield event.plain_result("\n".join(lines))
+            async for r in self._cmd_list(event, accounts):
+                yield r
             return
 
-        # /wasu del <序号或名称> — 删除指定账号
         if args and args[0].lower() == "del":
-            if len(args) < 2:
-                yield event.plain_result("用法: /wasu del <序号或名称>")
-                return
-
-            del_arg = args[1]
-
-            # 尝试按序号删除
-            if del_arg.isdigit():
-                del_idx = int(del_arg) - 1
-                if 0 <= del_idx < len(accounts):
-                    deleted = self.delete_account(del_idx)
-                    if deleted:
-                        name = deleted.get("name") or deleted.get("phone") or "未知"
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-
-            # 按名称删除
-            for i, acc in enumerate(accounts):
-                name = acc.get("name") or acc.get("phone") or ""
-                if name == del_arg:
-                    deleted = self.delete_account(i)
-                    if deleted:
-                        yield event.plain_result(f"✅ 已删除: {name}")
-                    else:
-                        yield event.plain_result("❌ 删除失败")
-                    return
-
-            yield event.plain_result(f"❌ 未找到账号: {del_arg}")
+            async for r in self._cmd_delete(args, event, accounts):
+                yield r
             return
 
-        # /wasu — 查询所有账号
         if not args:
-            if not accounts:
-                yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
-                return
-            yield event.plain_result("🔍 正在查询所有华数账号...")
-
-            for acc in accounts:
-                name = acc.get("name") or acc.get("phone") or "华数账号"
-                try:
-                    result = await self.query(acc)
-                    if result.get("success"):
-                        wr = WasuResult(
-                            success=True,
-                            account_name=name,
-                            data=result.get("data", {}),
-                            template=result.get("template")
-                        )
-                        yield event.plain_result(wr.to_text())
-                    else:
-                        yield event.plain_result(f"{name}\n❌ {result.get('error')}")
-                except Exception as e:
-                    yield event.plain_result(f"{name}\n❌ 查询失败: {e}")
+            async for r in self._cmd_query_all(event, accounts):
+                yield r
             return
 
-        # /wasu <名称> — 查询指定账号
-        query_arg = args[0]
+        async for r in self._cmd_query_one(args[0], event, accounts):
+            yield r
 
-        # 按名称查找
+    async def _cmd_list(self, event, accounts: list[dict]):
+        """列出全部账号"""
+        if not accounts:
+            yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
+            return
+
+        lines = [f"共 {len(accounts)} 个华数账号:"]
+        for i, acc in enumerate(accounts, start=1):
+            name = acc.get("name") or acc.get("phone") or f"华数账号{i}"
+            lines.append(f"  {i}. {name} | 手机号: {acc.get('phone', '未填写')}")
+
+        yield event.plain_result("\n".join(lines))
+
+    async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
+        """删除指定账号"""
+        if len(args) < 2:
+            yield event.plain_result("用法: /wasu del <序号或名称>")
+            return
+
+        target = args[1]
+        account: dict | None = None
+
+        if target.isdigit():
+            index = int(target) - 1
+            if 0 <= index < len(accounts):
+                account = accounts[index]
+        else:
+            for acc in accounts:
+                if target in (acc.get("name"), acc.get("phone")):
+                    account = acc
+                    break
+
+        if not account:
+            yield event.plain_result(f"❌ 未找到账号: {target}")
+            return
+
+        deleted = self.delete_account(str(account.get("_filename", "")))
+        if not deleted:
+            yield event.plain_result("❌ 删除失败")
+            return
+
+        name = deleted.get("name") or deleted.get("phone") or target
+        yield event.plain_result(f"✅ 已删除: {name}")
+
+    async def _cmd_query_all(self, event, accounts: list[dict]):
+        """查询全部账号"""
+        if not accounts:
+            yield event.plain_result("❌ 还没有配置华数账号\n请在网页管理界面添加账号")
+            return
+
+        yield event.plain_result("🔍 正在查询所有华数账号...")
+
         for acc in accounts:
-            name = acc.get("name") or acc.get("phone") or ""
-            if name == query_arg:
-                yield event.plain_result("🔍 正在查询...")
-                try:
-                    result = await self.query(acc)
-                    if result.get("success"):
-                        wr = WasuResult(
-                            success=True,
-                            account_name=name,
-                            data=result.get("data", {}),
-                            template=result.get("template")
-                        )
-                        yield event.plain_result(wr.to_text())
-                    else:
-                        yield event.plain_result(f"{name}\n❌ {result.get('error')}")
-                except Exception as e:
-                    yield event.plain_result(f"{name}\n❌ 查询失败: {e}")
-                return
+            yield event.plain_result(self.render(await self.query(acc)))
 
-        yield event.plain_result(f"❌ 未找到账号: {query_arg}\n使用 /wasu ls 查看所有账号")
+    async def _cmd_query_one(self, identifier: str, event, accounts: list[dict]):
+        """查询指定账号"""
+        account = None
+        for acc in accounts:
+            if identifier in (acc.get("name"), acc.get("phone"), acc.get("_filename")):
+                account = acc
+                break
+
+        if not account:
+            yield event.plain_result(f"❌ 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号")
+            return
+
+        yield event.plain_result("🔍 正在查询...")
+        yield event.plain_result(self.render(await self.query(account)))
+
+    # ══════════════════════════════════════════
+    #  Pages 接口
+    # ══════════════════════════════════════════
+
+    def get_web_apis(self) -> list[dict]:
+        """本模块的 Pages 接口
+
+        Returns:
+            接口定义列表。
+        """
+        return [
+            {"path": "config", "handler": self._api_get_config, "methods": ["GET"], "desc": "获取模块配置"},
+            {"path": "config", "handler": self._api_save_config, "methods": ["POST"], "desc": "保存模块配置"},
+            {"path": "test", "handler": self._api_test, "methods": ["POST"], "desc": "测试凭据是否可用"},
+        ]
+
+    async def _api_test(self):
+        """测试凭据是否可用
+
+        Returns:
+            JSON 响应。
+        """
+        from astrbot.api.web import json_response, request
+
+        payload = await request.json(default={})
+        if not isinstance(payload, dict) or not payload:
+            return json_response({"status": "error", "message": "缺少账号配置"})
+
+        result = await self.query(payload)
+
+        if not result.get("success"):
+            return json_response({
+                "status": "error",
+                "message": result.get("error", "查询失败"),
+            })
+
+        return json_response({"status": "ok", "message": "凭据有效"})
+
+    async def _api_get_config(self):
+        """获取模块配置"""
+        from astrbot.api.web import json_response
+
+        return json_response(self.load_module_config())
+
+    async def _api_save_config(self):
+        """保存模块配置"""
+        from astrbot.api.web import error_response, json_response, request
+
+        payload = await request.json(default={})
+        if not isinstance(payload, dict) or not payload:
+            return error_response("缺少配置数据")
+
+        config = self.load_module_config()
+        config.update(payload)
+        if not self.save_module_config(config):
+            return error_response("保存失败")
+
+        return json_response({"status": "ok"})

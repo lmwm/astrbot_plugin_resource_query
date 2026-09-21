@@ -1,10 +1,11 @@
-"""华数广电查询结果类"""
+"""华数广电查询结果
 
-import logging
+模板变量覆盖余额、话费、流量与语音明细。
+"""
 
-from ...base import QueryResult
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+from ...core.result import QueryResult
 
 
 class WasuResult(QueryResult):
@@ -14,67 +15,69 @@ class WasuResult(QueryResult):
         self,
         success: bool,
         account_name: str,
-        data: dict,
+        data: dict | None = None,
         error: str = "",
         template: str | None = None,
-    ):
+    ) -> None:
+        """初始化查询结果
+
+        Args:
+            success: 是否查询成功。
+            account_name: 账号显示名称。
+            data: 查询数据。
+            error: 错误信息。
+            template: 消息模板。
+        """
         super().__init__(
             success=success,
             platform="华数广电",
             account_name=account_name,
-            data=data,
+            data=data or {},
             error=error,
+            template=template,
         )
-        self.template = template
 
-    def _format_data(self) -> str:
-        """格式化华数广电查询结果"""
-        try:
-            logger.info(f"[WasuResult] 开始格式化, data keys: {list(self.data.keys())}")
+    def build_variables(self) -> dict[str, str]:
+        """构建华数模板变量
 
-            # 获取模板（模板应该由调用方提供，不能为空）
-            if not self.template:
-                logger.error(f"[WasuResult] 模板为空，无法格式化")
-                return f"{self.account_name}\n❌ 错误：模板未配置"
-            tpl = self.template
+        Returns:
+            模板变量字典。
+        """
+        data = self.data
+        balance = data.get("balance") or {}
+        traffic = data.get("traffic") or {}
+        items = traffic.get("items") or []
+        voice_items = data.get("voice") or []
 
-            data = self.data
+        traffic_detail = "".join(
+            "\n     · {name}{tag}: {total} (已用 {used} / 剩 {remain})".format(
+                name=item.get("name", ""),
+                tag=" 结转" if item.get("is_carry") else "",
+                total=item.get("total", ""),
+                used=item.get("used", ""),
+                remain=item.get("remain", ""),
+            )
+            for item in items
+        )
+        voice_detail = "".join(
+            "\n📞 语音: {name}: {total}分钟 | 剩余 {remain}分钟".format(
+                name=item.get("name", ""),
+                total=item.get("total", ""),
+                remain=item.get("remain", ""),
+            )
+            for item in voice_items
+        )
 
-            # 提取流量详细信息
-            traffic_items = data.get("traffic", {}).get("items", [])
-            traffic_detail = ""
-            for item in traffic_items:
-                tag = "结转" if item.get("is_carry") else ""
-                traffic_detail += f"\n     · {item['name']} {tag}: {item['total']} (已用 {item['used']} / 剩 {item['remain']})"
-
-            # 提取语音信息
-            voice_items = data.get("voice", [])
-            voice_detail = ""
-            for item in voice_items:
-                voice_detail += f"\n📞 语音: {item['name']}: {item['total']}分钟 | 剩余 {item['remain']}分钟"
-
-            # 准备变量
-            variables = {
-                "label": str(self.account_name or "华数账号"),
-                "balance": data.get("balance", {}).get("balance", "?"),
-                "month_fee": data.get("balance", {}).get("month_fee", "?"),
-                "arrears": data.get("balance", {}).get("arrears", "?"),
-                "total_used": data.get("traffic", {}).get("total_used", "?"),
-                "total": data.get("traffic", {}).get("total", "?"),
-                "used": data.get("traffic", {}).get("used", "?"),
-                "remain": data.get("traffic", {}).get("remain", "?"),
-                "query_time": data.get("query_time", ""),
-                "traffic_detail": traffic_detail,
-                "voice_detail": voice_detail,
-            }
-
-            logger.info(f"[WasuResult] variables: {variables}")
-
-            # 格式化
-            result = tpl.format(**variables)
-            logger.info(f"[WasuResult] 格式化成功, 长度: {len(result)}")
-            return result
-
-        except Exception as e:
-            logger.error(f"[WasuResult] 错误: {type(e).__name__}: {e}")
-            return f"{self.account_name}\n❌ 格式化错误: {e}"
+        return {
+            "label": str(self.account_name or "华数账号"),
+            "balance": str(balance.get("balance", "?")),
+            "month_fee": str(balance.get("month_fee", "?")),
+            "arrears": str(balance.get("arrears", "?")),
+            "total_used": str(traffic.get("total_used", "?")),
+            "total": str(traffic.get("total", "?")),
+            "used": str(traffic.get("used", "?")),
+            "remain": str(traffic.get("remain", "?")),
+            "query_time": str(data.get("query_time", "")),
+            "traffic_detail": traffic_detail,
+            "voice_detail": voice_detail,
+        }

@@ -1,3 +1,64 @@
+## v5.0.0 (2026-09-21)
+
+### ♻️ 架构重构：四个功能全面模块化
+
+#### 模块体系
+
+- 四个功能各自成为独立模块，均继承 `core.module.ModuleBase`
+  - `mimo` — 小米 MiMo 用量查询
+  - `wasu` — 华数广电流量 / 话费查询
+  - `jm` — JMComic 漫画下载
+  - `update` — 插件自身更新（原 `updater.py` 迁入）
+- 新增 `core/result.py`：查询结果只需实现 `build_variables()`，模板渲染与异常兜底由基类统一处理
+- `ModuleBase` 重写为统一契约：元信息 + 能力声明（`supports_accounts` / `template` / `query` / `login` / `test`）+ 配置 / 账号 / 模板 / 查询 / 指令 / Pages 接口
+- 新增功能只需在 `modules/` 下建包并在 `main.py` 的模块清单登记一行，Pages 依据 schema 自动渲染，无需改动前端
+- 删除遗留的 `base.py`（内容并入 `core/result.py` 并真正启用抽象方法检查）
+
+#### 配置体系
+
+- 模块启用开关统一交给 AstrBot 原生配置：`mimo_enabled` / `wasu_enabled` / `jm_enabled` / `update_enabled`
+- 模块自身配置全部迁移到 Pages 管理，持久化到各自目录的 `config.json`
+- 更新代理与重试次数从 AstrBot 配置迁移到「插件更新」模块的 Pages 配置
+- **禁用的模块不加载，其指令与 Pages 配置页同时隐藏**
+
+#### 缺陷修复
+
+- **JM 下载**：修正对 jmcomic 的错误用法（原实现把 `episode_list` 的元组当对象遍历，必然抛 `AttributeError`），改用 jmcomic 原生下载器
+- **JM 配置**：并发 / 代理 / Cookie / 超时 / 重试现在通过 `JmOption` 真正生效（此前 7 个配置项全部无效）
+- **JM 进度**：改用 `asyncio.run_coroutine_threadsafe` 从下载线程安全转发进度（原先在线程中取事件循环必然失败）
+- **JM 性能**：图片下载与 PDF 生成都进入线程池，不再阻塞 AstrBot 事件循环
+- **JM 缓存**：兼容旧版下载目录结构，历史 PDF 重新可被识别
+- **JM 提示**：文件超过大小上限时给出文件实际位置
+- **华数**：校验接口业务码，凭据失效时提示「token 错误，请重新填写」，不再抛出 `KeyError: 'data'`
+- **华数**：新增凭据测试接口，可在保存前验证
+- **MiMo**：收紧认证失效判定，避免把普通提示误判为凭据过期
+- **账号管理**：删除改用文件名定位（原先依赖数组下标与磁盘顺序），并防止同名账号互相覆盖
+- **Pages**：修复华数模板预览与变量标签因元素 id 拼写不一致而永久空白
+- **Pages**：修复保存失败被「假成功」覆盖、测试按钮静默写库、JM 文件上限填 0 变 10
+- **Pages**：所有插值统一转义，消除属性注入与显示截断
+- **Pages**：账号变量配置改为模块声明驱动，用户新增的变量不再刷新即丢失
+
+#### 代码精简
+
+- 合并 `mimo` 与 `wasu` 中重复的 YAML 解析、路径与文件工具到 `common/`
+- 删除 `pages/template-editor/modules/` 下 7 个从未被引用的死文件（含 `registry.js`）
+- Pages 前端由 2172 行精简为 2 个文件（`index.html` + `core.js`），改为 schema 驱动
+
+---
+
+## v4.0.1 (2026-09-21)
+
+### 🐛 修复（MiMo 模块）
+
+- 修复 MiMo 限额变量无法渲染的问题
+  - `{tpm}` / `{rpm}` / `{concurrency}` 现从接口返回的 `accountRateLimit` 读取
+  - 限额字段缺失时显示 `-`，不再抛出 `KeyError` 导致「格式化错误」
+- 修复 `query_mimo()` 引用不存在的 `api.balance_url` / `api.usage_url` 配置项导致的潜在崩溃
+  - 两个接口地址改为必填参数，移除已失效的配置回退逻辑
+- 修复 MiMo 重新登录后仍使用旧 `userId` 重试查询的问题
+
+---
+
 ## v4.0.0 (2025-09-XX)
 
 ### ♻️ 重大重构：模块化架构

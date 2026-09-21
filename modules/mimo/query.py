@@ -4,20 +4,29 @@ import asyncio
 from urllib.request import Request
 
 from ...http_utils import inject_cookie, new_opener, parse_resp
-from .utils import get_config_value
 
 
 async def query_mimo(
     service_token: str,
     user_id: str,
     ua: str,
-    balance_url: str | None = None,
-    usage_url: str | None = None,
+    balance_url: str,
+    usage_url: str,
     timeout: int = 15,
 ) -> dict:
-    """查询 MiMo 平台余额和用量，返回原始 API 响应"""
-    balance_url = balance_url or get_config_value("api.balance_url")
-    usage_url = usage_url or get_config_value("api.usage_url")
+    """查询 MiMo 平台余额和用量，返回原始 API 响应
+
+    Args:
+        service_token: 账号的 serviceToken。
+        user_id: 小米账号 User ID。
+        ua: User-Agent。
+        balance_url: 余额查询接口地址。
+        usage_url: 用量查询接口地址。
+        timeout: 单次请求超时秒数。
+
+    Returns:
+        包含 balance 与 usage 两个原始 API 响应的字典。
+    """
 
     def _query():
         opener, jar = new_opener()
@@ -42,16 +51,39 @@ async def query_mimo(
     return await loop.run_in_executor(None, _query)
 
 
+# 明确的认证失效信号（避免把普通提示误判为凭据过期）
+_AUTH_ERROR_CODES = {401, 70016}
+_AUTH_ERROR_KEYWORDS = (
+    "unauthorized",
+    "invalid token",
+    "token expired",
+    "token过期",
+    "token 过期",
+    "登录失效",
+    "未登录",
+    "请先登录",
+)
+
+
 def is_auth_error(results: dict) -> bool:
-    """检测 API 响应是否为认证失败（401 / token 相关错误）"""
-    for v in results.values():
-        if not isinstance(v, dict):
+    """检测接口响应是否属于认证失效
+
+    Args:
+        results: 接口原始响应字典。
+
+    Returns:
+        是否属于认证失效。
+    """
+    for value in results.values():
+        if not isinstance(value, dict):
             continue
-        if v.get("code") == 401:
+        if value.get("code") in _AUTH_ERROR_CODES:
             return True
-        msg = str(v.get("message", "")).lower()
-        if "auth" in msg or "token" in msg:
+
+        message = str(value.get("message") or value.get("desc") or "").lower()
+        if any(keyword in message for keyword in _AUTH_ERROR_KEYWORDS):
             return True
+
     return False
 
 

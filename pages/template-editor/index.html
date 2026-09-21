@@ -2,12 +2,10 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>资源查询插件管理</title>
   <script src="/api/plugin/page/bridge-sdk.js"></script>
-  <script src="modules/mimo.js" defer></script>
-  <script src="modules/wasu.js" defer></script>
-  <script src="modules/jm.js" defer></script>
+  <script src="core.js" defer></script>
   <style>
     :root {
       --primary: #3c96ca;
@@ -34,202 +32,137 @@
     }
     .app { padding: 20px; }
     .container { max-width: 1200px; margin: 0 auto; }
-    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+    .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; gap: 12px; }
     .header-title { font-size: 20px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
     .header-icon { width: 36px; height: 36px; background: var(--primary); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; }
-    .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); }
-    .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+    .version { font-size: 12px; font-weight: 500; color: var(--text-muted); }
+    .card { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); border: 1px solid var(--border); margin-bottom: 16px; }
+    .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
     .card-title { font-size: 15px; font-weight: 600; }
     .card-body { padding: 20px; }
     .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; outline: none; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
     .btn-primary { background: var(--primary); color: white; }
-    .btn-primary:hover { background: var(--primary-hover); }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
     .btn-secondary { background: var(--surface); color: var(--text-secondary); border: 1px solid var(--border); }
-    .btn-secondary:hover { background: var(--bg); }
+    .btn-secondary:hover:not(:disabled) { background: var(--bg); }
     .btn-ghost { background: transparent; color: var(--text-secondary); padding: 4px 10px; }
-    .btn-ghost:hover { background: var(--bg); }
+    .btn-ghost:hover:not(:disabled) { background: var(--bg); }
     .btn-danger { background: white; color: var(--danger); border: 1px solid #fecaca; }
-    .btn-danger:hover { background: #fef2f2; }
+    .btn-danger:hover:not(:disabled) { background: #fef2f2; }
     .btn-sm { padding: 5px 10px; font-size: 12px; }
-    .btn-xs { padding: 3px 8px; font-size: 11px; }
+    .btn-xs { padding: 5px 10px; font-size: 12px; min-height: 28px; }
 
     /* 顶部导航 */
-    .nav-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface); border-radius: var(--radius); padding: 4px; box-shadow: var(--shadow); }
+    .nav-tabs { display: flex; gap: 4px; margin-bottom: 20px; background: var(--surface); border-radius: var(--radius); padding: 4px; box-shadow: var(--shadow); flex-wrap: wrap; }
     .nav-tab { padding: 10px 20px; border-radius: var(--radius-sm); font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; background: transparent; color: var(--text-secondary); }
     .nav-tab.active { background: var(--primary); color: white; }
     .nav-tab:hover:not(.active) { background: var(--bg); }
 
-    /* 子标签页 */
-    .sub-tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 2px solid var(--border); padding-bottom: 0; }
-    .sub-tab { padding: 8px 16px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; background: transparent; color: var(--text-secondary); border-bottom: 2px solid transparent; margin-bottom: -2px; }
-    .sub-tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-    .sub-tab:hover:not(.active) { color: var(--text); }
-
-    /* 子页面容器 */
-    .sub-page { display: none; }
-    .sub-page.active { display: block; }
-
     /* 页面容器 */
     .page { display: none; }
     .page.active { display: block; }
+    .module-head { margin-bottom: 16px; }
+    .module-head h2 { font-size: 17px; font-weight: 600; }
+    .module-head p { font-size: 13px; color: var(--text-secondary); margin-top: 4px; }
 
     /* 账号卡片 */
-    .account-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
-    .account-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: all 0.15s; background: var(--surface); }
+    .account-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+    .account-card { border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; transition: all 0.15s; background: var(--surface); display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
     .account-card:hover { border-color: var(--primary); box-shadow: var(--shadow-md); }
-    .account-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-    .account-avatar { width: 42px; height: 42px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; color: white; flex-shrink: 0; }
-    .avatar-mimo { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
-    .avatar-wasu { background: linear-gradient(135deg, #10b981, #059669); }
-    .account-info { flex: 1; min-width: 0; }
-    .account-name { font-size: 15px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .account-platform { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; margin-top: 4px; }
-    .platform-mimo { background: #dbeafe; color: #1e40af; }
-    .platform-wasu { background: #d1fae5; color: #065f46; }
-    .account-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
-    .stat-label { font-size: 11px; color: var(--text-muted); }
-    .stat-value { font-size: 12px; font-weight: 500; color: var(--text-secondary); }
-    .stat-value.success { color: var(--success); }
-    .stat-value.warning { color: var(--warning); }
-    .account-actions { display: flex; gap: 8px; margin-top: 12px; }
-    .account-actions .btn { flex: 1; }
-    .empty-state { text-align: center; padding: 50px 20px; grid-column: 1/-1; }
-    .empty-icon { width: 64px; height: 64px; background: var(--bg); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 28px; margin: 0 auto 16px; }
-    .empty-title { font-size: 15px; font-weight: 600; color: var(--text-secondary); margin-bottom: 6px; }
-    .empty-text { font-size: 13px; color: var(--text-muted); }
+    .account-main { flex: 1; min-width: 0; cursor: pointer; }
+    .account-title { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .account-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; word-break: break-all; }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+    .badge.ok { background: #d1fae5; color: #065f46; }
+    .badge.off { background: #fee2e2; color: #991b1b; }
+    .empty { text-align: center; padding: 40px 20px; color: var(--text-muted); font-size: 13px; grid-column: 1/-1; }
 
     /* 模态框 */
-    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s; }
+    .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s; padding: 16px; }
     .modal-overlay.active { opacity: 1; visibility: visible; }
-    .modal { background: var(--surface); border-radius: 16px; width: 92%; max-width: 900px; max-height: 92vh; overflow: hidden; display: flex; flex-direction: column; transform: scale(0.95); transition: transform 0.2s; }
+    .modal { background: var(--surface); border-radius: 16px; width: 100%; max-width: 900px; max-height: 92vh; overflow: hidden; display: flex; flex-direction: column; transform: scale(0.95); transition: transform 0.2s; }
     .modal-overlay.active .modal { transform: scale(1); }
     .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
     .modal-title { font-size: 17px; font-weight: 600; }
     .modal-body { padding: 20px 24px; overflow-y: auto; overflow-x: hidden; flex: 1; }
-    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+    .modal-footer { padding: 16px 24px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
+
+    /* 状态提示（显示在模态框内部，避免落在隐藏容器里） */
+    .status-box { padding: 10px 14px; border-radius: var(--radius-sm); font-size: 13px; margin-bottom: 16px; }
+    .status-box.ok { background: #d1fae5; color: #065f46; }
+    .status-box.warn { background: #fef3c7; color: #92400e; }
+    .status-box.error { background: #fee2e2; color: #991b1b; }
 
     /* 表单 */
     .form-group { margin-bottom: 16px; }
     .form-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 6px; }
-    .form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; transition: border-color 0.15s; }
+    .form-input { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 16px; outline: none; transition: border-color 0.15s; }
     .form-input:focus { border-color: var(--primary); }
-    .form-select { width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 14px; outline: none; background: white; cursor: pointer; }
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .password-wrapper { position: relative; }
-    .password-toggle { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 16px; color: var(--text-muted); }
+    .hint { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .switch { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+    .switch input { width: auto; }
 
     /* 模板编辑器 */
     .template-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
     .template-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; overflow: hidden; }
     .template-editor, .template-preview-box { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
     .template-label { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
-    .form-textarea { width: 100%; min-height: 200px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'SF Mono', Monaco, monospace; outline: none; resize: vertical; line-height: 1.6; white-space: pre; overflow-x: auto; box-sizing: border-box; }
+    .form-textarea { width: 100%; min-height: 220px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'SF Mono', Monaco, monospace; outline: none; resize: vertical; line-height: 1.6; white-space: pre; overflow-x: auto; box-sizing: border-box; }
     .form-textarea:focus { border-color: var(--primary); }
-    .template-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; white-space: pre; min-height: 200px; line-height: 1.6; overflow: auto; box-sizing: border-box; }
+    .template-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; white-space: pre; min-height: 220px; line-height: 1.6; overflow: auto; box-sizing: border-box; }
 
     /* 变量标签 */
     .variable-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
-    .variable-tag { display: inline-block; padding: 4px 10px; background: var(--primary-light); color: var(--primary); border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.15s; }
+    .variable-tags:empty { display: none; }
+    .variable-tag { display: inline-block; padding: 5px 10px; background: var(--primary-light); color: var(--primary); border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: none; }
     .variable-tag:hover { background: var(--primary); color: white; }
 
+    /* 变量配置表格 */
+    .table-scroll { overflow-x: auto; }
+    .var-table { width: 100%; border-collapse: collapse; min-width: 560px; }
+    .var-table th, .var-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
+    .var-table th { background: var(--bg); font-weight: 600; color: var(--text-secondary); font-size: 12px; }
+    .var-table input[type="text"], .var-table input:not([type]) { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; }
+    .var-table input:focus { border-color: var(--primary); }
+    .var-table input[type="checkbox"] { width: auto; }
+
     /* Toast */
-    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); padding: 12px 24px; background: var(--text); color: white; border-radius: var(--radius-sm); font-size: 14px; opacity: 0; visibility: hidden; transition: all 0.3s; z-index: 2000; }
+    .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); padding: 12px 24px; background: var(--text); color: white; border-radius: var(--radius-sm); font-size: 14px; opacity: 0; visibility: hidden; transition: all 0.3s; z-index: 2000; max-width: 90vw; text-align: center; }
     .toast.show { opacity: 1; visibility: visible; transform: translateX(-50%) translateY(0); }
     .toast.error { background: var(--danger); }
 
-    /* 平台标签 */
-    .platform-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-    .platform-tab { padding: 8px 16px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 500; cursor: pointer; border: 1px solid var(--border); background: white; transition: all 0.15s; }
-    .platform-tab.active { background: var(--primary); color: white; border-color: var(--primary); }
-    .platform-tab:hover:not(.active) { background: var(--bg); }
+    /* 启动失败提示 */
+    .fatal { padding: 24px; background: #fee2e2; color: #991b1b; border-radius: var(--radius); font-size: 14px; }
 
-    /* 变量配置页面 */
-    .var-config-layout { display: grid; grid-template-columns: 180px 1fr; gap: 20px; min-height: 400px; }
-    .var-platform-list { border-right: 1px solid var(--border); padding-right: 20px; }
-    .var-platform-item { padding: 10px 16px; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.15s; margin-bottom: 4px; }
-    .var-platform-item:hover { background: var(--bg); }
-    .var-platform-item.active { background: var(--primary-light); color: var(--primary); font-weight: 500; }
-    .var-list { flex: 1; }
-    .var-table { width: 100%; border-collapse: collapse; }
-    .var-table th, .var-table td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }
-    .var-table th { background: var(--bg); font-weight: 600; color: var(--text-secondary); font-size: 12px; }
-    .var-table input { width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; outline: none; }
-    .var-table input:focus { border-color: var(--primary); }
-    .var-table input[type="checkbox"] { width: auto; }
-    .var-table .var-name { font-family: monospace; color: var(--primary); background: var(--primary-light); padding: 2px 6px; border-radius: 3px; }
-    .var-empty { text-align: center; padding: 40px; color: var(--text-muted); }
-    .var-actions { display: flex; gap: 8px; margin-top: 16px; }
-
-    /* 响应式设计 */
-    @media (max-width: 1200px) {
-      .container { max-width: 100%; padding: 0 16px; }
-    }
-
+    /* 响应式 */
     @media (max-width: 1024px) {
       .template-layout { grid-template-columns: 1fr; }
-      .var-config-layout { grid-template-columns: 1fr; }
-      .var-platform-list { border-right: none; border-bottom: 1px solid var(--border); padding-right: 0; padding-bottom: 16px; margin-bottom: 16px; }
-      .var-table { display: block; overflow-x: auto; }
     }
-
     @media (max-width: 768px) {
       .app { padding: 12px; }
-      .container { padding: 0 8px; }
-      .header { flex-direction: column; align-items: flex-start; gap: 12px; }
+      .header { flex-direction: column; align-items: flex-start; }
       .header-title { font-size: 18px; }
-      .nav-tabs { flex-wrap: wrap; gap: 4px; }
       .nav-tab { padding: 8px 14px; font-size: 13px; flex: 1; text-align: center; }
-      .card { border-radius: var(--radius-sm); }
-      .card-header { flex-direction: column; align-items: flex-start; gap: 10px; padding: 12px 16px; }
+      .card-header { flex-direction: column; align-items: flex-start; padding: 12px 16px; }
       .card-body { padding: 12px 16px; }
       .account-grid { grid-template-columns: 1fr; gap: 10px; }
       .form-row { grid-template-columns: 1fr; }
-      .modal { width: 96%; max-height: 96vh; border-radius: 12px; }
+      .modal { max-height: 88vh; border-radius: 12px; }
       .modal-header { padding: 16px 20px 12px; }
       .modal-body { padding: 16px 20px; }
-      .modal-footer { padding: 12px 20px; flex-wrap: wrap; }
-      .modal-footer .btn { flex: 1; min-width: 80px; }
-      .platform-tabs { flex-wrap: wrap; }
-      .platform-tab { flex: 1; text-align: center; }
-      .var-table { font-size: 12px; }
-      .var-table th, .var-table td { padding: 8px 6px; }
-      .var-table input { padding: 4px 6px; font-size: 12px; }
-      .variable-tags { gap: 4px; }
-      .variable-tag { padding: 3px 8px; font-size: 11px; }
+      .modal-footer { padding: 12px 20px; }
+      .modal-footer .btn { flex: 1; min-width: 90px; }
     }
-
     @media (max-width: 480px) {
       .app { padding: 8px; }
-      .container { padding: 0 4px; }
-      .header { margin-bottom: 12px; }
       .header-title { font-size: 16px; gap: 8px; }
-      .header-icon { width: 32px; height: 32px; font-size: 16px; border-radius: 8px; }
-      .btn { padding: 6px 12px; font-size: 12px; }
-      .btn-sm { padding: 4px 8px; font-size: 11px; }
-      .btn-xs { padding: 3px 6px; font-size: 10px; }
-      .nav-tabs { padding: 3px; }
+      .header-icon { width: 32px; height: 32px; font-size: 16px; }
       .nav-tab { padding: 8px 10px; font-size: 12px; }
-      .card { border-radius: 8px; }
-      .card-header { padding: 10px 12px; }
-      .card-title { font-size: 14px; }
       .card-body { padding: 10px 12px; }
-      .account-card { padding: 12px; border-radius: 8px; }
-      .account-card-header { gap: 10px; margin-bottom: 10px; }
-      .account-avatar { width: 36px; height: 36px; font-size: 16px; border-radius: 8px; }
-      .account-name { font-size: 14px; }
-      .account-platform { font-size: 10px; padding: 1px 6px; }
-      .account-stats { gap: 8px; padding-top: 10px; }
-      .stat-label { font-size: 10px; }
-      .stat-value { font-size: 11px; }
-      .account-actions { gap: 6px; }
-      .form-textarea { min-height: 150px; font-size: 12px; }
-      .template-preview { min-height: 150px; font-size: 12px; }
-      .template-label { font-size: 11px; }
-      .var-platform-list { padding-bottom: 12px; }
-      .var-platform-item { padding: 8px 12px; font-size: 13px; }
-      .var-table th { font-size: 11px; }
-      .var-table td { font-size: 11px; }
-      .var-name { font-size: 11px; padding: 1px 4px; }
+      .form-textarea { min-height: 160px; font-size: 12px; }
+      .template-preview { min-height: 160px; font-size: 12px; }
     }
   </style>
 </head>
@@ -239,768 +172,77 @@
       <div class="header">
         <div class="header-title">
           <div class="header-icon">📊</div>
-          资源查询插件管理
+          <span>资源查询插件</span>
+          <span class="version" id="version"></span>
         </div>
+        <button class="btn btn-secondary btn-sm" data-action="reload">↻ 刷新</button>
       </div>
 
-      <!-- 顶部导航 -->
-      <div class="nav-tabs">
-        <button class="nav-tab active" data-module="mimo" onclick="switchPage('mimo', event)">🤖 MiMo 账号</button>
-        <button class="nav-tab" data-module="wasu" onclick="switchPage('wasu', event)">📺 华数账号</button>
-        <button class="nav-tab" data-module="jm" onclick="switchPage('jm', event)">🎮 JM 设置</button>
-      </div>
-
-      <!-- MiMo 账号管理页面 -->
-      <div class="page active" id="page-mimo" data-module="mimo">
-        <div class="sub-tabs">
-          <button class="sub-tab active" onclick="switchSubPage('mimo', 'accounts', event)">📋 账号管理</button>
-          <button class="sub-tab" onclick="switchSubPage('mimo', 'variables', event)">⚙️ 变量配置</button>
-        </div>
-        <div class="sub-page active" id="mimo-accounts">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">🤖 MiMo 账号管理</div>
-              <div style="display:flex;align-items:center;gap:12px">
-                <span style="font-size:12px;color:var(--text-muted)"><span id="mimo-count">0</span> 个账号</span>
-                <button class="btn btn-primary btn-sm" onclick="openAddMimoModal()">＋ 添加 MiMo 账号</button>
-              </div>
-            </div>
-            <div class="card-body">
-              <div class="account-grid" id="mimo-account-list"></div>
-            </div>
-          </div>
-        </div>
-        <div class="sub-page" id="mimo-variables">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">⚙️ MiMo 变量配置</div>
-              <button class="btn btn-primary btn-sm" onclick="saveMimoVarConfig()">💾 保存配置</button>
-            </div>
-            <div class="card-body">
-              <div id="mimo-var-list"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- 华数账号管理页面 -->
-      <div class="page" id="page-wasu" data-module="wasu">
-        <div class="sub-tabs">
-          <button class="sub-tab active" onclick="switchSubPage('wasu', 'accounts', event)">📋 账号管理</button>
-          <button class="sub-tab" onclick="switchSubPage('wasu', 'variables', event)">⚙️ 变量配置</button>
-        </div>
-        <div class="sub-page active" id="wasu-accounts">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">📺 华数广电账号管理</div>
-              <div style="display:flex;align-items:center;gap:12px">
-                <span style="font-size:12px;color:var(--text-muted)"><span id="wasu-count">0</span> 个账号</span>
-                <button class="btn btn-primary btn-sm" onclick="openAddWasuModal()">＋ 添加华数账号</button>
-              </div>
-            </div>
-            <div class="card-body">
-              <div class="account-grid" id="wasu-account-list"></div>
-            </div>
-          </div>
-        </div>
-        <div class="sub-page" id="wasu-variables">
-          <div class="card">
-            <div class="card-header">
-              <div class="card-title">⚙️ 华数变量配置</div>
-              <button class="btn btn-primary btn-sm" onclick="saveWasuVarConfig()">💾 保存配置</button>
-            </div>
-            <div class="card-body">
-              <div id="wasu-var-list"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- JM 设置页面 -->
-      <div class="page" id="page-jm" data-module="jm">
-        <div class="card">
-          <div class="card-header">
-            <div class="card-title">🎮 JMComic 下载配置</div>
-            <button class="btn btn-primary btn-sm" onclick="saveJmConfig()">💾 保存配置</button>
-          </div>
-          <div class="card-body">
-            <div style="max-width: 700px;">
-              <div style="margin-bottom: 24px;">
-                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">基本设置</div>
-                <div class="form-row" style="margin-bottom: 14px;">
-                  <div class="form-group" style="margin-bottom:0">
-                    <label class="form-label" style="display:flex;align-items:center;gap:8px;">
-                      <input type="checkbox" id="jm-enabled" checked style="width:auto;">
-                      启用 JM 下载功能
-                    </label>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">关闭后 /jm 命令将不可用</div>
-                  </div>
-                  <div class="form-group" style="margin-bottom:0">
-                    <label class="form-label" style="display:flex;align-items:center;gap:8px;">
-                      <input type="checkbox" id="jm-send-file" checked style="width:auto;">
-                      下载后发送 PDF 文件
-                    </label>
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">关闭后只显示结果提示，不发送文件</div>
-                  </div>
-                  <div class="form-group" style="margin-bottom:0">
-                    <label class="form-label">文件大小限制（MB）</label>
-                    <input class="form-input" id="jm-max-file-size" type="number" min="0" max="50" value="10" style="max-width: 150px;">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">超过此大小不发送文件，0 表示不限制</div>
-                  </div>
-                </div>
-              </div>
-              <div style="margin-bottom: 24px;">
-                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">网络设置</div>
-                <div class="form-group">
-                  <label class="form-label">JMComic Cookie</label>
-                  <input class="form-input" id="jm-cookies" placeholder="如：csrf=xxx; remember_web=xxx" style="font-family:monospace;font-size:12px;">
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">可选，格式为 k=v; k2=v2，用于访问仅登录可见内容</div>
-                </div>
-                <div class="form-group">
-                  <label class="form-label">代理地址</label>
-                  <input class="form-input" id="jm-proxy" placeholder="如：http://127.0.0.1:7890">
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">可选，留空使用系统代理</div>
-                </div>
-                <div class="form-row">
-                  <div class="form-group">
-                    <label class="form-label">请求超时（秒）</label>
-                    <input class="form-input" id="jm-timeout" type="number" min="5" max="120" value="20">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">单次网络请求超时，范围 5-120</div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">重试次数</label>
-                    <input class="form-input" id="jm-retry-times" type="number" min="1" max="10" value="3">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">网络请求失败重试次数，范围 1-10</div>
-                  </div>
-                </div>
-              </div>
-              <div style="margin-bottom: 16px;">
-                <div style="font-size: 14px; font-weight: 600; color: var(--text); margin-bottom: 14px; padding-bottom: 8px; border-bottom: 1px solid var(--border);">下载设置</div>
-                <div class="form-row" style="margin-bottom: 14px;">
-                  <div class="form-group">
-                    <label class="form-label">图片下载并发数</label>
-                    <input class="form-input" id="jm-image-threads" type="number" min="1" max="32" value="16">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">单章节内图片并行下载数，范围 1-32</div>
-                  </div>
-                  <div class="form-group">
-                    <label class="form-label">章节下载并发数</label>
-                    <input class="form-input" id="jm-photo-threads" type="number" min="1" max="16" value="4">
-                    <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">章节并行下载数，范围 1-16</div>
-                  </div>
-                </div>
-                <div class="form-group" style="max-width: 340px;">
-                  <label class="form-label">同时下载数量</label>
-                  <input class="form-input" id="jm-max-concurrent" type="number" min="1" max="3" value="1">
-                  <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">同时处理的漫画数量，范围 1-3</div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <div class="nav-tabs" id="nav-tabs"></div>
+      <div id="boot-error"></div>
+      <div id="pages"></div>
     </div>
   </div>
 
-  <!-- MiMo 账号添加/编辑模态框 -->
-  <div class="modal-overlay" id="mimo-modal">
-    <div class="modal" style="max-width: 700px;">
+  <!-- 账号编辑模态框 -->
+  <div class="modal-overlay" id="account-modal">
+    <div class="modal">
       <div class="modal-header">
-        <div class="modal-title" id="mimo-modal-title">添加 MiMo 账号</div>
-        <button class="btn btn-ghost" onclick="closeMimoModal()">✕</button>
+        <div class="modal-title" id="account-modal-title">编辑账号</div>
+        <button class="btn btn-ghost" data-action="close-account-modal" aria-label="关闭">✕</button>
       </div>
       <div class="modal-body">
-        <div class="form-group">
-          <div class="platform-tabs">
-            <div class="platform-tab active" data-section="account" onclick="switchMimoModalSection('account')">📋 账号配置</div>
-            <div class="platform-tab" data-section="template" onclick="switchMimoModalSection('template')">📝 消息模板</div>
-          </div>
+        <div class="status-box" id="account-status" style="display:none"></div>
+        <div id="account-form"></div>
+
+        <div class="form-group" id="account-otp-row" style="display:none">
+          <label class="form-label" for="account-otp">短信验证码</label>
+          <input class="form-input" id="account-otp" placeholder="请输入收到的验证码" autocomplete="one-time-code">
         </div>
-        <div id="mimo-account-section">
-          <div class="form-group">
-            <label class="form-label">账号名称（可选）</label>
-            <input class="form-input" id="mimo-field-name" placeholder="如：我的MiMo账号">
+
+        <div id="account-template-section" style="display:none">
+          <div class="template-header">
+            <label class="form-label" style="margin-bottom:0">消息模板</label>
+            <button class="btn btn-ghost btn-sm" data-action="reset-template">↺ 恢复默认</button>
           </div>
-          <div class="form-group">
-            <label class="form-label">登录方式</label>
-            <div class="platform-tabs">
-              <div class="platform-tab active" data-method="password" onclick="switchMimoLoginMethod('password')">账号密码</div>
-              <div class="platform-tab" data-method="passtoken" onclick="switchMimoLoginMethod('passtoken')">PassToken</div>
-              <div class="platform-tab" data-method="token" onclick="switchMimoLoginMethod('token')">ServiceToken</div>
+          <div class="template-layout">
+            <div class="template-editor">
+              <div class="template-label">模板编辑</div>
+              <textarea class="form-textarea" id="account-template" spellcheck="false"></textarea>
             </div>
-          </div>
-          <div id="mimo-password-section">
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">小米账号 *</label>
-                <input class="form-input" id="mimo-field-account" placeholder="手机号或邮箱">
-              </div>
-              <div class="form-group">
-                <label class="form-label">密码 *</label>
-                <div class="password-wrapper">
-                  <input class="form-input" id="mimo-field-password" type="password" placeholder="密码">
-                  <button class="password-toggle" onclick="toggleMimoPassword()">👁</button>
-                </div>
-              </div>
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-                <label class="form-label">设备标识</label>
-                <input class="form-input" id="mimo-field-device-id" placeholder="留空使用默认值">
-              </div>
-              <div class="form-group">
-                <label class="form-label">User-Agent</label>
-                <input class="form-input" id="mimo-field-ua" placeholder="留空使用默认值">
-              </div>
-            </div>
-            <div class="form-group" id="mimo-otp-section" style="display: none;">
-              <label class="form-label">短信验证码</label>
-              <input class="form-input" id="mimo-field-otp" placeholder="6位数字验证码" maxlength="6">
-              <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">验证码已发送到您的手机，请输入6位数字验证码</div>
+            <div class="template-preview-box">
+              <div class="template-label">预览效果</div>
+              <div class="template-preview" id="account-template-preview"></div>
             </div>
           </div>
-          <div id="mimo-token-section" style="display: none;">
-            <div class="form-group">
-              <label class="form-label">ServiceToken *</label>
-              <input class="form-input" id="mimo-field-service-token" placeholder="粘贴 ServiceToken" style="font-family: monospace; font-size: 12px;">
-            </div>
-            <div class="form-group">
-              <label class="form-label">User ID *</label>
-              <input class="form-input" id="mimo-field-user-id" placeholder="小米用户 ID">
-            </div>
-          </div>
-          <div id="mimo-passtoken-section" style="display: none;">
-            <div class="form-group">
-              <label class="form-label">PassToken *</label>
-              <input class="form-input" id="mimo-field-passtoken" placeholder="粘贴 PassToken" style="font-family: monospace; font-size: 12px;">
-            </div>
-            <div class="form-group">
-              <label class="form-label">User ID *</label>
-              <input class="form-input" id="mimo-field-passtoken-user-id" placeholder="小米用户 ID">
-            </div>
-            <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">PassToken 必须配合 User ID 使用，查询时会自动换取 ServiceToken</div>
-          </div>
-          <div id="mimo-login-status" style="margin-top: 12px; padding: 10px; border-radius: 8px; display: none;"></div>
-        </div>
-        <div id="mimo-template-section" style="display: none;">
-          <div class="form-group">
-            <div class="template-header">
-              <label class="form-label" style="margin-bottom:0">消息模板</label>
-              <button class="btn btn-ghost btn-sm" onclick="resetMimoFieldTemplate()">↺ 恢复默认</button>
-            </div>
-            <div class="template-layout">
-              <div class="template-editor">
-                <div class="template-label">模板编辑</div>
-                <textarea class="form-textarea" id="mimo-field-template" oninput="syncMimoPreviewHeight()" style="min-height: 300px;"></textarea>
-              </div>
-              <div class="template-preview-box">
-                <div class="template-label">预览效果</div>
-                <div class="template-preview" id="mimo-field-template-preview" style="min-height: 300px;"></div>
-              </div>
-            </div>
-            <div class="variable-tags" id="mimo-field-variable-tags"></div>
-          </div>
+          <div class="variable-tags" id="account-variable-tags"></div>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeMimoModal()">取消</button>
-        <button class="btn btn-secondary" id="mimo-test-btn" onclick="testMimoAccount()">🧪 测试</button>
-        <button class="btn btn-primary" id="mimo-save-btn" onclick="saveMimoAccount()">💾 保存</button>
+        <button class="btn btn-secondary" data-action="close-account-modal">取消</button>
+        <button class="btn btn-secondary" id="btn-login" data-action="login-account" style="display:none">🔑 登录</button>
+        <button class="btn btn-secondary" id="btn-test" data-action="test-account" style="display:none">🧪 测试</button>
+        <button class="btn btn-primary" data-action="save-account">💾 保存</button>
       </div>
     </div>
   </div>
 
-  <!-- 华数账号添加/编辑模态框 -->
-  <div class="modal-overlay" id="wasu-modal">
-    <div class="modal" style="max-width: 700px;">
-      <div class="modal-header">
-        <div class="modal-title" id="wasu-modal-title">添加华数账号</div>
-        <button class="btn btn-ghost" onclick="closeWasuModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <div class="platform-tabs">
-            <div class="platform-tab active" data-section="account" onclick="switchWasuModalSection('account')">📋 账号配置</div>
-            <div class="platform-tab" data-section="template" onclick="switchWasuModalSection('template')">📝 消息模板</div>
-          </div>
-        </div>
-        <div id="wasu-account-section">
-          <div class="form-group">
-            <label class="form-label">账号名称（可选）</label>
-            <input class="form-input" id="wasu-field-name" placeholder="如：我的华数账号">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">手机号 *</label>
-              <input class="form-input" id="wasu-field-phone" placeholder="手机号">
-            </div>
-            <div class="form-group">
-              <label class="form-label">User Key *</label>
-              <input class="form-input" id="wasu-field-user-key" placeholder="User Key">
-            </div>
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Token *</label>
-              <input class="form-input" id="wasu-field-token" placeholder="Token">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Sign</label>
-              <input class="form-input" id="wasu-field-sign" placeholder="Sign（可选）">
-            </div>
-          </div>
-        </div>
-        <div id="wasu-template-section" style="display: none;">
-          <div class="form-group">
-            <div class="template-header">
-              <label class="form-label" style="margin-bottom:0">消息模板</label>
-              <button class="btn btn-ghost btn-sm" onclick="resetWasuTemplate()">↺ 恢复默认</button>
-            </div>
-            <div class="template-layout">
-              <div class="template-editor">
-                <div class="template-label">模板编辑</div>
-                <textarea class="form-textarea" id="wasu-field-template" oninput="syncWasuPreviewHeight()" style="min-height: 300px;"></textarea>
-              </div>
-              <div class="template-preview-box">
-                <div class="template-label">预览效果</div>
-                <div class="template-preview" id="wasu-template-preview" style="min-height: 300px;"></div>
-              </div>
-            </div>
-            <div class="variable-tags" id="wasu-variable-tags"></div>
-          </div>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeWasuModal()">取消</button>
-        <button class="btn btn-primary" onclick="saveWasuAccount()">💾 保存</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- 删除确认模态框 -->
+  <!-- 删除确认 -->
   <div class="modal-overlay" id="delete-modal">
-    <div class="modal" style="max-width: 400px;">
+    <div class="modal" style="max-width:420px">
       <div class="modal-header">
         <div class="modal-title">确认删除</div>
-        <button class="btn btn-ghost" onclick="closeDeleteModal()">✕</button>
       </div>
       <div class="modal-body">
-        <p>确定要删除账号「<span id="delete-account-name"></span>」吗？</p>
+        <p style="font-size:14px">确定要删除账号「<span id="delete-target"></span>」吗？此操作不可撤销。</p>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeDeleteModal()">取消</button>
-        <button class="btn btn-danger" onclick="confirmDelete()">删除</button>
+        <button class="btn btn-secondary" data-action="close-delete-modal">取消</button>
+        <button class="btn btn-danger" data-action="confirm-delete">删除</button>
       </div>
     </div>
   </div>
 
-  <!-- 添加变量模态框 -->
-  <div class="modal-overlay" id="add-var-modal">
-    <div class="modal" style="max-width: 400px;">
-      <div class="modal-header">
-        <div class="modal-title">添加变量</div>
-        <button class="btn btn-ghost" onclick="closeAddVarModal()">✕</button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label class="form-label">变量名称（英文，如：balance）</label>
-          <input class="form-input" id="new-var-name" placeholder="变量名称">
-        </div>
-        <div class="form-group">
-          <label class="form-label">中文描述</label>
-          <input class="form-input" id="new-var-desc" placeholder="如：余额">
-        </div>
-        <div class="form-group">
-          <label class="form-label">默认值（用于预览）</label>
-          <input class="form-input" id="new-var-default" placeholder="如：100.00">
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button class="btn btn-secondary" onclick="closeAddVarModal()">取消</button>
-        <button class="btn btn-primary" onclick="addVariable()">添加</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="toast" id="toast"></div>
-
-  <script>
-    const bridge = window.AstrBotPluginPage;
-    let accounts = [];
-    let editingIndex = -1;
-    let defaultTemplates = {};
-    let currentPlatform = 'mimo';
-    let pendingDeleteIndex = -1;
-    let varConfigPlatform = 'mimo';
-
-    // 变量配置结构
-    let templateVars = {};
-
-    // 页面切换
-    function switchPage(page, eventObj) {
-      // 移除所有页面的 active 状态
-      document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-
-      // 激活目标页面
-      const pageEl = document.getElementById('page-' + page);
-      if (pageEl) {
-        pageEl.classList.add('active');
-      }
-
-      // 激活对应的导航标签（通过 data-module 属性查找）
-      const targetTab = document.querySelector(`.nav-tab[data-module="${page}"]`);
-      if (targetTab) {
-        targetTab.classList.add('active');
-      }
-
-      // 激活对应的子页面
-      if (pageEl) {
-        pageEl.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
-        pageEl.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
-        const defaultSub = pageEl.querySelector('.sub-page');
-        if (defaultSub) defaultSub.classList.add('active');
-        const defaultTab = pageEl.querySelector('.sub-tab');
-        if (defaultTab) defaultTab.classList.add('active');
-      }
-    }
-
-    function switchSubPage(parent, sub, eventObj) {
-      const evt = eventObj || event;
-      const page = document.getElementById('page-' + parent);
-      if (!page) return;
-      page.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
-      page.querySelectorAll('.sub-tab').forEach(t => t.classList.remove('active'));
-      const targetSubPage = document.getElementById(parent + '-' + sub);
-      if (targetSubPage) targetSubPage.classList.add('active');
-      if (evt && evt.target) {
-        evt.target.classList.add('active');
-      } else {
-        page.querySelectorAll('.sub-tab').forEach(t => {
-          if (t.getAttribute('onclick')?.includes(`'${sub}'`)) {
-            t.classList.add('active');
-          }
-        });
-      }
-    }
-
-    // 模块启用状态
-    let modulesEnabled = { mimo: true, wasu: true, jm: true };
-
-    document.addEventListener('DOMContentLoaded', async () => {
-      await bridge.ready();
-      await loadModulesConfig();
-      await loadDefaults();
-      await loadAccounts();
-      renderMimoVarList();
-      renderWasuVarList();
-      // 自动选中第一个启用的标签
-      activateFirstEnabledModule();
-    });
-
-    // 加载模块启用配置
-    async function loadModulesConfig() {
-      try {
-        const config = await bridge.apiGet('modules');
-        if (config) {
-          modulesEnabled = config;
-          updateModuleVisibility();
-        }
-      } catch (e) {
-        console.error('加载模块配置失败:', e);
-      }
-    }
-
-    // 根据模块启用状态更新页面可见性
-    function updateModuleVisibility() {
-      // 隐藏禁用模块的导航标签
-      document.querySelectorAll('.nav-tab[data-module]').forEach(tab => {
-        const moduleName = tab.dataset.module;
-        tab.style.display = modulesEnabled[moduleName] ? '' : 'none';
-      });
-
-      // 隐藏禁用模块的页面
-      document.querySelectorAll('.page[data-module]').forEach(page => {
-        const moduleName = page.dataset.module;
-        page.style.display = modulesEnabled[moduleName] ? '' : 'none';
-      });
-    }
-
-    // 激活第一个启用的模块
-    function activateFirstEnabledModule() {
-      const firstEnabledTab = document.querySelector('.nav-tab[data-module]:not([style*="display: none"])');
-      if (firstEnabledTab) {
-        const moduleName = firstEnabledTab.dataset.module;
-        switchPage(moduleName);
-      }
-    }
-
-    async function loadDefaults() {
-      try {
-        const templates = await bridge.apiGet('templates');
-        defaultTemplates = templates || {};
-        const varsData = await bridge.apiGet('template-vars');
-        templateVars = varsData || {};
-        // 加载 JM 配置（路径是 jm/config，不是 jm-config）
-        const jmData = await bridge.apiGet('jm/config');
-        if (jmData) renderJmConfig(jmData);
-      } catch (e) {
-        console.error('加载默认配置失败:', e);
-      }
-    }
-
-    async function loadAccounts() {
-      try {
-        const result = await bridge.apiGet('config');
-        accounts = result.accounts || [];
-        renderAccounts();
-      } catch (e) {
-        document.getElementById('mimo-account-list').innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><div class="empty-title">加载失败</div></div>';
-      }
-    }
-
-    // ==================== 账号管理 ====================
-
-    function renderAccounts() {
-      const mimoAccounts = accounts.filter(acc => acc.platform === 'mimo');
-      const wasuAccounts = accounts.filter(acc => acc.platform === 'wasu');
-
-      document.getElementById('mimo-count').textContent = mimoAccounts.length;
-      document.getElementById('wasu-count').textContent = wasuAccounts.length;
-
-      renderMimoAccounts(mimoAccounts);
-      renderWasuAccounts(wasuAccounts);
-    }
-
-    function generateDefaultName(platform) {
-      let maxNum = 0;
-      accounts.forEach(acc => {
-        if (acc.name && acc.name.startsWith('账号')) {
-          const num = parseInt(acc.name.substring(2), 10);
-          if (!isNaN(num) && num > maxNum) maxNum = num;
-        }
-      });
-      let nextNum = maxNum + 1;
-      if (nextNum > 999) nextNum = 1;
-      return '账号' + String(nextNum).padStart(3, '0');
-    }
-
-    // ==================== 通用模板预览函数 ====================
-
-    function updateTemplatePreviewGeneric(platform, useDefault = false) {
-      const templateEl = document.getElementById(`${platform}-field-template`);
-      const previewEl = document.getElementById(`${platform}-field-template-preview`);
-      if (!templateEl || !previewEl) return;
-
-      const defaultTpl = useDefault ? (defaultTemplates[platform] || '') : '';
-      const template = templateEl.value || defaultTpl;
-      const platformVars = templateVars[platform] || {};
-      const sample = {};
-      (platformVars.variables || []).forEach(v => {
-        sample[v.name] = v.default || '';
-      });
-      let result = template;
-      for (const [k, v] of Object.entries(sample)) {
-        result = result.replace(new RegExp(`\\{${k}\\}`, 'g'), v);
-      }
-      previewEl.textContent = result || '（请在左侧输入模板）';
-    }
-
-    function syncPreviewHeightGeneric(platform, updatePreview = true) {
-      const textarea = document.getElementById(`${platform}-field-template`);
-      const preview = document.getElementById(`${platform}-field-template-preview`);
-      if (textarea && preview) {
-        preview.style.height = textarea.offsetHeight + 'px';
-      }
-      if (updatePreview) {
-        updateTemplatePreviewGeneric(platform, platform === 'wasu');
-      }
-    }
-
-    function updateVariableTagsGeneric(platform) {
-      const platformVars = templateVars[platform] || {};
-      const vars = (platformVars.variables || []).filter(v => v.show !== false);
-      const container = document.getElementById(`${platform}-field-variable-tags`);
-      if (container) {
-        container.innerHTML = vars.length > 0
-          ? '<span style="font-size:11px;color:var(--text-muted);margin-right:4px">快速插入：</span>' +
-            vars.map(v =>
-              `<span class="variable-tag" onclick="insertVariableGeneric('${platform}', '${v.name}')" title="{${v.name}}">${v.desc}</span>`
-            ).join('')
-          : '';
-      }
-    }
-
-    function insertVariableGeneric(platform, name) {
-      const ta = document.getElementById(`${platform}-field-template`);
-      if (!ta) return;
-      const pos = ta.selectionStart;
-      ta.value = ta.value.slice(0, pos) + `{${name}}` + ta.value.slice(pos);
-      ta.focus();
-      updateTemplatePreviewGeneric(platform, platform === 'wasu');
-    }
-
-    function resetTemplateGeneric(platform) {
-      const templateEl = document.getElementById(`${platform}-field-template`);
-      if (templateEl) {
-        templateEl.value = defaultTemplates[platform] || '';
-        updateTemplatePreviewGeneric(platform, true);
-        showToast('已恢复默认模板');
-      }
-    }
-
-    // ==================== 删除功能 ====================
-
-    function deleteAccount(index) {
-      const acc = accounts[index];
-      if (!acc) return;
-      const name = acc.name || acc.account || acc.phone || '账号' + (index + 1);
-      pendingDeleteIndex = index;
-      document.getElementById('delete-account-name').textContent = name;
-      document.getElementById('delete-modal').classList.add('active');
-    }
-
-    function closeDeleteModal() {
-      document.getElementById('delete-modal').classList.remove('active');
-      pendingDeleteIndex = -1;
-    }
-
-    async function confirmDelete() {
-      if (pendingDeleteIndex < 0) return;
-      const index = pendingDeleteIndex;
-      const acc = accounts[index];
-      if (!acc) {
-        closeDeleteModal();
-        return;
-      }
-      const name = acc.name || acc.account || acc.phone || '账号' + (index + 1);
-      closeDeleteModal();
-
-      const platform = acc.platform;
-      let platformIdx = 0;
-      for (let i = 0; i < index; i++) {
-        if (accounts[i].platform === platform) platformIdx++;
-      }
-
-      try {
-        const result = await bridge.apiPost('config/delete', { platform, index: platformIdx });
-        if (result && result.status === 'ok') {
-          accounts.splice(index, 1);
-          renderAccounts();
-          showToast(`已删除「${result.deleted || name}」`);
-        } else {
-          showToast(result?.message || '删除失败', 'error');
-        }
-      } catch (e) {
-        showToast('删除失败: ' + (e.message || '未知错误'), 'error');
-      }
-    }
-
-    // ==================== 保存 ====================
-
-    async function saveAccounts() {
-      try {
-        await bridge.apiPost('config', { accounts });
-        await loadAccounts();
-      } catch (e) {
-        showToast('保存失败', 'error');
-      }
-    }
-
-    function showToast(msg, type = 'success') {
-      const t = document.getElementById('toast');
-      t.textContent = msg;
-      t.className = `toast ${type} show`;
-      setTimeout(() => t.classList.remove('show'), 3000);
-    }
-
-    // ==================== 变量配置 ====================
-
-    function updateVarField(platform, index, field, value) {
-      if (!templateVars[platform]) {
-        templateVars[platform] = { variables: [] };
-      }
-      if (!templateVars[platform].variables) {
-        templateVars[platform].variables = [];
-      }
-      if (templateVars[platform].variables[index]) {
-        templateVars[platform].variables[index][field] = value;
-      }
-    }
-
-    let addVarPlatform = 'mimo';
-
-    function openAddVarModal(platform) {
-      addVarPlatform = platform;
-      document.getElementById('new-var-name').value = '';
-      document.getElementById('new-var-desc').value = '';
-      document.getElementById('new-var-default').value = '';
-      document.getElementById('add-var-modal').classList.add('active');
-    }
-
-    function closeAddVarModal() {
-      document.getElementById('add-var-modal').classList.remove('active');
-    }
-
-    function addVariable() {
-      const name = document.getElementById('new-var-name').value.trim();
-      const desc = document.getElementById('new-var-desc').value.trim();
-      const defaultValue = document.getElementById('new-var-default').value.trim();
-
-      if (!name) {
-        showToast('请输入变量名称', 'error');
-        return;
-      }
-
-      if (!/^[a-zA-Z_]\w*$/.test(name)) {
-        showToast('变量名称只能包含英文、数字和下划线', 'error');
-        return;
-      }
-
-      const platform = addVarPlatform;
-      if (!templateVars[platform]) {
-        templateVars[platform] = { variables: [] };
-      }
-      if (!templateVars[platform].variables) {
-        templateVars[platform].variables = [];
-      }
-
-      // 检查是否已存在
-      if (templateVars[platform].variables.some(v => v.name === name)) {
-        showToast('变量名已存在', 'error');
-        return;
-      }
-
-      templateVars[platform].variables.push({
-        name: name,
-        desc: desc || name,
-        default: defaultValue || '',
-        show: true
-      });
-
-      closeAddVarModal();
-
-      // 重新渲染对应的变量列表
-      if (platform === 'mimo') {
-        renderMimoVarList();
-      } else {
-        renderWasuVarList();
-      }
-
-      showToast('变量已添加');
-    }
-
-    function removeVariable(platform, index) {
-      if (!templateVars[platform] || !templateVars[platform].variables) return;
-      templateVars[platform].variables.splice(index, 1);
-
-      if (platform === 'mimo') {
-        renderMimoVarList();
-      } else {
-        renderWasuVarList();
-      }
-
-      showToast('变量已删除');
-    }
-  </script>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
 </body>
 </html>

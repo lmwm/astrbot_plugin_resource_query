@@ -1,467 +1,374 @@
-"""
-资源查询 AstrBot 插件（模块化架构）
+"""资源查询插件入口
 
-支持平台：
-  - MiMo：小米 MiMo 平台用量查询
-  - 华数广电：流量/通话/余额查询
-  - JMComic：漫画下载（仅私聊）
+职责保持极薄：
+  1. 按 AstrBot 原生配置决定启用哪些功能模块并注册；
+  2. 注册全局与各模块的 Pages 接口；
+  3. 把指令分发到对应模块。
 
-指令：
-  /query                    — 查询帮助
-  /mimo                     — 查询所有 MiMo 账号
-  /mimo <序号或名称>        — 查询指定 MiMo 账号
-  /mimo ls                  — 列出所有 MiMo 账号
-  /mimo del <序号或名称>    — 删除 MiMo 账号
-  /wasu                     — 查询所有华数账号
-  /wasu <序号或名称>        — 查询指定华数账号
-  /wasu ls                  — 列出所有华数账号
-  /wasu del <序号或名称>    — 删除华数账号
-  /query update             — 更新插件
-  /jm <ID>                  — 下载 JMComic 漫画 PDF（仅私聊）
+四个功能模块（均继承 `core.module.ModuleBase`）：
+  - mimo   ：小米 MiMo 用量查询
+  - wasu   ：华数广电流量 / 话费查询
+  - jm     ：JMComic 漫画下载
+  - update ：插件自身更新
 
-架构设计：
-  本插件采用模块化架构，各功能模块独立管理自己的配置和逻辑。
-  总管理模块（PluginManager）负责协调模块与 AstrBot 之间的通信。
-
-  ┌─────────────────────────────────────────────────────────────┐
-  │                    main.py (总管理模块)                      │
-  │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐        │
-  │  │  MiMo模块   │  │  华数模块   │  │  JM模块     │        │
-  │  └──────┬──────┘  └──────┬──────┘  └──────┬──────┘        │
-  │         │                │                │                │
-  │         └────────────────┼────────────────┘                │
-  │                          │                                 │
-  │                    ┌─────┴─────┐                           │
-  │                    │ 模块注册中心 │                          │
-  │                    └───────────┘                           │
-  └─────────────────────────────────────────────────────────────┘
+新增功能模块只需两步：
+  1. 在 `modules/` 下新建包并实现 `XxxModule(ModuleBase)`；
+  2. 在下方 `_MODULE_CLASSES` 中登记一行。
+  Pages 前端会依据模块声明的 schema 自动渲染配置页。
 """
 
-import asyncio
-import json
-import os
+from __future__ import annotations
+
 from pathlib import Path
 
-from astrbot.api import AstrBotConfig
-from astrbot.api.event import AstrMessageEvent, MessageChain, filter
-from astrbot.api.message_components import File
+from astrbot.api import AstrBotConfig, logger
+from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 
+from .common.utils import load_json_file, save_json_file
 from .core.manager import PluginManager
-from .modules.mimo import MimoModule, MimoResult
-from .modules.wasu import WasuModule
-from .modules.jm import JMModule, normalize_album_id
-from .updater import check_update, do_update, reload_plugin
+from .modules import JMModule, MimoModule, UpdateModule, WasuModule
+from .modules.update.updater import get_current_version
 
-_PLUGIN_NAME = "astrbot_plugin_resource_query"
+# 插件唯一标识
+PLUGIN_NAME = "astrbot_plugin_resource_query"
 
+# 功能模块清单：模块名 → 模块类
+# 新增功能时在此登记即可，无需改动其他逻辑
+_MODULE_CLASSES: dict[str, type] = {
+    "mimo": MimoModule,
+    "wasu": WasuModule,
+    "jm": JMModule,
+    "update": UpdateModule,
+}
 
-def _get_plugin_version() -> str:
-    """从 metadata.yaml 动态读取版本号"""
-    try:
-        metadata_path = Path(__file__).parent / "metadata.yaml"
-        if metadata_path.exists():
-            content = metadata_path.read_text(encoding="utf-8")
-            for line in content.splitlines():
-                line = line.strip()
-                if line.startswith("version:"):
-                    return line.split(":", 1)[1].strip().strip('"').strip("'")
-    except Exception:
-        pass
-    return "0.0.0"
+# 模板变量配置文件
+_VAR_CONFIG_FILE = "var_config.json"
 
 
 class ResourceQueryPlugin(Star):
-    """资源查询插件主类
+    """资源查询插件
 
-    采用模块化架构，各功能模块独立管理自己的配置和逻辑。
-    总管理模块负责协调模块与 AstrBot 之间的通信。
+    只做「注册 + 分发」，具体功能全部由各模块自治实现。
     """
 
-    def __init__(self, context: Context, config: AstrBotConfig | None = None):
+    def __init__(self, context: Context, config: AstrBotConfig | None = None) -> None:
+        """初始化插件
+
+        Args:
+            context: AstrBot 上下文。
+            config: AstrBot 原生配置（模块启用开关）。
+        """
         super().__init__(context)
         self.config = config or {}
         self._plugin_dir = Path(__file__).parent
 
-        # 初始化总管理器
-        self._manager = PluginManager(_PLUGIN_NAME, self._plugin_dir)
-
-        # 注册功能模块
-        self._register_modules()
-
-        # 注册 Pages API
+        self._manager = PluginManager(PLUGIN_NAME, self._plugin_dir)
+        self._register_modules(context)
         self._register_web_apis(context)
 
-    def _register_modules(self):
-        """注册所有功能模块（根据配置决定是否启用）"""
-        # 获取模块启用配置
-        modules_config = self.config.get("modules", {})
+    # ══════════════════════════════════════════
+    #  模块注册
+    # ══════════════════════════════════════════
 
-        # 注册 MiMo 模块
-        if modules_config.get("mimo_enabled", True):
-            mimo_module = MimoModule(self._plugin_dir, _PLUGIN_NAME)
-            self._manager.register_module(mimo_module)
+    def _register_modules(self, context: Context) -> None:
+        """按 AstrBot 原生配置注册已启用的模块
 
-        # 注册华数广电模块
-        if modules_config.get("wasu_enabled", True):
-            wasu_module = WasuModule(self._plugin_dir, _PLUGIN_NAME)
-            self._manager.register_module(wasu_module)
+        Args:
+            context: AstrBot 上下文，会注入到每个模块。
+        """
+        enabled = self.config.get("modules") or {}
 
-        # 注册 JMComic 模块
-        if modules_config.get("jm_enabled", True):
-            jm_module = JMModule(self._plugin_dir, _PLUGIN_NAME)
-            self._manager.register_module(jm_module)
+        for name, module_cls in _MODULE_CLASSES.items():
+            # 未显式配置时默认启用
+            if not enabled.get(f"{name}_enabled", True):
+                logger.info(f"[{PLUGIN_NAME}] 模块 {name} 已在配置中禁用，跳过加载")
+                continue
 
-    def _register_web_apis(self, context: Context):
-        """注册 Web API"""
-        # 注册全局配置 API
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/config", self.get_config, ["GET"], "获取插件配置"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/config", self.save_config, ["POST"], "保存插件配置"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/config/delete", self.delete_config, ["POST"], "删除账号配置"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/templates", self.get_templates, ["GET"], "获取默认模板"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/template-vars", self.get_template_vars, ["GET"], "获取模板变量定义"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/template-vars", self.save_template_vars, ["POST"], "保存模板变量定义"
-        )
-        context.register_web_api(
-            f"/{_PLUGIN_NAME}/modules", self.get_modules_config, ["GET"], "获取模块启用配置"
-        )
+            module = module_cls(self._plugin_dir, PLUGIN_NAME)
+            module.set_context(context)
 
-        # 注册模块特有的 Web API
+            if not self._manager.register_module(module):
+                logger.warning(f"[{PLUGIN_NAME}] 模块 {name} 注册失败（名称重复）")
+
+    # ══════════════════════════════════════════
+    #  Pages 接口
+    # ══════════════════════════════════════════
+
+    def _register_web_apis(self, context: Context) -> None:
+        """注册全局接口与各模块自有接口
+
+        Args:
+            context: AstrBot 上下文。
+        """
+        for path, handler, methods, desc in (
+            ("modules", self.get_modules, ["GET"], "获取已启用模块及其页面描述"),
+            ("accounts", self.get_accounts, ["GET"], "获取所有模块的账号"),
+            ("accounts", self.save_accounts, ["POST"], "保存指定模块的账号"),
+            ("accounts/delete", self.delete_account, ["POST"], "删除指定账号"),
+            ("template-vars", self.get_template_vars, ["GET"], "获取模板变量定义"),
+            ("template-vars", self.save_template_vars, ["POST"], "保存模板变量定义"),
+        ):
+            context.register_web_api(f"/{PLUGIN_NAME}/{path}", handler, methods, desc)
+
+        # 模块自有接口（路径含模块名前缀）
         for module in self._manager.get_all_modules():
-            module_apis = module.get_web_apis()
-            for api in module_apis:
-                path = api.get("path", "")
-                handler = api.get("handler")
-                methods = api.get("methods", ["GET"])
-                desc = api.get("desc", "")
+            for api in module.get_web_apis():
+                context.register_web_api(
+                    f"/{PLUGIN_NAME}/{module.module_name}/{api['path']}",
+                    api["handler"],
+                    api.get("methods", ["GET"]),
+                    api.get("desc", ""),
+                )
 
-                # 添加模块前缀到路径
-                full_path = f"/{_PLUGIN_NAME}/{module.module_name}/{path}"
-                context.register_web_api(full_path, handler, methods, desc)
+    async def get_modules(self):
+        """获取已启用模块的页面描述
 
-    # ══════════════════════════════════════════
-    #  Pages API
-    # ══════════════════════════════════════════
+        未启用的模块不会被注册，因此不会出现在返回结果中，
+        Pages 也就不会渲染它们的配置页。
 
-    async def get_modules_config(self):
-        """获取模块启用配置"""
+        Returns:
+            JSON 响应，包含模块 schema 列表与插件版本号。
+        """
         from astrbot.api.web import json_response
-        modules_config = self.config.get("modules", {})
+
         return json_response({
-            "mimo": modules_config.get("mimo_enabled", True),
-            "wasu": modules_config.get("wasu_enabled", True),
-            "jm": modules_config.get("jm_enabled", True),
+            "version": get_current_version(),
+            "modules": self._manager.get_page_schemas(),
         })
 
-    async def get_config(self):
-        """获取配置"""
+    async def get_accounts(self):
+        """获取所有已启用模块的账号
+
+        Returns:
+            JSON 响应，账号列表（每项带 platform 字段）。
+        """
         from astrbot.api.web import json_response
+
         return json_response({"accounts": self._manager.get_all_accounts()})
 
-    async def save_config(self):
-        """保存配置"""
-        from astrbot.api.web import json_response, request
-        payload = await request.json(default={})
-        if "accounts" in payload:
-            # 按平台分组保存
-            accounts_by_module = {}
-            for acc in payload["accounts"]:
-                module_name = acc.get("platform", "unknown")
-                if module_name not in accounts_by_module:
-                    accounts_by_module[module_name] = []
-                accounts_by_module[module_name].append(acc)
+    async def save_accounts(self):
+        """保存指定模块的账号列表
 
-            # 保存到各模块
-            for module_name, accounts in accounts_by_module.items():
-                module = self._manager.get_module(module_name)
-                if module:
-                    module.save_accounts(accounts)
+        Returns:
+            JSON 响应。
+        """
+        from astrbot.api.web import error_response, json_response, request
+
+        payload = await request.json(default={})
+        platform = str(payload.get("platform") or "").strip()
+        accounts = payload.get("accounts")
+
+        module = self._manager.get_module(platform)
+        if not module:
+            return error_response(f"模块 {platform or '(空)'} 未启用")
+
+        if not isinstance(accounts, list):
+            return error_response("accounts 必须是数组")
+
+        if not module.save_accounts(accounts):
+            return error_response("保存失败")
 
         return json_response({"status": "ok"})
 
-    async def delete_config(self):
-        """删除指定账号"""
-        from astrbot.api.web import error_response, json_response, request
-        payload = await request.json(default={})
-        platform = payload.get("platform", "").strip()
-        index = payload.get("index")
-        if not platform or index is None:
-            return error_response("缺少 platform 或 index 参数")
-        try:
-            index = int(index)
-        except (TypeError, ValueError):
-            return error_response("index 必须是整数")
+    async def delete_account(self):
+        """删除指定账号
 
-        deleted = self._manager.delete_account(platform, index)
+        Returns:
+            JSON 响应。
+        """
+        from astrbot.api.web import error_response, json_response, request
+
+        payload = await request.json(default={})
+        platform = str(payload.get("platform") or "").strip()
+        filename = str(payload.get("filename") or "").strip()
+
+        if not platform or not filename:
+            return error_response("缺少 platform 或 filename 参数")
+
+        deleted = self._manager.delete_account(platform, filename)
         if deleted is None:
             return error_response("账号不存在或删除失败")
 
-        name = deleted.get("name") or deleted.get("account") or deleted.get("phone") or "未知"
+        name = (
+            deleted.get("name")
+            or deleted.get("account")
+            or deleted.get("phone")
+            or filename
+        )
         return json_response({"status": "ok", "deleted": name})
 
-    async def get_templates(self):
-        """获取默认模板"""
-        from astrbot.api.web import json_response
-        templates = {}
-        # 从各模块获取默认模板
-        for module in self._manager.get_all_modules():
-            platform = module.module_name
-            default_template = module.get_default_template()
-            if default_template:
-                templates[platform] = default_template
-        return json_response(templates)
-
     async def get_template_vars(self):
-        """获取模板变量定义"""
-        import re
+        """获取各模块的模板变量定义
+
+        变量来源 = 模块声明的变量 + 用户在 Pages 中的自定义配置，
+        因此在 Pages 中新增的变量刷新后不会丢失。
+
+        Returns:
+            JSON 响应，按模块名分组的变量列表。
+        """
         from astrbot.api.web import json_response
-        from .modules.mimo.utils import get_config_value
 
-        # 变量描述映射
-        var_descriptions = {
-            "label": "账号名称",
-            "balance": "余额",
-            "gift_balance": "赠送余额",
-            "input_token": "输入Token（自动格式化）",
-            "output_token": "输出Token（自动格式化）",
-            "cache_token": "缓存Token（自动格式化）",
-            "monthly_cost": "本月费用",
-            "total_cost": "累计费用",
-            "tpm": "TPM 限额",
-            "rpm": "RPM 限额",
-            "concurrency": "并发限额",
-            "month_fee": "当月话费",
-            "arrears": "欠费",
-            "total_used": "本月累计使用",
-            "total": "总流量",
-            "used": "已用流量",
-            "remain": "剩余流量",
-            "query_time": "查询时间",
-            "traffic_detail": "流量详细信息（多行）",
-            "voice_detail": "语音详细信息（多行）",
-        }
+        result: dict[str, dict] = {}
 
-        # 变量默认值
-        var_defaults = {
-            "mimo": {
-                "label": "MiMo账号", "balance": "177.40", "gift_balance": "177.40",
-                "input_token": "10.3亿", "output_token": "324.0万", "cache_token": "9.8亿",
-                "monthly_cost": "120.93", "total_cost": "132.60",
-                "tpm": "10.0万", "rpm": "1,200", "concurrency": "50"
-            },
-            "wasu": {
-                "label": "138****8888", "balance": "¥56.80", "month_fee": "¥38.50",
-                "arrears": "¥0.00", "total_used": "15.62 GB", "total": "30.00 GB",
-                "used": "15.62 GB", "remain": "14.38 GB", "query_time": "2026-08-21 23:00",
-                "traffic_detail": "\n     · 通用流量 结转: 20.00 GB (已用 12.50 GB / 剩 7.50 GB)",
-                "voice_detail": "\n📞 语音: 通话套餐: 300分钟 | 剩余 215分钟"
-            }
-        }
-
-        result = {}
-
-        # 从各模块获取默认模板
-        templates = {}
         for module in self._manager.get_all_modules():
-            platform = module.module_name
-            default_template = module.get_default_template()
-            if default_template:
-                templates[platform] = default_template
-
-        # 处理每个平台的变量
-        for platform, content in templates.items():
-            # 从模板中提取变量名
-            vars_found = re.findall(r"\{(\w+)\}", content)
-            if not vars_found:
+            declared = module.get_var_definitions()
+            if not declared:
                 continue
 
-            platform_defaults = var_defaults.get(platform, {})
+            saved = load_json_file(module.get_config_path() / _VAR_CONFIG_FILE) or {}
+            saved_map = {
+                item["name"]: item
+                for item in (saved.get("variables") or [])
+                if isinstance(item, dict) and item.get("name")
+            }
 
-            # 检查是否有用户自定义配置
-            module = self._manager.get_module(platform)
-            if module:
-                var_config_path = module.get_config_path() / "var_config.json"
-                user_vars = {}
-                if var_config_path.exists():
-                    try:
-                        user_config = json.loads(var_config_path.read_text(encoding="utf-8"))
-                        if user_config and "variables" in user_config:
-                            for v in user_config["variables"]:
-                                user_vars[v["name"]] = v
-                    except (json.JSONDecodeError, OSError):
-                        pass
-
-                vars_list = []
-                for v in dict.fromkeys(vars_found):  # 去重并保持顺序
-                    if v in user_vars:
-                        vars_list.append(user_vars[v])
-                    else:
-                        vars_list.append({
-                            "name": v,
-                            "desc": var_descriptions.get(v, v),
-                            "default": platform_defaults.get(v, ""),
-                            "show": True
-                        })
-
-                result[platform] = {
-                    "variables": vars_list
+            variables = [
+                {
+                    "name": name,
+                    "desc": saved_map.get(name, {}).get("desc") or desc,
+                    "default": saved_map.get(name, {}).get("default", ""),
+                    "show": saved_map.get(name, {}).get("show", True),
                 }
+                for name, desc in declared.items()
+            ]
+
+            # 用户在 Pages 中额外添加的变量也一并保留
+            variables.extend(
+                item for name, item in saved_map.items() if name not in declared
+            )
+
+            result[module.module_name] = {"variables": variables}
 
         return json_response(result)
 
     async def save_template_vars(self):
-        """保存模板变量配置"""
-        from astrbot.api.web import error_response, json_response, request
-        payload = await request.json(default={})
-        if not payload:
-            return error_response("缺少配置数据")
+        """保存指定模块的模板变量配置
 
-        # 按平台分别保存到各自的目录
-        for platform, config_data in payload.items():
-            module = self._manager.get_module(platform)
-            if module:
-                var_config_path = module.get_config_path() / "var_config.json"
-                try:
-                    # 确保目录存在
-                    var_config_path.parent.mkdir(parents=True, exist_ok=True)
-                    var_config_path.write_text(
-                        json.dumps(config_data, ensure_ascii=False, indent=2),
-                        encoding="utf-8"
-                    )
-                except OSError as e:
-                    return error_response(f"保存 {platform} 配置失败: {e}")
+        Returns:
+            JSON 响应。
+        """
+        from astrbot.api.web import error_response, json_response, request
+
+        payload = await request.json(default={})
+        platform = str(payload.get("platform") or "").strip()
+        variables = payload.get("variables")
+
+        module = self._manager.get_module(platform)
+        if not module:
+            return error_response(f"模块 {platform or '(空)'} 未启用")
+
+        if not isinstance(variables, list):
+            return error_response("variables 必须是数组")
+
+        path = module.get_config_path() / _VAR_CONFIG_FILE
+        if not save_json_file(path, {"variables": variables}):
+            return error_response("保存失败")
 
         return json_response({"status": "ok"})
 
     # ══════════════════════════════════════════
-    #  主指令
+    #  指令
     # ══════════════════════════════════════════
 
     @filter.command("query")
     async def query_cmd(self, event: AstrMessageEvent):
-        """/query — 资源查询主指令"""
-        args = event.get_message_str().strip().split()
+        """/query — 显示帮助，或分发 /query <模块名>
 
-        if len(args) == 1:
-            # 显示帮助信息
-            version = _get_plugin_version()
-            help_text = f"📊 资源查询插件 v{version}（模块化架构）\n"
-            help_text += "────────────────\n"
-            help_text += "用法:\n"
+        Args:
+            event: 消息事件。
 
-            # 动态生成各模块的帮助信息
-            for module in self._manager.get_all_modules():
-                commands = module.get_commands()
-                for cmd in commands:
-                    help_text += f"  /{cmd['name']} — {cmd['desc']}\n"
+        Yields:
+            消息结果。
+        """
+        args = self._parse_args(event, "query")
 
-            help_text += "  /query update — 更新插件"
-            yield event.plain_result(help_text)
+        if not args:
+            yield event.plain_result(self._help_text())
             return
 
-        platform = args[1].lower()
+        name = args[0].lower()
+        module = self._manager.get_module(name)
 
-        if platform == "update":
-            yield event.plain_result("正在检查更新...")
-            async for r in self._handle_update(event):
-                yield r
-        else:
-            # 检查是否有对应的模块
-            module = self._manager.get_module(platform)
-            if module:
-                # 委托给模块处理
-                async for result in module.handle_command(platform, args[2:], event):
-                    yield result
-            else:
-                supported = ", ".join(self._manager.get_module_names())
-                yield event.plain_result(f"❌ 未知平台: {platform}\n支持: {supported}")
+        if not module:
+            enabled = "、".join(self._manager.get_module_names()) or "（无）"
+            yield event.plain_result(f"❌ 未知功能: {name}\n已启用: {enabled}")
+            return
 
-    # ══════════════════════════════════════════
-    #  MiMo 指令
-    # ══════════════════════════════════════════
+        async for result in module.handle_command(name, args[1:], event):
+            yield result
 
     @filter.command("mimo")
     async def mimo_cmd(self, event: AstrMessageEvent):
         """/mimo — MiMo 查询指令"""
-        args = event.get_message_str().strip().split()
-        # 移除指令名本身
-        if args and args[0].lower() == "mimo":
-            args = args[1:]
-
-        # 委托给 MiMo 模块处理
-        mimo_module = self._manager.get_module("mimo")
-        if mimo_module:
-            async for result in mimo_module.handle_command("mimo", args, event):
-                yield result
-        else:
-            yield event.plain_result("❌ MiMo 模块未加载")
-
-    # ══════════════════════════════════════════
-    #  华数指令
-    # ══════════════════════════════════════════
+        async for result in self._dispatch("mimo", event):
+            yield result
 
     @filter.command("wasu")
     async def wasu_cmd(self, event: AstrMessageEvent):
         """/wasu — 华数广电查询指令"""
-        args = event.get_message_str().strip().split()
-        # 移除指令名本身
-        if args and args[0].lower() == "wasu":
-            args = args[1:]
+        async for result in self._dispatch("wasu", event):
+            yield result
 
-        # 委托给华数模块处理
-        wasu_module = self._manager.get_module("wasu")
-        if wasu_module:
-            async for result in wasu_module.handle_command("wasu", args, event):
-                yield result
-        else:
-            yield event.plain_result("❌ 华数广电模块未加载")
+    @filter.command("jm", alias={"JM", "Jm", "jM"})
+    async def jm_cmd(self, event: AstrMessageEvent):
+        """/jm — JMComic 漫画下载指令"""
+        async for result in self._dispatch("jm", event):
+            yield result
 
-    # ══════════════════════════════════════════
-    #  JM 指令
-    # ══════════════════════════════════════════
+    async def _dispatch(self, name: str, event: AstrMessageEvent):
+        """把指令分发到指定模块
 
-    @filter.command("jm", alias={"JM", "Jm", "jM"}, desc="下载 JMComic 漫画 PDF：/jm <数字ID> [redownload]")
-    async def jm_command(self, event: AstrMessageEvent, jm_id: str = "", option: str = ""):
-        """/jm — 下载 JMComic 漫画（仅私聊）"""
-        # 委托给 JM 模块处理
-        jm_module = self._manager.get_module("jm")
-        if jm_module:
-            args = []
-            if jm_id:
-                args.append(jm_id)
-            if option:
-                args.append(option)
-            async for result in jm_module.handle_command("jm", args, event):
-                yield result
-        else:
-            yield event.plain_result("❌ JMComic 模块未加载")
+        Args:
+            name: 模块名称。
+            event: 消息事件。
 
-    # ══════════════════════════════════════════
-    #  更新
-    # ══════════════════════════════════════════
-
-    async def _handle_update(self, event: AstrMessageEvent):
-        """处理更新命令（始终执行更新）"""
-        check = await check_update(self.config, force=True)
-        if check.get("error"):
-            yield event.plain_result(f"检查更新失败: {check['error']}")
+        Yields:
+            模块返回的消息结果。
+        """
+        module = self._manager.get_module(name)
+        if not module:
+            yield event.plain_result(f"❌ 模块「{name}」未启用")
             return
 
-        yield event.plain_result(f"当前版本 v{check['current']}，正在重新安装...")
-        result = await do_update(self.config)
-        if "✅" in result:
-            reload_result = await reload_plugin(self.context)
-            yield event.plain_result(f"{result}\n{reload_result}")
-        else:
-            yield event.plain_result(result)
+        args = self._parse_args(event, name)
+        async for result in module.handle_command(name, args, event):
+            yield result
+
+    @staticmethod
+    def _parse_args(event: AstrMessageEvent, command: str) -> list[str]:
+        """解析指令参数
+
+        AstrBot 的唤醒检查会剥离唤醒前缀，因此这里只需去掉指令名本身。
+
+        Args:
+            event: 消息事件。
+            command: 指令名称。
+
+        Returns:
+            参数列表。
+        """
+        parts = event.get_message_str().strip().split()
+
+        if parts and parts[0].lower() == command.lower():
+            parts = parts[1:]
+
+        return parts
+
+    def _help_text(self) -> str:
+        """生成帮助文本
+
+        Returns:
+            帮助信息文本。
+        """
+        lines = [
+            f"📊 资源查询插件 v{get_current_version()}",
+            "────────────────",
+            "用法:",
+        ]
+
+        for module in self._manager.get_all_modules():
+            for cmd in module.get_commands():
+                lines.append(f"  /{cmd['name']} — {cmd['desc']}")
+
+        return "\n".join(lines)

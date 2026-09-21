@@ -58,10 +58,29 @@ class MimoManager:
           1. 账号密码 → PassToken + User ID
           2. PassToken → ServiceToken
 
+        Args:
+            acc: 账号配置。
+            otp_code: OTP 验证码（可选）。
+
         Returns:
-            dict: {"userId", "passToken", "serviceToken"}
+            dict: {"account", "password", "userId", "passToken", "serviceToken"}
         """
         return self._sync_login_account(acc, otp_code)
+
+    async def login_account_async(self, acc: dict, otp_code: str | None = None) -> dict:
+        """异步：完整登录流程（丢到线程池，避免阻塞事件循环）
+
+        Args:
+            acc: 账号配置。
+            otp_code: OTP 验证码（可选）。
+
+        Returns:
+            登录后的凭据字典。
+        """
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            None, lambda: self.login_account(acc, otp_code)
+        )
 
     def _create_mi_account(self, acc: dict) -> MiAccount:
         """创建或获取缓存的 MiAccount 实例
@@ -333,6 +352,8 @@ class MimoManager:
 
         acc = await self.re_login_account(acc)
         if acc.get("serviceToken"):
+            # 重新登录可能刷新了 userId，重试时必须使用最新凭据
+            user_id = acc.get("userId") or user_id
             results = await query_mimo(
                 acc["serviceToken"],
                 user_id,

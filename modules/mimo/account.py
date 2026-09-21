@@ -17,12 +17,12 @@ from urllib.request import Request
 
 from ...http_utils import inject_cookie, new_opener, parse_resp
 from .exceptions import LoginError, OtpRequired, PassTokenExpired, StsError
-from .utils import get_config_value
+from .utils import get_default_ua
 
 logger = logging.getLogger(__name__)
 
-# User-Agent（从 YAML 配置读取，登录、OTP 验证、查询共用）
-_DEFAULT_UA = get_config_value("device.default_ua", "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148")
+# User-Agent（来自模块默认配置，登录、OTP 验证、查询共用）
+_DEFAULT_UA = get_default_ua()
 
 # API 基础地址
 _ACCOUNT_BASE = "https://account.xiaomi.com"

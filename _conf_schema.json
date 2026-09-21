@@ -1,38 +1,33 @@
 {
     "modules": {
-        "description": "模块启用设置",
+        "description": "功能模块开关",
         "type": "object",
+        "hint": "关闭的模块不会加载，其指令与配置页同时隐藏；模块自身的配置在插件 Pages 页面中管理",
         "items": {
             "mimo_enabled": {
-                "description": "启用 MiMo 模块",
+                "description": "启用 MiMo 查询",
                 "type": "bool",
                 "default": true,
-                "hint": "小米 MiMo 平台用量查询功能"
+                "hint": "小米 MiMo 平台余额与用量查询"
             },
             "wasu_enabled": {
-                "description": "启用华数模块",
+                "description": "启用华数查询",
                 "type": "bool",
                 "default": true,
-                "hint": "华数广电流量/话费查询功能"
+                "hint": "华数广电流量 / 话费 / 余量查询"
             },
             "jm_enabled": {
-                "description": "启用 JM 模块",
+                "description": "启用 JM 下载",
                 "type": "bool",
                 "default": true,
-                "hint": "JMComic 漫画下载功能"
+                "hint": "JMComic 漫画下载（仅私聊）"
+            },
+            "update_enabled": {
+                "description": "启用插件更新",
+                "type": "bool",
+                "default": true,
+                "hint": "通过 /query update 检查并更新插件自身"
             }
         }
-    },
-    "proxy": {
-        "description": "GitHub 更新代理",
-        "type": "string",
-        "default": "https://gh-proxy.cn/",
-        "hint": "用于 GitHub 更新请求的代理地址，留空禁用代理"
-    },
-    "update_max_retries": {
-        "description": "更新最大重试次数",
-        "type": "int",
-        "default": 3,
-        "hint": "自动更新时网络请求失败的重试次数"
     }
 }

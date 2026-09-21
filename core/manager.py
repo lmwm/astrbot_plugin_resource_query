@@ -1,37 +1,34 @@
-"""总管理器基类
+"""总管理器
 
-负责协调模块与 AstrBot 之间的通信。
+协调各功能模块与 AstrBot 之间的通信：负责模块注册、账号汇总、
+Pages schema 汇总与跨模块查询转发。
 
-设计原则：
-1. 统一入口：所有 AstrBot 的请求通过总管理器分发
-2. 模块协调：总管理器协调模块之间的通信
-3. 配置管理：总管理器管理全局配置，模块配置由模块自治
+模块之间通过注册中心按名称取用，不直接互相依赖。
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
 
 from .module import ModuleBase
 from .registry import ModuleRegistry
 
 
 class PluginManager:
-    """总管理器基类
-
-    协调模块与 AstrBot 之间的通信。
+    """总管理器
 
     Attributes:
-        plugin_name: 插件名称
-        plugin_dir: 插件目录路径
-        registry: 模块注册中心
+        plugin_name: 插件名称。
+        plugin_dir: 插件目录路径。
+        registry: 模块注册中心。
     """
 
-    def __init__(self, plugin_name: str, plugin_dir: Path):
+    def __init__(self, plugin_name: str, plugin_dir: Path) -> None:
         """初始化总管理器
 
         Args:
-            plugin_name: 插件名称
-            plugin_dir: 插件目录路径
+            plugin_name: 插件名称。
+            plugin_dir: 插件目录路径。
         """
         self._plugin_name = plugin_name
         self._plugin_dir = plugin_dir
@@ -53,17 +50,17 @@ class PluginManager:
         return self._registry
 
     # ══════════════════════════════════════════
-    #  模块管理
+    #  模块注册与访问
     # ══════════════════════════════════════════
 
     def register_module(self, module: ModuleBase) -> bool:
         """注册模块
 
         Args:
-            module: 要注册的模块实例
+            module: 模块实例。
 
         Returns:
-            是否注册成功
+            是否注册成功；模块名重复时返回 False。
         """
         return self._registry.register(module)
 
@@ -71,192 +68,102 @@ class PluginManager:
         """获取模块实例
 
         Args:
-            module_name: 模块名称
+            module_name: 模块名称。
 
         Returns:
-            模块实例，如果不存在则返回 None
+            模块实例；不存在时返回 None。
         """
         return self._registry.get_module(module_name)
 
     def get_all_modules(self) -> list[ModuleBase]:
-        """获取所有已注册的模块
+        """获取全部已注册模块
 
         Returns:
-            模块实例列表
+            模块实例列表（按注册顺序）。
         """
         return self._registry.get_all_modules()
 
     def get_module_names(self) -> list[str]:
-        """获取所有已注册的模块名称
+        """获取全部已注册模块名称
 
         Returns:
-            模块名称列表
+            模块名称列表。
         """
         return self._registry.get_module_names()
 
-    # ══════════════════════════════════════════
-    #  查询接口
-    # ══════════════════════════════════════════
-
-    async def query_module(self, module_name: str, account: dict) -> dict:
-        """查询指定模块的账号
+    def has_module(self, module_name: str) -> bool:
+        """判断模块是否已注册
 
         Args:
-            module_name: 模块名称
-            account: 账号配置
+            module_name: 模块名称。
 
         Returns:
-            查询结果
+            是否已注册。
         """
-        module = self.get_module(module_name)
-        if not module:
-            return {
-                "success": False,
-                "error": f"模块 {module_name} 不存在"
-            }
-
-        return await module.query(account)
-
-    async def query_all_module(self, module_name: str) -> list[dict]:
-        """查询指定模块的所有账号
-
-        Args:
-            module_name: 模块名称
-
-        Returns:
-            查询结果列表
-        """
-        module = self.get_module(module_name)
-        if not module:
-            return [{
-                "success": False,
-                "error": f"模块 {module_name} 不存在"
-            }]
-
-        return await module.query_all()
-
-    async def query_all(self) -> dict[str, list[dict]]:
-        """查询所有模块的所有账号
-
-        Returns:
-            按模块分组的查询结果
-        """
-        results = {}
-        for module in self.get_all_modules():
-            results[module.module_name] = await module.query_all()
-        return results
+        return self._registry.has_module(module_name)
 
     # ══════════════════════════════════════════
-    #  账号管理接口
+    #  账号汇总
     # ══════════════════════════════════════════
 
     def get_all_accounts(self) -> list[dict]:
-        """获取所有模块的所有账号
+        """汇总所有模块的账号
 
         Returns:
-            账号配置列表（包含 platform 字段）
+            账号列表；每项带 platform 字段标识所属模块。
         """
-        accounts = []
+        accounts: list[dict] = []
+
         for module in self.get_all_modules():
-            module_accounts = module.get_accounts()
-            accounts.extend(module_accounts)
+            for acc in module.get_accounts():
+                acc["platform"] = module.module_name
+                accounts.append(acc)
+
         return accounts
 
-    def get_accounts_by_module(self, module_name: str) -> list[dict]:
-        """获取指定模块的所有账号
-
-        Args:
-            module_name: 模块名称
-
-        Returns:
-            账号配置列表
-        """
-        module = self.get_module(module_name)
-        if not module:
-            return []
-        return module.get_accounts()
-
-    def delete_account(self, module_name: str, index: int) -> dict | None:
+    def delete_account(self, module_name: str, filename: str) -> dict | None:
         """删除指定模块的指定账号
 
         Args:
-            module_name: 模块名称
-            index: 账号索引（从 0 开始）
+            module_name: 模块名称。
+            filename: 账号配置文件名。
 
         Returns:
-            被删除的账号，如果模块不存在或索引无效则返回 None
+            被删除的账号数据；模块或账号不存在时返回 None。
         """
         module = self.get_module(module_name)
         if not module:
             return None
-        return module.delete_account(index)
+        return module.delete_account(filename)
 
     # ══════════════════════════════════════════
-    #  Web API 管理
+    #  Pages 支持
     # ══════════════════════════════════════════
 
-    def get_all_web_apis(self) -> list[dict]:
-        """获取所有模块提供的 Web API 列表
+    def get_page_schemas(self) -> list[dict]:
+        """汇总各模块的 Pages 描述
 
         Returns:
-            API 定义列表，每个 API 包含：
-            - module: str, 所属模块名称
-            - path: str, 完整 API 路径
-            - handler: Callable, 处理函数
-            - methods: list[str], HTTP 方法
-            - desc: str, API 描述
+            模块 schema 列表，供前端通用渲染配置页。
         """
-        apis = []
-        for module in self.get_all_modules():
-            module_apis = module.get_web_apis()
-            for api in module_apis:
-                api["module"] = module.module_name
-                # 添加模块前缀到路径
-                if not api["path"].startswith("/"):
-                    api["path"] = f"/{module.module_name}/{api['path']}"
-                apis.append(api)
-        return apis
+        return [module.get_page_schema() for module in self.get_all_modules()]
 
     # ══════════════════════════════════════════
-    #  指令管理
+    #  查询转发
     # ══════════════════════════════════════════
 
-    def get_all_commands(self) -> list[dict]:
-        """获取所有模块提供的指令列表
-
-        Returns:
-            指令定义列表
-        """
-        commands = []
-        for module in self.get_all_modules():
-            module_commands = module.get_commands()
-            for cmd in module_commands:
-                cmd["module"] = module.module_name
-                commands.append(cmd)
-        return commands
-
-    async def handle_command(
-        self,
-        module_name: str,
-        command: str,
-        args: list[str],
-        event: Any
-    ) -> Any:
-        """处理指令
+    async def query_module(self, module_name: str, account: dict) -> dict:
+        """查询指定模块的单个账号
 
         Args:
-            module_name: 模块名称
-            command: 指令名称
-            args: 指令参数
-            event: AstrBot 事件对象
+            module_name: 模块名称。
+            account: 账号配置。
 
         Returns:
-            处理结果（生成器）
+            查询结果字典。
         """
         module = self.get_module(module_name)
         if not module:
-            yield f"❌ 模块 {module_name} 不存在"
-            return
+            return {"success": False, "account_name": "", "error": f"模块 {module_name} 不存在"}
 
-        async for result in module.handle_command(command, args, event):
-            yield result
+        return await module.query(account)

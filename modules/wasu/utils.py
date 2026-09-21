@@ -1,238 +1,58 @@
-"""华数广电平台工具函数"""
+"""华数广电模块工具与默认配置
 
-import re
+默认值统一来自 `modules/wasu/config.yaml`（只读）。
+"""
+
+from __future__ import annotations
+
 from pathlib import Path
 
-# 获取当前模块目录
+from ...common.yaml_utils import get_config_value, load_yaml_config
+
 _MODULE_DIR = Path(__file__).parent
+_CONFIG_FILE = _MODULE_DIR / "config.yaml"
 
-# YAML 配置缓存
-_yaml_config_cache: dict | None = None
+# config.yaml 缺失时的兜底模板
+_FALLBACK_TEMPLATE = "{label}\n  余额: {balance}\n  当月话费: {month_fee}"
 
 
-def _convert_value(value: str):
-    """将 YAML 值字符串转换为合适的 Python 类型
+def _config() -> dict:
+    """加载模块 YAML 配置（结果带缓存）
+
+    Returns:
+        配置字典。
+    """
+    return load_yaml_config(_CONFIG_FILE)
+
+
+def get_default_template() -> str:
+    """获取默认消息模板
+
+    Returns:
+        默认模板文本。
+    """
+    return get_config_value(_config(), "template.default", _FALLBACK_TEMPLATE)
+
+
+def fmt_gb(value) -> str:
+    """把接口返回的 KB 数值格式化为 GB 字符串
 
     Args:
-        value: YAML 值字符串
+        value: KB 数值。
 
     Returns:
-        转换后的值（int、float、bool、None 或 str）
+        形如 "15.62 GB" 的字符串。
     """
-    if not value:
-        return ""
-    # 布尔值
-    if value.lower() in ("true", "yes", "on"):
-        return True
-    if value.lower() in ("false", "no", "off"):
-        return False
-    # null
-    if value.lower() in ("null", "~"):
-        return None
-    # 整数
-    try:
-        return int(value)
-    except ValueError:
-        pass
-    # 浮点数
-    try:
-        return float(value)
-    except ValueError:
-        pass
-    return value
+    return f"{int(value or 0) / 1024 / 1024:.2f} GB"
 
 
-def _parse_yaml_simple(text: str) -> dict:
-    """简单的 YAML 解析器（支持基本的键值对、嵌套和块标量）
-
-    支持 |- / |+ / > 等块标量指示符。
+def fmt_yuan(value) -> str:
+    """把接口返回的「分」格式化为「元」字符串
 
     Args:
-        text: YAML 文本内容
+        value: 以分为单位的金额。
 
     Returns:
-        解析后的字典
+        形如 "¥56.80" 的字符串。
     """
-    result = {}
-    current_section = None
-    current_subsection = None
-    base_indent = 0
-
-    lines = text.split("\n")
-    i = 0
-    while i < len(lines):
-        line = lines[i]
-        # 跳过空行和注释
-        stripped = line.strip()
-        if not stripped or stripped.startswith("#"):
-            i += 1
-            continue
-
-        # 计算缩进级别
-        indent = len(line) - len(line.lstrip())
-
-        # 解析键值对（只在当前缩进级别解析）
-        match = re.match(r"^(\w+):\s*(.*)?$", stripped)
-        if match:
-            key = match.group(1)
-            value = match.group(2).strip() if match.group(2) else ""
-
-            # 顶层键（缩进为0）
-            if indent == 0:
-                base_indent = 0
-                current_section = key
-                current_subsection = None
-
-                if value:
-                    # 移除引号
-                    if (value.startswith('"') and value.endswith('"')) or \
-                       (value.startswith("'") and value.endswith("'")):
-                        value = value[1:-1]
-                    result[key] = _convert_value(value)
-                else:
-                    result[key] = {}
-                i += 1
-                continue
-
-            # 子键（缩进大于0）
-            if current_section and indent > base_indent:
-                # 处理多行字符串（支持 |、|-、|+、>、>-、>+）
-                if value and re.match(r'^[|>][+-]?$', value):
-                    current_subsection = key
-                    block_lines = []
-                    # 记录块内容的基准缩进（取后续第一行的缩进）
-                    block_base_indent = None
-                    i += 1
-                    while i < len(lines):
-                        bline = lines[i]
-                        bstripped = bline.strip()
-                        # 空行保留
-                        if not bstripped:
-                            block_lines.append("")
-                            i += 1
-                            continue
-                        bindent = len(bline) - len(bline.lstrip())
-                        # 如果缩进小于等于父级键的缩进，块结束
-                        if bindent <= indent:
-                            break
-                        if block_base_indent is None:
-                            block_base_indent = bindent
-                        # 去掉块基准缩进
-                        content = bline[block_base_indent:] if block_base_indent else bstripped
-                        block_lines.append(content)
-                        i += 1
-                    # 根据块标量类型决定连接方式
-                    if value.startswith(">"):
-                        # 折叠模式：空行分段，非空行用空格连接
-                        paragraphs = []
-                        current_para = []
-                        for bl in block_lines:
-                            if bl == "":
-                                if current_para:
-                                    paragraphs.append(" ".join(current_para))
-                                    current_para = []
-                            else:
-                                current_para.append(bl)
-                        if current_para:
-                            paragraphs.append(" ".join(current_para))
-                        result[current_section][key] = "\n".join(paragraphs)
-                    else:
-                        # 字面模式（|）：保留换行
-                        result[current_section][key] = "\n".join(block_lines)
-                    # 不递增 i，while 循环已经推进到了块结束位置
-                    continue
-
-                if value:
-                    # 移除引号
-                    if (value.startswith('"') and value.endswith('"')) or \
-                       (value.startswith("'") and value.endswith("'")):
-                        value = value[1:-1]
-                    result[current_section][key] = _convert_value(value)
-                else:
-                    current_subsection = key
-                    result[current_section][key] = {}
-
-        # 处理多行字符串内容（兼容旧的无块标量写法）
-        elif current_subsection and current_section:
-            if isinstance(result[current_section].get(current_subsection), str):
-                if result[current_section][current_subsection]:
-                    result[current_section][current_subsection] += "\n"
-                result[current_section][current_subsection] += stripped
-
-        i += 1
-
-    return result
-
-
-def load_yaml_config() -> dict:
-    """加载 YAML 配置文件
-
-    Returns:
-        配置字典
-    """
-    global _yaml_config_cache
-
-    if _yaml_config_cache is not None:
-        return _yaml_config_cache
-
-    yaml_path = _MODULE_DIR / "config.yaml"
-    if yaml_path.exists():
-        try:
-            content = yaml_path.read_text(encoding="utf-8")
-            _yaml_config_cache = _parse_yaml_simple(content)
-            return _yaml_config_cache
-        except (OSError, Exception):
-            pass
-
-    # 返回默认配置
-    _yaml_config_cache = {
-        "platform": {"name": "wasu", "display_name": "华数广电"},
-        "template": {
-            "default": "{label}\n────────────────\n账户余额: {balance}\n   当月话费: {month_fee}\n   欠费: {arrears}\n\n本月累计使用: {total_used}\n   总流量: {total} | 已用: {used} | 剩余: {remain}\n\n查询时间: {query_time}"
-        },
-    }
-    return _yaml_config_cache
-
-
-def get_config_value(key_path: str, default=None):
-    """获取配置值
-
-    Args:
-        key_path: 配置路径，如 "api.base_url" 或 "template.default"
-        default: 默认值
-
-    Returns:
-        配置值
-    """
-    config = load_yaml_config()
-    keys = key_path.split(".")
-    value = config
-
-    for key in keys:
-        if isinstance(value, dict) and key in value:
-            value = value[key]
-        else:
-            return default
-
-    return value
-
-
-def load_default_template() -> str:
-    """加载默认模板，优先从 YAML 配置读取"""
-    # 优先从 YAML 配置读取
-    template = get_config_value("template.default")
-    if template:
-        return template
-
-    # 兜底内置模板（最小化，仅包含必要字段）
-    return "{label}\n  余额: {balance}\n  话费: {month_fee}"
-
-
-def fmt_gb(val) -> str:
-    """格式化流量为 GB"""
-    return f"{int(val) / 1024 / 1024:.2f} GB"
-
-
-def fmt_yuan(val) -> str:
-    """格式化金额为元"""
-    return f"¥{int(val) / 100:.2f}"
+    return f"¥{int(value or 0) / 100:.2f}"
