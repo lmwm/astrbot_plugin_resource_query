@@ -144,7 +144,7 @@ class DemoModule(ModuleBase):
 
     @property
     def module_icon(self) -> str:
-        return "🧩"
+        return "▧"
 
     def get_config_fields(self) -> list[dict]:
         return [{"key": "api_key", "label": "接口密钥", "type": "password"}]
