@@ -39,7 +39,6 @@ def pick_display_name(oname: str, fallback: str) -> str:
 
 # config.yaml 缺失时的兜底默认值
 _FALLBACK_DEFAULTS: dict = {
-    "jm_enabled": True,
     "jm_send_file": True,
     "jm_show_info": False,
     "jm_info_after_download": False,
@@ -56,7 +55,6 @@ _FALLBACK_DEFAULTS: dict = {
 
 # config.yaml 缺失时的兜底字段定义
 _FALLBACK_FIELDS: list[dict] = [
-    {"key": "jm_enabled", "label": "启用下载功能", "type": "bool"},
     {"key": "jm_send_file", "label": "下载后发送 PDF", "type": "bool"},
     {"key": "jm_show_info", "label": "发送漫画信息", "type": "bool"},
     {"key": "jm_info_after_download", "label": "详情在下载完成后发送", "type": "bool"},

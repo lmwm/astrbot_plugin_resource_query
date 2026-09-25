@@ -137,12 +137,6 @@ class JMModule(ModuleBase):
         if command != "jm":
             return
 
-        config = self.load_module_config()
-
-        if not config.get("jm_enabled", True):
-            yield event.plain_result("JM 下载功能已关闭，请在网页管理界面启用")
-            return
-
         if event.get_group_id():
             yield event.plain_result("JM 下载仅支持私聊使用，请私聊发送指令")
             return

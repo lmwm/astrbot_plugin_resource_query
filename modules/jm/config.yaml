@@ -8,8 +8,7 @@
 #  默认值
 # ══════════════════════════════════════════
 defaults:
-  # 功能开关
-  jm_enabled: true
+  # 功能开关（模块总开关由 AstrBot 原生配置 modules.jm_enabled 控制，此处不再提供）
   jm_send_file: true
   jm_show_info: false
   jm_info_after_download: false
@@ -33,11 +32,6 @@ defaults:
 #  Pages 配置项定义（顺序即显示顺序）
 # ══════════════════════════════════════════
 fields:
-  jm_enabled:
-    label: 启用下载功能
-    type: bool
-    hint: 关闭后 /jm 指令不可用
-
   jm_send_file:
     label: 下载后发送 PDF
     type: bool
