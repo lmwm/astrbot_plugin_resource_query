@@ -181,7 +181,7 @@ _MODULE_CLASSES = {
     "wasu": WasuModule,
     "jm": JMModule,
     "update": UpdateModule,
-    "demo": DemoModule,      # 新增
+    "demo": DemoModule,  # 新增
 }
 ```
 
