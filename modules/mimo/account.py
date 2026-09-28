@@ -253,7 +253,9 @@ class MiAccount:
 
         # Step 1: 打开 notificationUrl 建立验证会话
         try:
-            with opener.open(Request(notification_url, headers=headers), timeout=15) as r:
+            with opener.open(
+                Request(notification_url, headers=headers), timeout=15
+            ) as r:
                 r.read()
         except HTTPError as e:
             if e.code == 401:
@@ -278,7 +280,9 @@ class MiAccount:
         method = "Email" if flag == 8 else "Phone"
 
         # Step 3: 触发 OTP 发送
-        verify_url = f"{self.account_base}/identity/auth/verify{method}?_flag={flag}&_json=true"
+        verify_url = (
+            f"{self.account_base}/identity/auth/verify{method}?_flag={flag}&_json=true"
+        )
         try:
             with opener.open(Request(verify_url, headers=headers), timeout=15) as r:
                 tresp = parse_resp(r.read())
@@ -339,12 +343,14 @@ class MiAccount:
         method = "Email" if flag == 8 else "Phone"
 
         # 提交 OTP 码
-        body = urlencode({
-            "_flag": str(flag),
-            "ticket": code.strip(),
-            "trust": "false",
-            "_json": "true",
-        }).encode()
+        body = urlencode(
+            {
+                "_flag": str(flag),
+                "ticket": code.strip(),
+                "trust": "false",
+                "_json": "true",
+            }
+        ).encode()
         req = Request(
             f"{self.account_base}/identity/auth/verify{method}?_dc={int(time.time() * 1000)}",
             data=body,
@@ -390,7 +396,9 @@ class MiAccount:
         nsec = f"nonce={nonce}&{ssecurity}"
         sign = base64.b64encode(hashlib.sha1(nsec.encode()).digest()).decode()
         sts_url = f"{location}&clientSign={quote(sign)}"
-        with opener.open(Request(sts_url, headers={"User-Agent": self.ua}), timeout=15) as r:
+        with opener.open(
+            Request(sts_url, headers={"User-Agent": self.ua}), timeout=15
+        ) as r:
             r.read()
         for c in jar:
             if "serviceToken" in c.name:

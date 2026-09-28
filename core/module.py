@@ -400,15 +400,19 @@ class ModuleBase(ABC):
         results: list[dict] = []
 
         for acc in self.get_accounts():
-            label = acc.get("name") or acc.get("account") or acc.get("phone") or "未命名"
+            label = (
+                acc.get("name") or acc.get("account") or acc.get("phone") or "未命名"
+            )
             try:
                 results.append(await self.query(acc))
             except Exception as e:
-                results.append({
-                    "success": False,
-                    "account_name": label,
-                    "error": f"{type(e).__name__}: {e}",
-                })
+                results.append(
+                    {
+                        "success": False,
+                        "account_name": label,
+                        "error": f"{type(e).__name__}: {e}",
+                    }
+                )
 
         return results
 
@@ -418,7 +422,7 @@ class ModuleBase(ABC):
         Returns:
             QueryResult 子类；返回 None 表示使用默认文本输出。
         """
-        return None
+        return
 
     def render(self, result: dict) -> str:
         """把 query() 的返回值渲染为可直接发送的文本
@@ -506,5 +510,7 @@ class ModuleBase(ABC):
             "account_fields": self.get_account_fields(),
             "account_groups": self.get_account_groups(),
             "variables": self.get_var_definitions(),
-            "default_template": self.get_default_template() if self.supports_template else "",
+            "default_template": self.get_default_template()
+            if self.supports_template
+            else "",
         }

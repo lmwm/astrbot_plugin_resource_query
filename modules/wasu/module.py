@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-from pathlib import Path
 from urllib.request import Request
 
 from ...core.module import ModuleBase
@@ -297,13 +296,15 @@ class WasuModule(ModuleBase):
             high = int(r.get("HIGH_FEE", 0) or 0)
             remain = int(r.get("BALANCE", 0) or 0)
             name = str(r.get("DISCNT_NAME", ""))
-            items.append({
-                "name": name,
-                "total": fmt_gb(high),
-                "used": fmt_gb(high - remain),
-                "remain": fmt_gb(remain),
-                "is_carry": "结转" in name,
-            })
+            items.append(
+                {
+                    "name": name,
+                    "total": fmt_gb(high),
+                    "used": fmt_gb(high - remain),
+                    "remain": fmt_gb(remain),
+                    "is_carry": "结转" in name,
+                }
+            )
 
         voice = [
             {
@@ -437,7 +438,9 @@ class WasuModule(ModuleBase):
                 break
 
         if not account:
-            yield event.plain_result(f"× 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号")
+            yield event.plain_result(
+                f"× 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号"
+            )
             return
 
         yield event.plain_result("正在查询...")
@@ -454,9 +457,24 @@ class WasuModule(ModuleBase):
             接口定义列表。
         """
         return [
-            {"path": "config", "handler": self._api_get_config, "methods": ["GET"], "desc": "获取模块配置"},
-            {"path": "config", "handler": self._api_save_config, "methods": ["POST"], "desc": "保存模块配置"},
-            {"path": "test", "handler": self._api_test, "methods": ["POST"], "desc": "测试凭据是否可用"},
+            {
+                "path": "config",
+                "handler": self._api_get_config,
+                "methods": ["GET"],
+                "desc": "获取模块配置",
+            },
+            {
+                "path": "config",
+                "handler": self._api_save_config,
+                "methods": ["POST"],
+                "desc": "保存模块配置",
+            },
+            {
+                "path": "test",
+                "handler": self._api_test,
+                "methods": ["POST"],
+                "desc": "测试凭据是否可用",
+            },
         ]
 
     async def _api_test(self):
@@ -474,10 +492,12 @@ class WasuModule(ModuleBase):
         result = await self.query(payload)
 
         if not result.get("success"):
-            return json_response({
-                "status": "error",
-                "message": result.get("error", "查询失败"),
-            })
+            return json_response(
+                {
+                    "status": "error",
+                    "message": result.get("error", "查询失败"),
+                }
+            )
 
         return json_response({"status": "ok", "message": "凭据有效"})
 

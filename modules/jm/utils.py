@@ -37,6 +37,7 @@ def pick_display_name(oname: str, fallback: str) -> str:
 
     return str(fallback or "").strip()
 
+
 # config.yaml 缺失时的兜底默认值
 _FALLBACK_DEFAULTS: dict = {
     "jm_send_file": True,

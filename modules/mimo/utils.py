@@ -15,7 +15,9 @@ _CONFIG_FILE = _MODULE_DIR / "config.yaml"
 
 # config.yaml 缺失时的兜底值
 _FALLBACK_DEVICE_ID = "wb_MIQUERY000001"
-_FALLBACK_UA = "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv)"
+_FALLBACK_UA = (
+    "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv)"
+)
 _FALLBACK_TEMPLATE = "{label}\n  余额: {balance}元\n  赠送: {gift_balance}元"
 
 

@@ -278,7 +278,9 @@ class JMModule(ModuleBase):
             return
 
         try:
-            yield event.chain_result([File(name=pdf_name or "comic.pdf", file=pdf_path)])
+            yield event.chain_result(
+                [File(name=pdf_name or "comic.pdf", file=pdf_path)]
+            )
         except Exception as e:
             yield event.plain_result(f"× 发送失败: {e}")
 
@@ -298,11 +300,13 @@ class JMModule(ModuleBase):
         """
         author = str(getattr(info, "author", "") or "").strip() or "未知"
 
-        return "\n".join([
-            f"I  D：{album_id}",
-            f"标题：{JMModule._message_title(info)}",
-            f"作者：{author}",
-        ])
+        return "\n".join(
+            [
+                f"I  D：{album_id}",
+                f"标题：{JMModule._message_title(info)}",
+                f"作者：{author}",
+            ]
+        )
 
     @staticmethod
     def _message_title(info) -> str:
@@ -342,7 +346,9 @@ class JMModule(ModuleBase):
         Returns:
             asyncio.Semaphore 实例。
         """
-        limit = max(1, _to_int(self.load_module_config().get("jm_max_concurrent", 1), 1))
+        limit = max(
+            1, _to_int(self.load_module_config().get("jm_max_concurrent", 1), 1)
+        )
 
         if self._semaphore is None or self._semaphore_limit != limit:
             self._semaphore = asyncio.Semaphore(limit)
@@ -361,8 +367,18 @@ class JMModule(ModuleBase):
             接口定义列表。
         """
         return [
-            {"path": "config", "handler": self._api_get_config, "methods": ["GET"], "desc": "获取下载配置"},
-            {"path": "config", "handler": self._api_save_config, "methods": ["POST"], "desc": "保存下载配置"},
+            {
+                "path": "config",
+                "handler": self._api_get_config,
+                "methods": ["GET"],
+                "desc": "获取下载配置",
+            },
+            {
+                "path": "config",
+                "handler": self._api_save_config,
+                "methods": ["POST"],
+                "desc": "保存下载配置",
+            },
         ]
 
     async def _api_get_config(self):

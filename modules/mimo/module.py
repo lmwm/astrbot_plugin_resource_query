@@ -50,11 +50,35 @@ _ACCOUNT_GROUPS = [
 # 账号表单字段；group 决定字段出现在哪个分组
 _ACCOUNT_FIELDS = [
     {"key": "name", "label": "账号名称", "type": "text", "hint": "留空则显示小米账号"},
-    {"key": "account", "label": "小米账号", "type": "text", "group": "password", "hint": "手机号或邮箱"},
+    {
+        "key": "account",
+        "label": "小米账号",
+        "type": "text",
+        "group": "password",
+        "hint": "手机号或邮箱",
+    },
     {"key": "password", "label": "密码", "type": "password", "group": "password"},
-    {"key": "userId", "label": "User ID", "type": "text", "group": ["passtoken", "servicetoken"], "hint": "登录后自动填充"},
-    {"key": "passToken", "label": "PassToken", "type": "password", "group": "passtoken", "hint": "登录后自动填充"},
-    {"key": "serviceToken", "label": "ServiceToken", "type": "password", "group": "servicetoken", "hint": "登录后自动填充"},
+    {
+        "key": "userId",
+        "label": "User ID",
+        "type": "text",
+        "group": ["passtoken", "servicetoken"],
+        "hint": "登录后自动填充",
+    },
+    {
+        "key": "passToken",
+        "label": "PassToken",
+        "type": "password",
+        "group": "passtoken",
+        "hint": "登录后自动填充",
+    },
+    {
+        "key": "serviceToken",
+        "label": "ServiceToken",
+        "type": "password",
+        "group": "servicetoken",
+        "hint": "登录后自动填充",
+    },
     {"key": "device_id", "label": "设备标识", "type": "text", "group": "device"},
     {"key": "ua", "label": "User-Agent", "type": "text", "group": "device"},
 ]
@@ -461,7 +485,9 @@ class MimoModule(ModuleBase):
         """查询指定账号"""
         account = self._find_account(accounts, identifier)
         if not account:
-            yield event.plain_result(f"× 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号")
+            yield event.plain_result(
+                f"× 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号"
+            )
             return
 
         yield event.plain_result("正在查询...")
@@ -478,10 +504,30 @@ class MimoModule(ModuleBase):
             接口定义列表。
         """
         return [
-            {"path": "config", "handler": self._api_get_config, "methods": ["GET"], "desc": "获取模块配置"},
-            {"path": "config", "handler": self._api_save_config, "methods": ["POST"], "desc": "保存模块配置"},
-            {"path": "login", "handler": self._api_login, "methods": ["POST"], "desc": "登录账号"},
-            {"path": "test", "handler": self._api_test, "methods": ["POST"], "desc": "测试查询"},
+            {
+                "path": "config",
+                "handler": self._api_get_config,
+                "methods": ["GET"],
+                "desc": "获取模块配置",
+            },
+            {
+                "path": "config",
+                "handler": self._api_save_config,
+                "methods": ["POST"],
+                "desc": "保存模块配置",
+            },
+            {
+                "path": "login",
+                "handler": self._api_login,
+                "methods": ["POST"],
+                "desc": "登录账号",
+            },
+            {
+                "path": "test",
+                "handler": self._api_test,
+                "methods": ["POST"],
+                "desc": "测试查询",
+            },
         ]
 
     async def _api_get_config(self):
@@ -528,16 +574,25 @@ class MimoModule(ModuleBase):
             account["password"] = password
 
         # 先落盘，确保账号/密码变更不会因登录失败而丢失
-        self.save_accounts(self._with_updated_account(filename, {
-            "account": account.get("account", ""),
-            "password": account.get("password", ""),
-        }))
+        self.save_accounts(
+            self._with_updated_account(
+                filename,
+                {
+                    "account": account.get("account", ""),
+                    "password": account.get("password", ""),
+                },
+            )
+        )
 
         try:
-            credentials = await self._manager.login_account_async(account, otp_code or None)
+            credentials = await self._manager.login_account_async(
+                account, otp_code or None
+            )
         except Exception as e:
             if type(e).__name__ == "OtpRequired":
-                return json_response({"status": "otp_required", "message": "验证码已发送，请输入验证码"})
+                return json_response(
+                    {"status": "otp_required", "message": "验证码已发送，请输入验证码"}
+                )
             return json_response({"status": "error", "message": str(e)})
 
         self.update_credentials(account, credentials)
@@ -556,10 +611,14 @@ class MimoModule(ModuleBase):
             result = await self.query(payload)
         except Exception as e:
             logger.error(f"[MiMo] 测试查询异常: {type(e).__name__}: {e}")
-            return json_response({"status": "error", "message": f"{type(e).__name__}: {e}"})
+            return json_response(
+                {"status": "error", "message": f"{type(e).__name__}: {e}"}
+            )
 
         if not result.get("success"):
-            return json_response({"status": "error", "message": result.get("error", "查询失败")})
+            return json_response(
+                {"status": "error", "message": result.get("error", "查询失败")}
+            )
 
         return json_response({"status": "ok", "message": "测试成功"})
 

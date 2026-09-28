@@ -67,7 +67,9 @@ def _unquote(value: str) -> str:
     return value
 
 
-def _read_block_scalar(lines: list[str], start: int, parent_indent: int) -> tuple[str, int]:
+def _read_block_scalar(
+    lines: list[str], start: int, parent_indent: int
+) -> tuple[str, int]:
     """读取块标量内容
 
     Args:
@@ -172,7 +174,9 @@ def parse_yaml(text: str) -> dict:
         if raw_value and _BLOCK_SCALAR_RE.match(raw_value):
             block_text, i = _read_block_scalar(lines, i + 1, indent)
             parent[key] = (
-                _fold_block_scalar(block_text) if raw_value.startswith(">") else block_text
+                _fold_block_scalar(block_text)
+                if raw_value.startswith(">")
+                else block_text
             )
             continue
 

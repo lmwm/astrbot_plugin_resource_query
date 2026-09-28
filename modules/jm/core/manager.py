@@ -26,9 +26,10 @@ from __future__ import annotations
 import asyncio
 import json
 import shutil
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from ..utils import pick_display_name
 from .models import AlbumInfo, DownloadResult
@@ -160,7 +161,9 @@ class JMManager:
         Returns:
             图片保存目录 `<漫画根目录>/JM<ID>-<标题>`。
         """
-        image_dir = self._ensure_album_root(album_id) / self.image_dir_name(album_id, info)
+        image_dir = self._ensure_album_root(album_id) / self.image_dir_name(
+            album_id, info
+        )
         image_dir.mkdir(parents=True, exist_ok=True)
         return image_dir
 
@@ -238,7 +241,9 @@ class JMManager:
 
         return sorted(latest.values())
 
-    def _cleanup_legacy_layout(self, album_id: str, keep_dir: Path | None = None) -> None:
+    def _cleanup_legacy_layout(
+        self, album_id: str, keep_dir: Path | None = None
+    ) -> None:
         """清理历史遗留目录，避免同一部漫画重复占用磁盘
 
         清理对象包括旧版结构（`images/`、`pdf/`）以及命名规则变更后
@@ -456,7 +461,11 @@ class JMManager:
         )
 
         # 名称无效说明这条缓存是早期获取失败时写入的，视为无缓存重新获取
-        if not info.name or info.name == "未知" or info.name.startswith(("获取失败", "未知（")):
+        if (
+            not info.name
+            or info.name == "未知"
+            or info.name.startswith(("获取失败", "未知（"))
+        ):
             return None
 
         return info
@@ -537,7 +546,9 @@ class JMManager:
             return f"下载失败: {error}"
 
         if isinstance(error, MissingAlbumPhotoException):
-            return "没有找到该漫画，请检查 ID；若内容仅登录可见，请在模块设置中填写 Cookie"
+            return (
+                "没有找到该漫画，请检查 ID；若内容仅登录可见，请在模块设置中填写 Cookie"
+            )
 
         if isinstance(error, RequestRetryAllFailException):
             return "JMComic 站点连接失败，请稍后重试或在模块设置中配置代理"
@@ -583,7 +594,9 @@ class JMManager:
             import jmcomic  # noqa: F401
             from img2pdf import convert as img2pdf_convert
         except ImportError as e:
-            return DownloadResult(success=False, message=f"缺少依赖: {e}", album_id=album_id)
+            return DownloadResult(
+                success=False, message=f"缺少依赖: {e}", album_id=album_id
+            )
 
         if not force_redownload:
             cached = self.check_local(album_id)
@@ -603,7 +616,11 @@ class JMManager:
 
         try:
             await loop.run_in_executor(
-                None, self._download_images, str(album_id), album_info, progress_callback
+                None,
+                self._download_images,
+                str(album_id),
+                album_info,
+                progress_callback,
             )
 
             images = self._list_images(str(album_id))
@@ -794,6 +811,8 @@ def _make_progress_downloader(progress_callback: ProgressCallback | None):
             """每张图片完成后上报"""
             self._done += 1
             if progress_callback and self._total > 0:
-                progress_callback(self._done, self._total, f"下载中 {self._done}/{self._total}")
+                progress_callback(
+                    self._done, self._total, f"下载中 {self._done}/{self._total}"
+                )
 
     return _ProgressDownloader

@@ -117,7 +117,9 @@ class UpdateModule(ModuleBase):
         except (TypeError, ValueError):
             max_retries = 3
 
-        yield event.plain_result(f"正在检查更新（当前版本 v{get_current_version()}）...")
+        yield event.plain_result(
+            f"正在检查更新（当前版本 v{get_current_version()}）..."
+        )
 
         check = await check_update(proxy, max_retries, force=True)
         if check.get("error"):
@@ -144,8 +146,18 @@ class UpdateModule(ModuleBase):
             接口定义列表。
         """
         return [
-            {"path": "config", "handler": self._api_get_config, "methods": ["GET"], "desc": "获取更新配置"},
-            {"path": "config", "handler": self._api_save_config, "methods": ["POST"], "desc": "保存更新配置"},
+            {
+                "path": "config",
+                "handler": self._api_get_config,
+                "methods": ["GET"],
+                "desc": "获取更新配置",
+            },
+            {
+                "path": "config",
+                "handler": self._api_save_config,
+                "methods": ["POST"],
+                "desc": "保存更新配置",
+            },
         ]
 
     async def _api_get_config(self):

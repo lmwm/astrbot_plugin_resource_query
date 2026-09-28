@@ -15,8 +15,8 @@ from .update import UpdateModule
 from .wasu import WasuModule
 
 __all__ = [
-    "MimoModule",
-    "WasuModule",
     "JMModule",
+    "MimoModule",
     "UpdateModule",
+    "WasuModule",
 ]

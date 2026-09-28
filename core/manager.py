@@ -164,6 +164,10 @@ class PluginManager:
         """
         module = self.get_module(module_name)
         if not module:
-            return {"success": False, "account_name": "", "error": f"模块 {module_name} 不存在"}
+            return {
+                "success": False,
+                "account_name": "",
+                "error": f"模块 {module_name} 不存在",
+            }
 
         return await module.query(account)

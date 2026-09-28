@@ -59,7 +59,9 @@ def get_current_version() -> str:
     return "0.0.0"
 
 
-async def check_update(proxy: str = "", max_retries: int = 3, force: bool = False) -> dict:
+async def check_update(
+    proxy: str = "", max_retries: int = 3, force: bool = False
+) -> dict:
     """检查远端是否有新版本
 
     Args:

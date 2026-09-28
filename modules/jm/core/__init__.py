@@ -9,8 +9,8 @@ from .manager import JMManager
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 
 __all__ = [
-    "JMManager",
     "AlbumInfo",
     "DownloadResult",
+    "JMManager",
     "ProgressCallback",
 ]

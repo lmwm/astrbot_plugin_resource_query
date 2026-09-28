@@ -3,7 +3,7 @@
 import json
 import time
 from http.cookiejar import Cookie, CookieJar, DefaultCookiePolicy
-from urllib.request import HTTPCookieProcessor, Request, build_opener
+from urllib.request import HTTPCookieProcessor, build_opener
 
 _JSON_PREFIX = "&&&START&&&"
 

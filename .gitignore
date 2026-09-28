@@ -3,6 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 
+# 工具缓存
+.ruff_cache/
+
 # 系统文件
 .DS_Store
 Thumbs.db

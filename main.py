@@ -132,10 +132,12 @@ class ResourceQueryPlugin(Star):
         """
         from astrbot.api.web import json_response
 
-        return json_response({
-            "version": get_current_version(),
-            "modules": self._manager.get_page_schemas(),
-        })
+        return json_response(
+            {
+                "version": get_current_version(),
+                "modules": self._manager.get_page_schemas(),
+            }
+        )
 
     async def get_accounts(self):
         """获取所有已启用模块的账号

@@ -105,7 +105,9 @@ class MimoManager:
         self._mi_account_cache[cache_key] = mi
         return mi
 
-    def _get_service_token(self, mi: MiAccount, user_id: str, pass_token: str, acc: dict) -> None:
+    def _get_service_token(
+        self, mi: MiAccount, user_id: str, pass_token: str, acc: dict
+    ) -> None:
         """通过 PassToken 获取 ServiceToken 并更新账号配置
 
         Args:
@@ -118,7 +120,9 @@ class MimoManager:
         acc["userId"] = user_id
         acc["serviceToken"] = service_token
 
-    def _try_pass_token_login(self, mi: MiAccount, user_id: str, pass_token: str, acc: dict) -> bool:
+    def _try_pass_token_login(
+        self, mi: MiAccount, user_id: str, pass_token: str, acc: dict
+    ) -> bool:
         """尝试使用 passToken 获取 serviceToken
 
         Args:
@@ -303,9 +307,7 @@ class MimoManager:
     async def query_one(self, acc: dict) -> dict:
         """查询单个 MiMo 账号，失败时自动重登录并重试"""
         if acc.pop("_otp_required", False):
-            return {
-                "error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"
-            }
+            return {"error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"}
 
         login_error = acc.pop("_login_error", "")
         if login_error:
@@ -320,9 +322,7 @@ class MimoManager:
 
             # 检查是否需要 OTP 验证
             if acc.pop("_otp_required", False):
-                return {
-                    "error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"
-                }
+                return {"error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"}
 
             # 检查是否有登录错误
             login_error = acc.pop("_login_error", "")
@@ -333,9 +333,7 @@ class MimoManager:
             user_id = acc.get("userId", "")
 
             if not service_token or not user_id:
-                return {
-                    "error": "无有效凭据，请检查账号配置"
-                }
+                return {"error": "无有效凭据，请检查账号配置"}
 
         ua = acc.get("ua", "")
         results = await query_mimo(
