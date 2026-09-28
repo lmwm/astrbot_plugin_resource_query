@@ -2,6 +2,23 @@
 
 多平台资源查询 AstrBot 插件，采用「一个功能一个模块」的模块化架构。
 
+## 快速开始
+
+1. **安装**：AstrBot WebUI → 插件管理 → 安装 `astrbot_plugin_resource_query`（或从本仓库安装）。
+2. **开模块**：插件配置界面里按需开关 `modules.mimo_enabled`（MiMo 用量）、`modules.wasu_enabled`（华数流量话费）、`modules.jm_enabled`（JM 下载，仅私聊）、`modules.update_enabled`（自我更新）。关闭的模块不会加载，其指令与配置页一并隐藏。
+3. **配账号**：打开插件管理页面 → 对应模块页 → 添加账号 → 点「测试」验证 → 保存。凭据填法与注意事项见下方[首次使用](#首次使用)。
+4. **开始用**：
+
+| 指令 | 说明 |
+|------|------|
+| `/query` | 显示帮助 |
+| `/mimo` · `/mimo <序号或名称>` | 查询 MiMo 余额与用量 |
+| `/wasu` · `/wasu <名称>` | 查询华数流量、通话、余额 |
+| `/jm <漫画ID>` | 下载漫画并生成 PDF（**仅私聊**） |
+| `/query update` | 检查并更新插件自身 |
+
+> 出问题时先查 AstrBot 日志（`data/logs/`），或到本仓库提 Issue。
+
 ## 功能模块
 
 | 模块 | 标识 | 功能 | 账号 | 模板 |
