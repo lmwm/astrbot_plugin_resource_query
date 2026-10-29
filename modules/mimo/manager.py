@@ -161,7 +161,7 @@ class MimoManager:
         password = acc.get("password", "")
 
         if not account or not password:
-            acc["_login_error"] = "令牌过期，请使用 mimo otp <验证码> 或重新登录"
+            acc["_login_error"] = "令牌过期，请使用 /mimo otp <验证码> 或重新登录"
             return False
 
         try:
@@ -307,7 +307,7 @@ class MimoManager:
     async def query_one(self, acc: dict) -> dict:
         """查询单个 MiMo 账号，失败时自动重登录并重试"""
         if acc.pop("_otp_required", False):
-            return {"error": "需要短信验证，请使用 mimo otp <验证码> 提交验证码"}
+            return {"error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"}
 
         login_error = acc.pop("_login_error", "")
         if login_error:
@@ -322,7 +322,7 @@ class MimoManager:
 
             # 检查是否需要 OTP 验证
             if acc.pop("_otp_required", False):
-                return {"error": "需要短信验证，请使用 mimo otp <验证码> 提交验证码"}
+                return {"error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"}
 
             # 检查是否有登录错误
             login_error = acc.pop("_login_error", "")

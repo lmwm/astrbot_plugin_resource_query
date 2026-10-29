@@ -338,10 +338,10 @@ class WasuModule(ModuleBase):
         Returns:
             指令定义列表。
         """
-        return [{"name": "wasu", "desc": "华数广电查询：wasu [ls|del|账号]"}]
+        return [{"name": "wasu", "desc": "华数广电查询：/wasu [ls|del|账号]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理 wasu 指令
+        """处理 /wasu 指令
 
         Args:
             command: 指令名称。
@@ -390,7 +390,7 @@ class WasuModule(ModuleBase):
     async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
         """删除指定账号"""
         if len(args) < 2:
-            yield event.plain_result("用法: wasu del <序号或名称>")
+            yield event.plain_result("用法: /wasu del <序号或名称>")
             return
 
         target = args[1]
@@ -439,7 +439,7 @@ class WasuModule(ModuleBase):
 
         if not account:
             yield event.plain_result(
-                f"× 未找到账号: {identifier}\n使用 wasu ls 查看所有账号"
+                f"× 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号"
             )
             return
 
