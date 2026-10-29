@@ -188,7 +188,7 @@ class JMModule(ModuleBase):
             if cached and cached.get("has_pdf"):
                 if show_info and info_after:
                     yield event.plain_result(self._info_message(album_id, info))
-                yield event.plain_result(f"JM {album_id} 使用本地缓存…")
+                yield event.plain_result(f"JM{album_id} 使用本地缓存…")
                 async for r in self._send_pdf(
                     event,
                     cached["pdf_path"],
@@ -201,7 +201,7 @@ class JMModule(ModuleBase):
                 return
 
         # 3) 开始下载
-        yield event.plain_result(f"JM {album_id} 开始下载…")
+        yield event.plain_result(f"JM{album_id} 开始下载…")
 
         loop = asyncio.get_running_loop()
         last = {"text": ""}

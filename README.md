@@ -116,14 +116,14 @@ JM 下载产物位于插件数据目录（`plugin_data/astrbot_plugin_resource_q
 
 ```
 JMDownload/
-└── JM <ID>/
-    ├── JM <ID>-<名称>/      # 下载的图片
-    ├── JM <ID>-<名称>.pdf   # 生成的 PDF
-    └── info.json            # 漫画信息缓存
+└── JM <ID>/                   # 第一层目录带空格
+    ├── JM<ID>-<名称>/         # 下载的图片（沿用原命名）
+    ├── JM<ID>-<名称>.pdf      # 生成的 PDF（沿用原命名）
+    └── info.json              # 漫画信息缓存
 ```
 
 > 旧版本把下载内容放在 AstrBot 数据根目录的 `JMDownload/` 下（目录名为 `JM<ID>`）；
-> 升级后会自动搬移到新位置并改用新命名，无需手工处理。
+> 升级后会自动搬移到新位置并给第一层目录加空格，图片目录与 PDF 名称保持原样。
 
 ## 首次使用
 
