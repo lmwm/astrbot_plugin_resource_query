@@ -36,21 +36,33 @@ _PLUGIN_DIR = Path(__file__).resolve().parents[2]
 # 更新时保留的内容
 _EXCLUDE = {".git", ".github", "__pycache__", ".gitignore", "tests"}
 
-# 未配置代理时依次尝试的下载前缀：首项为直连，其余为公共加速镜像
-_DEFAULT_PROXIES = ("", "https://gh-proxy.com/", "https://gh-proxy.cn/")
-
 
 def _proxy_candidates(proxy: str) -> tuple[str, ...]:
     """返回本次请求要依次尝试的代理前缀
+
+    用户配置的代理排在最前；若它不可用，再回退到直连与公共镜像，
+    避免一个失效镜像让整个更新流程不可用。
 
     Args:
         proxy: 用户配置的代理前缀。
 
     Returns:
-        配置了代理时只返回它；留空时返回直连 + 公共镜像的候选列表。
+        去重后的候选前缀列表（空字符串表示直连）。
     """
-    proxy = proxy.strip()
-    return (proxy,) if proxy else _DEFAULT_PROXIES
+    proxy = proxy.strip().rstrip("/")
+
+    candidates = [proxy] if proxy else []
+    candidates.extend(["", "https://gh-proxy.com/", "https://gh-proxy.cn/"])
+
+    seen: set[str] = set()
+    result: list[str] = []
+    for item in candidates:
+        key = item.rstrip("/")
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return tuple(result)
 
 
 def get_current_version() -> str:

@@ -29,7 +29,7 @@ _CONFIG_FIELDS = [
 
 # 默认配置
 _DEFAULT_CONFIG = {
-    "proxy": "https://gh-proxy.cn/",
+    "proxy": "",
     "max_retries": 3,
 }
 
