@@ -36,8 +36,21 @@ _PLUGIN_DIR = Path(__file__).resolve().parents[2]
 # 更新时保留的内容
 _EXCLUDE = {".git", ".github", "__pycache__", ".gitignore", "tests"}
 
-# 未配置代理时使用的默认加速前缀
-_DEFAULT_PROXY = "https://gh-proxy.cn/"
+# 未配置代理时依次尝试的下载前缀：首项为直连，其余为公共加速镜像
+_DEFAULT_PROXIES = ("", "https://gh-proxy.com/", "https://gh-proxy.cn/")
+
+
+def _proxy_candidates(proxy: str) -> tuple[str, ...]:
+    """返回本次请求要依次尝试的代理前缀
+
+    Args:
+        proxy: 用户配置的代理前缀。
+
+    Returns:
+        配置了代理时只返回它；留空时返回直连 + 公共镜像的候选列表。
+    """
+    proxy = proxy.strip()
+    return (proxy,) if proxy else _DEFAULT_PROXIES
 
 
 def get_current_version() -> str:
@@ -65,7 +78,7 @@ async def check_update(
     """检查远端是否有新版本
 
     Args:
-        proxy: GitHub 代理前缀；留空使用内置默认代理。
+        proxy: GitHub 代理前缀；留空时依次尝试直连与内置镜像。
         max_retries: 网络请求重试次数。
         force: 是否强制视为需要更新。
 
@@ -73,9 +86,8 @@ async def check_update(
         含 latest / current / has_update / force / error 字段的字典。
     """
     current_version = get_current_version()
-    proxy = proxy or _DEFAULT_PROXY
 
-    def _fetch() -> dict:
+    def _fetch_one(prefix: str) -> dict:
         def _do() -> dict:
             opener, _ = new_opener()
             raw_url = (
@@ -83,7 +95,7 @@ async def check_update(
                 "/main/metadata.yaml"
             )
             request = Request(
-                proxy_url(raw_url, proxy),
+                proxy_url(raw_url, prefix),
                 headers={"User-Agent": _USER_AGENT},
             )
             with opener.open(request, timeout=15) as response:
@@ -106,6 +118,20 @@ async def check_update(
         except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
             return {"latest": "", "current": current_version, "error": str(e)}
 
+    def _fetch() -> dict:
+        last: dict | None = None
+        for prefix in _proxy_candidates(proxy):
+            result = _fetch_one(prefix)
+            if result["latest"] or not result["error"]:
+                return result
+            last = result
+
+        return last or {
+            "latest": "",
+            "current": current_version,
+            "error": "没有可用的下载地址",
+        }
+
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, _fetch)
     result["has_update"] = bool(
@@ -119,81 +145,93 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
     """下载远端最新版本并覆盖插件文件
 
     Args:
-        proxy: GitHub 代理前缀；留空使用内置默认代理。
+        proxy: GitHub 代理前缀；留空时依次尝试直连与内置镜像。
         max_retries: 网络请求重试次数。
 
     Returns:
         面向用户的更新结果文本。
     """
-    proxy = proxy or _DEFAULT_PROXY
+
+    def _download_with(prefix: str) -> str:
+        def _get_sha() -> str:
+            opener, _ = new_opener()
+            request = Request(
+                proxy_url(f"{_GITHUB_API}/commits/main", prefix),
+                headers={
+                    "User-Agent": _USER_AGENT,
+                    "Accept": "application/vnd.github.v3+json",
+                },
+            )
+            with opener.open(request, timeout=15) as response:
+                return json.loads(response.read())["sha"]
+
+        sha = retry(_get_sha, max_retries)
+
+        def _download_zip() -> bytes:
+            opener, _ = new_opener()
+            zip_url = proxy_url(
+                f"https://github.com/{_REPO_OWNER}/{_REPO_NAME}/archive/{sha}.zip",
+                prefix,
+            )
+            request = Request(zip_url, headers={"User-Agent": _USER_AGENT})
+            with opener.open(request, timeout=30) as response:
+                return response.read()
+
+        zip_data = retry(_download_zip, max_retries)
+
+        tmp_dir = _PLUGIN_DIR.parent / f"{_REPO_NAME}_tmp_update"
+        if tmp_dir.exists():
+            shutil.rmtree(tmp_dir)
+
+        with zipfile.ZipFile(io.BytesIO(zip_data)) as archive:
+            archive.extractall(tmp_dir)
+
+        extracted = [d for d in tmp_dir.iterdir() if d.is_dir()]
+        if not extracted:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+            raise RuntimeError("解压失败：未找到插件目录")
+
+        source_dir = extracted[0]
+
+        # 清空插件目录（保留版本控制与缓存目录）
+        for item in _PLUGIN_DIR.iterdir():
+            if item.name in _EXCLUDE:
+                continue
+            if item.is_file():
+                item.unlink()
+            elif item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+
+        # 覆盖为新版本
+        for item in source_dir.iterdir():
+            if item.name in _EXCLUDE:
+                continue
+            destination = _PLUGIN_DIR / item.name
+            if item.is_dir():
+                shutil.copytree(item, destination)
+            else:
+                shutil.copy2(item, destination)
+
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        return f"√ 更新完成，新版本已下载（commit: {sha[:7]}）"
 
     def _download_and_extract() -> str:
-        try:
+        last_error = "没有可用的下载地址"
 
-            def _get_sha() -> str:
-                opener, _ = new_opener()
-                request = Request(
-                    proxy_url(f"{_GITHUB_API}/commits/main", proxy),
-                    headers={
-                        "User-Agent": _USER_AGENT,
-                        "Accept": "application/vnd.github.v3+json",
-                    },
-                )
-                with opener.open(request, timeout=15) as response:
-                    return json.loads(response.read())["sha"]
+        for prefix in _proxy_candidates(proxy):
+            try:
+                return _download_with(prefix)
+            except (
+                OSError,
+                TimeoutError,
+                zipfile.BadZipFile,
+                shutil.Error,
+                RuntimeError,
+            ) as e:
+                last_error = str(e)
+                continue
 
-            sha = retry(_get_sha, max_retries)
-
-            def _download_zip() -> bytes:
-                opener, _ = new_opener()
-                zip_url = proxy_url(
-                    f"https://github.com/{_REPO_OWNER}/{_REPO_NAME}/archive/{sha}.zip",
-                    proxy,
-                )
-                request = Request(zip_url, headers={"User-Agent": _USER_AGENT})
-                with opener.open(request, timeout=30) as response:
-                    return response.read()
-
-            zip_data = retry(_download_zip, max_retries)
-
-            tmp_dir = _PLUGIN_DIR.parent / f"{_REPO_NAME}_tmp_update"
-            if tmp_dir.exists():
-                shutil.rmtree(tmp_dir)
-
-            with zipfile.ZipFile(io.BytesIO(zip_data)) as archive:
-                archive.extractall(tmp_dir)
-
-            extracted = [d for d in tmp_dir.iterdir() if d.is_dir()]
-            if not extracted:
-                shutil.rmtree(tmp_dir, ignore_errors=True)
-                return "× 解压失败：未找到插件目录"
-
-            source_dir = extracted[0]
-
-            # 清空插件目录（保留版本控制与缓存目录）
-            for item in _PLUGIN_DIR.iterdir():
-                if item.name in _EXCLUDE:
-                    continue
-                if item.is_file():
-                    item.unlink()
-                elif item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-
-            # 覆盖为新版本
-            for item in source_dir.iterdir():
-                if item.name in _EXCLUDE:
-                    continue
-                destination = _PLUGIN_DIR / item.name
-                if item.is_dir():
-                    shutil.copytree(item, destination)
-                else:
-                    shutil.copy2(item, destination)
-
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            return f"√ 更新完成，新版本已下载（commit: {sha[:7]}）"
-
-        except (OSError, TimeoutError, zipfile.BadZipFile, shutil.Error) as e:
-            return f"× 更新失败: {e}"
+        return f"× 更新失败: {last_error}"
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _download_and_extract)
@@ -202,7 +240,7 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
 async def reload_plugin(context) -> str:
     """调用 Dashboard API 重载插件，使新版本生效
 
-    优先使用 AstrBot 4.29+ 的 REST 路由 `/api/plugins/{name}/reload`，
+    优先使用 AstrBot 4.29+ 的 REST 路由 `/api/v1/plugins/{name}/reload`，
     失败时回退到旧路由 `/api/plugin/reload`（旧版 AstrBot 仍在使用）。
 
     Args:
@@ -237,7 +275,7 @@ async def reload_plugin(context) -> str:
 
             base = f"http://{host}:{port}"
             routes = (
-                (f"{base}/api/plugins/{_REPO_NAME}/reload", None),
+                (f"{base}/api/v1/plugins/{_REPO_NAME}/reload", None),
                 (f"{base}/api/plugin/reload", {"name": _REPO_NAME}),
             )
 
