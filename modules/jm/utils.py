@@ -123,8 +123,8 @@ def normalize_album_id(raw: str) -> int | None:
     if text.isdigit():
         return int(text)
 
-    # JM+数字
-    match = re.match(r"^[Jj][Mm]?(\d+)$", text)
+    # JM+数字（允许 JM 与数字之间有空格，如 "JM 181251"）
+    match = re.match(r"^[Jj][Mm]?\s*(\d+)$", text)
     if match:
         return int(match.group(1))
 

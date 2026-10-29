@@ -5,26 +5,28 @@
 目录结构（每部漫画一个根目录，PDF 与信息文件与图片目录同级）：
 
     JMDownload/
-    └── JM1083382/
-        ├── JM1083382-漫画名称/        ← 下载的图片
+    └── JM 1083382/
+        ├── JM 1083382-漫画名称/        ← 下载的图片
         │   ├── 00001.jpg
         │   └── ...
-        ├── JM1083382-漫画名称.pdf     ← 生成的 PDF
+        ├── JM 1083382-漫画名称.pdf     ← 生成的 PDF
         └── info.json                  ← 漫画信息缓存
 
 实现要点：
   1. 下载交给 jmcomic 原生下载器，并发 / 代理 / Cookie / 超时 / 重试
-     通过 JmOption 下发；目录由 `JM{Aid}-{Atitle}` 规则决定。
+     通过 JmOption 下发；目录由 `JM {Aid}-{Atitle}` 规则决定。
   2. 进度通过继承 `JmDownloader` 的 `after_image` 钩子统计，回调在下载线程
      中执行，由调用方负责线程安全转发。
   3. 图片下载与 PDF 生成都在线程池中执行，避免阻塞 AstrBot 事件循环。
-  4. 缓存判定兼容历史目录结构（`ready/*.pdf`）。
+  4. 缓存判定兼容历史目录结构（`ready/*.pdf`）与旧命名（`JM<ID>` /
+     `JM<ID>-<标题>`）。
 """
 
 from __future__ import annotations
 
 import asyncio
 import json
+import re
 import shutil
 from collections.abc import Callable
 from io import BytesIO
@@ -42,6 +44,9 @@ _INVALID_FILENAME_CHARS = set('\\/:*?"<>|')
 
 # 历史版本的子目录（新结构启用后不再使用）
 _LEGACY_SUBDIRS = ("images", "pdf")
+
+# 漫画根目录名：`JM 123456`（兼容无空格的旧命名 `JM123456`）
+_ALBUM_DIR_RE = re.compile(r"^JM\s*(\d+)$", re.IGNORECASE | re.ASCII)
 
 # 进度回调签名：callback(current, total, message)
 ProgressCallback = Callable[[int, int, str], None]
@@ -80,9 +85,9 @@ class JMManager:
             album_id: 漫画 ID。
 
         Returns:
-            形如 `<JMDownload>/JM<ID>` 的目录路径。
+            形如 `<JMDownload>/JM <ID>` 的目录路径。
         """
-        return self._download_dir / f"JM{album_id}"
+        return self._download_dir / f"JM {album_id}"
 
     def _ensure_album_root(self, album_id: str) -> Path:
         """获取漫画根目录，并确保目录名以大写 `JM` 开头
@@ -96,6 +101,7 @@ class JMManager:
         Returns:
             已存在的漫画根目录。
         """
+
         target = self.album_root(album_id)
 
         if target.exists():
@@ -137,7 +143,7 @@ class JMManager:
             清洗后的标题。
         """
         title = pick_display_name(info.oname, info.name)
-        return JMManager._safe_name(title) or f"JM{info.id}"
+        return JMManager._safe_name(title) or f"JM {info.id}"
 
     def image_dir_name(self, album_id: str, info: AlbumInfo) -> str:
         """图片目录名
@@ -147,9 +153,9 @@ class JMManager:
             info: 漫画信息。
 
         Returns:
-            形如 `JM<ID>-<标题>` 的目录名。
+            形如 `JM <ID>-<标题>` 的目录名。
         """
-        return f"JM{album_id}-{self.display_title(info)}"
+        return f"JM {album_id}-{self.display_title(info)}"
 
     def _ensure_image_dir(self, album_id: str, info: AlbumInfo) -> Path:
         """确保图片目录存在并返回
@@ -159,7 +165,7 @@ class JMManager:
             info: 漫画信息。
 
         Returns:
-            图片保存目录 `<漫画根目录>/JM<ID>-<标题>`。
+            图片保存目录 `<漫画根目录>/JM <ID>-<标题>`。
         """
         image_dir = self._ensure_album_root(album_id) / self.image_dir_name(
             album_id, info
@@ -181,8 +187,8 @@ class JMManager:
     def _current_image_dir(self, album_id: str) -> Path | None:
         """取该漫画当前使用的图片目录
 
-        命名规则变化后可能残留多个 `JM<ID>-` 目录，此时取最近修改的一个，
-        避免同一部漫画的图片被重复收录。
+        命名规则变化后可能残留多个 `JM <ID>-`（旧版为 `JM<ID>-`）目录，
+        此时取最近修改的一个，避免同一部漫画的图片被重复收录。
 
         Args:
             album_id: 漫画 ID。
@@ -194,12 +200,12 @@ class JMManager:
         if not root.exists():
             return None
 
-        prefix = f"jm{album_id}-"
+        prefixes = (f"jm {album_id}-", f"jm{album_id}-")
         try:
             candidates = [
                 item
                 for item in root.iterdir()
-                if item.is_dir() and item.name.lower().startswith(prefix)
+                if item.is_dir() and item.name.lower().startswith(prefixes)
             ]
         except OSError:
             return None
@@ -212,7 +218,7 @@ class JMManager:
     def _list_images(self, album_id: str) -> list[Path]:
         """列出该漫画图片目录中的图片
 
-        只扫描当前使用的图片目录（`JM<ID>-<标题>`），因此历史结构
+        只扫描当前使用的图片目录（`JM <ID>-<标题>`），因此历史结构
         （`images/`、旧命名的目录）不会导致 PDF 出现重复页。
 
         Args:
@@ -247,8 +253,8 @@ class JMManager:
         """清理历史遗留目录，避免同一部漫画重复占用磁盘
 
         清理对象包括旧版结构（`images/`、`pdf/`）以及命名规则变更后
-        残留的其它 `JM<ID>-` 目录；仅当保留目录中确实有图片时才执行，
-        确保不会误删唯一副本。
+        残留的其它 `JM <ID>-`（旧版 `JM<ID>-`）目录；仅当保留目录中确实
+        有图片时才执行，确保不会误删唯一副本。
 
         Args:
             album_id: 漫画 ID。
@@ -267,7 +273,7 @@ class JMManager:
             if legacy.is_dir():
                 shutil.rmtree(legacy, ignore_errors=True)
 
-        prefix = f"jm{album_id}-"
+        prefixes = (f"jm {album_id}-", f"jm{album_id}-")
         try:
             subdirs = [item for item in root.iterdir() if item.is_dir()]
         except OSError:
@@ -276,8 +282,131 @@ class JMManager:
         for subdir in subdirs:
             if subdir == current:
                 continue
-            if subdir.name.lower().startswith(prefix):
+            if subdir.name.lower().startswith(prefixes):
                 shutil.rmtree(subdir, ignore_errors=True)
+
+    # ══════════════════════════════════════════
+    #  旧数据迁移
+    # ══════════════════════════════════════════
+
+    def migrate_legacy_root(self, legacy_dir: str | Path) -> int:
+        """把旧版下载根目录的内容搬入当前根目录并统一命名
+
+        旧版把下载内容放在 AstrBot 数据根目录下的 `JMDownload/`，目录名为
+        `JM<ID>`、子项为 `JM<ID>-<标题>`；本方法逐个搬移并改写为新命名
+        （`JM <ID>` / `JM <ID>-<标题>`）。目标已存在的漫画不覆盖，过渡版本
+        的 `ready/*.pdf` 也会归位到对应漫画根目录。
+
+        Args:
+            legacy_dir: 旧版下载根目录。
+
+        Returns:
+            实际搬移的漫画目录数量。
+        """
+        legacy = Path(legacy_dir)
+
+        try:
+            if not legacy.is_dir():
+                return 0
+            if legacy.resolve() == self._download_dir.resolve():
+                return 0
+            entries = list(legacy.iterdir())
+        except OSError:
+            return 0
+
+        moved = 0
+        for entry in entries:
+            if not entry.is_dir():
+                continue
+
+            match = _ALBUM_DIR_RE.match(entry.name)
+            if match is None:
+                continue
+
+            album_id = match.group(1)
+            target = self.album_root(album_id)
+            if target.exists():
+                continue
+
+            self._rename_legacy_children(entry, album_id)
+            try:
+                shutil.move(str(entry), str(target))
+            except OSError:
+                continue
+            moved += 1
+
+        self._migrate_ready_pdfs(legacy)
+
+        # 搬空后删除旧目录壳，避免数据目录里留下空文件夹
+        for leftover in (legacy / "ready", legacy):
+            try:
+                leftover.rmdir()
+            except OSError:
+                pass
+
+        return moved
+
+    @staticmethod
+    def _rename_legacy_children(root: Path, album_id: str) -> None:
+        """把旧命名 `JM<ID>-<标题>` 的子项改为 `JM <ID>-<标题>`
+
+        Args:
+            root: 旧版漫画根目录。
+            album_id: 漫画 ID。
+        """
+        old_prefix = f"JM{album_id}-"
+        new_prefix = f"JM {album_id}-"
+
+        try:
+            children = list(root.iterdir())
+        except OSError:
+            return
+
+        for child in children:
+            name = child.name
+            if not name.lower().startswith(old_prefix.lower()):
+                continue
+            if name.lower().startswith(new_prefix.lower()):
+                continue
+
+            try:
+                child.rename(root / (new_prefix + name[len(old_prefix) :]))
+            except OSError:
+                pass
+
+    def _migrate_ready_pdfs(self, legacy: Path) -> None:
+        """把过渡版本的 `ready/*.pdf` 归位到对应漫画根目录
+
+        Args:
+            legacy: 旧版下载根目录。
+        """
+        try:
+            pdfs = list((legacy / "ready").glob("*.pdf"))
+        except OSError:
+            return
+
+        for pdf in pdfs:
+            match = _ALBUM_DIR_RE.match(pdf.stem.split("-", 1)[0])
+            if match is None:
+                continue
+
+            album_id = match.group(1)
+            root = self.album_root(album_id)
+
+            try:
+                root.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                continue
+
+            # 已有 PDF 说明该漫画已在新结构下用过，旧文件留在原地不覆盖
+            if any(root.glob("*.pdf")):
+                continue
+
+            title = pdf.stem.split("-", 1)[1] if "-" in pdf.stem else pdf.stem
+            try:
+                shutil.move(str(pdf), str(root / f"JM {album_id}-{title}.pdf"))
+            except OSError:
+                continue
 
     # ══════════════════════════════════════════
     #  配置构建
@@ -395,8 +524,10 @@ class JMManager:
         yield from sorted(root.glob("*.pdf"))
         # 历史结构：<漫画根目录>/pdf/*.pdf
         yield from sorted((root / "pdf").glob("*.pdf"))
-        # 过渡版本：<JMDownload>/ready/*.pdf
-        yield from sorted((self._download_dir / "ready").glob(f"JM{album_id}-*.pdf"))
+        # 过渡版本：<JMDownload>/ready/*.pdf（兼容新旧命名）
+        ready = self._download_dir / "ready"
+        yield from sorted(ready.glob(f"JM {album_id}-*.pdf"))
+        yield from sorted(ready.glob(f"JM{album_id}-*.pdf"))
 
     def check_local(self, album_id: str) -> dict | None:
         """检查本地是否已有下载产物
@@ -682,7 +813,7 @@ class JMManager:
     ) -> None:
         """下载漫画图片（同步，在线程池中执行）
 
-        图片写入 `<漫画根目录>/JM<ID>-<标题>/`。
+        图片写入 `<漫画根目录>/JM <ID>-<标题>/`。
 
         Args:
             album_id: 漫画 ID。
@@ -723,7 +854,7 @@ class JMManager:
         quality = max(1, min(95, self._int("jm_jpeg_quality", 75)))
         payloads = self._compress_images(images, quality)
 
-        pdf_name = f"JM{album_id}-{self.display_title(album_info)}"
+        pdf_name = f"JM {album_id}-{self.display_title(album_info)}"
         pdf_path = album_root / f"{pdf_name}.pdf"
         pdf_path.write_bytes(converter(payloads))
         return pdf_path

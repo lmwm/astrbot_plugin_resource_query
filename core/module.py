@@ -20,6 +20,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ..common import utils as common_utils
 from ..common.utils import (
     get_account_filename,
     get_platform_path,
@@ -151,6 +152,14 @@ class ModuleBase(ABC):
     # ══════════════════════════════════════════
     #  路径
     # ══════════════════════════════════════════
+
+    def get_data_path(self) -> Path:
+        """获取本插件的数据目录（不存在时自动创建）
+
+        Returns:
+            形如 `<数据目录>/plugin_data/<插件>/` 的路径。
+        """
+        return common_utils.get_data_path(self._plugin_name)
 
     def get_config_path(self) -> Path:
         """获取本模块的配置目录（不存在时自动创建）

@@ -112,15 +112,18 @@ plugin_data/astrbot_plugin_resource_query/config/
 - **模板变量**：变量的中文说明、预览示例值与是否在快捷插入区显示
 - 账号编辑窗内可编辑该账号的**消息模板**并实时预览
 
-JM 下载产物位于 AstrBot 数据目录：
+JM 下载产物位于插件数据目录（`plugin_data/astrbot_plugin_resource_query/`）下：
 
 ```
 JMDownload/
-├── cache/<漫画ID>/     # 下载的图片与原信息
-└── ready/JM<ID>-<名称>.pdf   # 生成的 PDF
+└── JM <ID>/
+    ├── JM <ID>-<名称>/      # 下载的图片
+    ├── JM <ID>-<名称>.pdf   # 生成的 PDF
+    └── info.json            # 漫画信息缓存
 ```
 
-> 兼容旧版结构：`JMDownload/<jmID>/*.pdf` 也会被识别为已下载。
+> 旧版本把下载内容放在 AstrBot 数据根目录的 `JMDownload/` 下（目录名为 `JM<ID>`）；
+> 升级后会自动搬移到新位置并改用新命名，无需手工处理。
 
 ## 首次使用
 

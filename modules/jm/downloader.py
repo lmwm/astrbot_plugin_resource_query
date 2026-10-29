@@ -20,14 +20,16 @@ CONFIG_FILE = "config.json"
 class JMDownloader:
     """JMComic 下载适配层"""
 
-    def __init__(self, config_path: Path) -> None:
+    def __init__(self, config_path: Path, data_path: Path) -> None:
         """初始化适配层
 
         Args:
             config_path: JM 配置目录（如 config/jm/）。
+            data_path: 插件数据目录（下载内容放在其下的 `JMDownload/`）。
         """
         self._config_path = Path(config_path)
         self._config_path.mkdir(parents=True, exist_ok=True)
+        self._data_path = Path(data_path)
         self._config = self.load_config()
         self._manager = self._create_manager()
 
@@ -69,15 +71,20 @@ class JMDownloader:
     def _create_manager(self) -> JMManager:
         """创建下载管理器
 
+        下载目录位于插件数据目录下的 `JMDownload/`；旧版放在 AstrBot
+        数据根目录的同名目录会在创建时自动搬移过来。
+
         Returns:
-            JMManager 实例，下载目录位于 AstrBot 数据目录下。
+            JMManager 实例。
         """
         from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
-        return JMManager(
+        manager = JMManager(
             config=self._config,
-            download_dir=str(Path(get_astrbot_data_path()) / "JMDownload"),
+            download_dir=str(self._data_path / "JMDownload"),
         )
+        manager.migrate_legacy_root(Path(get_astrbot_data_path()) / "JMDownload")
+        return manager
 
     def check_local(self, album_id: str) -> dict | None:
         """检查本地缓存
