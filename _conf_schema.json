@@ -26,7 +26,7 @@
                 "description": "启用插件更新",
                 "type": "bool",
                 "default": true,
-                "hint": "通过 /query update 检查并更新插件自身"
+                "hint": "通过 query update 检查并更新插件自身"
             }
         }
     }

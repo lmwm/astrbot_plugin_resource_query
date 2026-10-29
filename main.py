@@ -371,6 +371,6 @@ class ResourceQueryPlugin(Star):
 
         for module in self._manager.get_all_modules():
             for cmd in module.get_commands():
-                lines.append(f"  /{cmd['name']} — {cmd['desc']}")
+                lines.append(f"  {cmd['name']} — {cmd['desc']}")
 
         return "\n".join(lines)

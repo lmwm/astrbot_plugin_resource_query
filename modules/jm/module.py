@@ -121,10 +121,10 @@ class JMModule(ModuleBase):
         Returns:
             指令定义列表。
         """
-        return [{"name": "jm", "desc": "下载 JMComic 漫画：/jm <ID> [redownload]"}]
+        return [{"name": "jm", "desc": "下载 JMComic 漫画：jm <ID> [redownload]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理 /jm 指令
+        """处理 jm 指令
 
         Args:
             command: 指令名称。
@@ -143,15 +143,15 @@ class JMModule(ModuleBase):
 
         if not args:
             yield event.plain_result(
-                "用法：/jm <漫画ID> [redownload]\n"
-                "例如：/jm 123456\n"
+                "用法：jm <漫画ID> [redownload]\n"
+                "例如：jm 123456\n"
                 "添加 redownload 可强制重新下载"
             )
             return
 
         album_id = normalize_album_id(args[0])
         if album_id is None:
-            yield event.plain_result("无效的漫画 ID\n用法：/jm <漫画ID> [redownload]")
+            yield event.plain_result("无效的漫画 ID\n用法：jm <漫画ID> [redownload]")
             return
 
         force = len(args) > 1 and args[1].lower() == "redownload"

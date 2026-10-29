@@ -356,10 +356,10 @@ class MimoModule(ModuleBase):
         Returns:
             指令定义列表。
         """
-        return [{"name": "mimo", "desc": "MiMo 用量查询：/mimo [ls|del|otp|账号]"}]
+        return [{"name": "mimo", "desc": "MiMo 用量查询：mimo [ls|del|otp|账号]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理 /mimo 指令
+        """处理 mimo 指令
 
         Args:
             command: 指令名称。
@@ -414,7 +414,7 @@ class MimoModule(ModuleBase):
     async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
         """删除指定账号"""
         if len(args) < 2:
-            yield event.plain_result("用法: /mimo del <序号或名称>")
+            yield event.plain_result("用法: mimo del <序号或名称>")
             return
 
         target = args[1]
@@ -442,7 +442,7 @@ class MimoModule(ModuleBase):
     async def _cmd_otp(self, args: list[str], event, accounts: list[dict]):
         """提交 OTP 验证码"""
         if len(args) < 2 or not args[1].strip():
-            yield event.plain_result("用法: /mimo otp <验证码>")
+            yield event.plain_result("用法: mimo otp <验证码>")
             return
 
         pending = self._manager.get_pending_otp_account()
@@ -486,7 +486,7 @@ class MimoModule(ModuleBase):
         account = self._find_account(accounts, identifier)
         if not account:
             yield event.plain_result(
-                f"× 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号"
+                f"× 未找到账号: {identifier}\n使用 mimo ls 查看所有账号"
             )
             return
 

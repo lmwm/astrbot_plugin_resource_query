@@ -2,7 +2,7 @@
 
 把「插件自身更新」也做成一个标准功能模块：
   - 配置（代理、重试次数）由 Views 管理
-  - 通过 `/query update` 触发检查与更新
+  - 通过 `query update` 触发检查与更新
   - 启用开关由 AstrBot 原生配置管理
 """
 
@@ -88,7 +88,7 @@ class UpdateModule(ModuleBase):
     def get_commands(self) -> list[dict]:
         """本模块指令列表
 
-        该模块通过 `/query update` 触发，因此指令名带 `query ` 前缀，
+        该模块通过 `query update` 触发，因此指令名带 `query ` 前缀，
         便于帮助信息正确展示。
 
         Returns:

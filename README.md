@@ -58,16 +58,18 @@ main.py                     插件入口：只做「注册 + 分发」
 
 | 指令 | 说明 |
 |------|------|
-| `/query` | 显示帮助信息 |
-| `/query <模块名> [参数]` | 分发到指定模块，如 `/query mimo ls` |
-| `/query update` | 检查并更新插件 |
-| `/mimo` | 查询所有 MiMo 账号 |
-| `/mimo <序号或名称>` | 查询指定 MiMo 账号 |
-| `/mimo ls` / `/mimo del <名称>` | 列出 / 删除 MiMo 账号 |
-| `/mimo otp <验证码>` | 提交登录短信验证码 |
-| `/wasu` / `/wasu <名称>` | 查询全部 / 指定华数账号 |
-| `/wasu ls` / `/wasu del <名称>` | 列出 / 删除华数账号 |
-| `/jm <漫画ID> [redownload]` | 下载漫画 PDF（仅私聊） |
+| `query` | 显示帮助信息 |
+| `query <模块名> [参数]` | 分发到指定模块，如 `query mimo ls` |
+| `query update` | 检查并更新插件 |
+| `mimo` | 查询所有 MiMo 账号 |
+| `mimo <序号或名称>` | 查询指定 MiMo 账号 |
+| `mimo ls` / `mimo del <名称>` | 列出 / 删除 MiMo 账号 |
+| `mimo otp <验证码>` | 提交登录短信验证码 |
+| `wasu` / `wasu <名称>` | 查询全部 / 指定华数账号 |
+| `wasu ls` / `wasu del <名称>` | 列出 / 删除华数账号 |
+| `jm <漫画ID> [redownload]` | 下载漫画 PDF（仅私聊） |
+
+> 本机 AstrBot 未配置指令前缀，直接发命令名即可（**不要**再加 `/`）。
 
 模块被禁用时，其指令会提示「模块未启用」。
 
