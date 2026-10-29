@@ -35,7 +35,7 @@ def get_default_template() -> str:
 
 
 def get_var_definitions() -> dict[str, str]:
-    """获取模板变量说明（Pages 变量面板展示用）
+    """获取模板变量说明（Views 变量面板展示用）
 
     Returns:
         变量名到中文描述的映射；config.yaml 未定义时返回空字典。

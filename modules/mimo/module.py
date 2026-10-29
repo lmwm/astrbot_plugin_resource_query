@@ -4,7 +4,7 @@
 登录、凭据刷新等底层逻辑由内部 MimoManager 负责。
 
 配置分层：
-  - 模块级默认值（Pages「模块设置」）→ config/mimo/config.json
+  - 模块级默认值（Views「模块设置」）→ config/mimo/config.json
   - 只读兜底默认值 → modules/mimo/config.yaml
   - 账号级覆盖 → config/mimo/<账号>.json
 """
@@ -145,12 +145,12 @@ class MimoModule(ModuleBase):
 
     @property
     def supports_login(self) -> bool:
-        """支持在 Pages 中登录（含 OTP）"""
+        """支持在 Views 中登录（含 OTP）"""
         return True
 
     @property
     def supports_test(self) -> bool:
-        """支持在 Pages 中测试凭据"""
+        """支持在 Views 中测试凭据"""
         return True
 
     @property
@@ -494,11 +494,11 @@ class MimoModule(ModuleBase):
         yield event.plain_result(self.render(await self.query(account)))
 
     # ══════════════════════════════════════════
-    #  Pages 接口
+    #  Views 接口
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Pages 接口
+        """本模块的 Views 接口
 
         Returns:
             接口定义列表。

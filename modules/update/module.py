@@ -1,7 +1,7 @@
 """插件更新模块
 
 把「插件自身更新」也做成一个标准功能模块：
-  - 配置（代理、重试次数）由 Pages 管理
+  - 配置（代理、重试次数）由 Views 管理
   - 通过 `/query update` 触发检查与更新
   - 启用开关由 AstrBot 原生配置管理
 """
@@ -136,11 +136,11 @@ class UpdateModule(ModuleBase):
         yield event.plain_result(f"{result}\n{await reload_plugin(self._context)}")
 
     # ══════════════════════════════════════════
-    #  Pages 接口
+    #  Views 接口
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Pages 接口
+        """本模块的 Views 接口
 
         Returns:
             接口定义列表。

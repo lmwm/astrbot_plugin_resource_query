@@ -1,0 +1,8 @@
+{
+  "views": {
+    "template-editor": {
+      "title": "Resource Query",
+      "description": "Configuration and account management for MiMo, Wasu, JM downloads and plugin updates"
+    }
+  }
+}

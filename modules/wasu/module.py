@@ -88,7 +88,7 @@ class WasuModule(ModuleBase):
 
     @property
     def supports_test(self) -> bool:
-        """支持在 Pages 中测试凭据"""
+        """支持在 Views 中测试凭据"""
         return True
 
     # ══════════════════════════════════════════
@@ -447,11 +447,11 @@ class WasuModule(ModuleBase):
         yield event.plain_result(self.render(await self.query(account)))
 
     # ══════════════════════════════════════════
-    #  Pages 接口
+    #  Views 接口
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Pages 接口
+        """本模块的 Views 接口
 
         Returns:
             接口定义列表。

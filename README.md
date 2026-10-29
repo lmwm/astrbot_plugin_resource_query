@@ -43,7 +43,8 @@ main.py                     插件入口：只做「注册 + 分发」
         ├── jm/             JM 下载（downloader 适配层 + core 下载核心）
         └── update/         插件更新
   └── common/               通用工具层：路径、文件读写、YAML 解析
-  └── pages/template-editor/  管理界面（schema 驱动，2 个文件）
+  └── views/template-editor/  管理界面（新版权图机制，schema 驱动，2 个文件）
+  └── .astrbot-plugin/i18n/   视图元数据（标题 / 描述）
 ```
 
 ### 设计原则
@@ -51,7 +52,7 @@ main.py                     插件入口：只做「注册 + 分发」
 1. **模块自治**：每个模块管理自己的配置、账号、模板、查询与指令
 2. **模块隔离**：模块之间不直接依赖，需要协作时通过注册中心按名称取用
 3. **契约统一**：所有模块继承 `ModuleBase`，实现同一套接口
-4. **界面驱动**：Pages 按模块声明的 schema 自动渲染，新增模块无需改前端
+4. **界面驱动**：Views 按模块声明的 schema 自动渲染，新增模块无需改前端
 
 ## 指令
 
@@ -76,7 +77,7 @@ main.py                     插件入口：只做「注册 + 分发」
 
 ### 1. AstrBot 原生配置（插件配置界面）
 
-只放**模块启用开关**，关闭的模块不会加载，其指令与 Pages 配置页一并隐藏：
+只放**模块启用开关**，关闭的模块不会加载，其指令与 Views 配置页一并隐藏：
 
 | 配置项 | 说明 | 默认 |
 |--------|------|------|
@@ -85,7 +86,7 @@ main.py                     插件入口：只做「注册 + 分发」
 | `modules.jm_enabled` | 启用 JM 下载 | 开 |
 | `modules.update_enabled` | 启用插件更新 | 开 |
 
-### 2. 插件 Pages（管理界面）
+### 2. 插件 Views（管理界面）
 
 每个模块的配置在各自的页面中管理，保存在插件数据目录，重装插件不会丢失：
 
@@ -216,9 +217,10 @@ astrbot_plugin_resource_query/
 │   ├── wasu/                # module / result / constants / utils / config.yaml
 │   ├── jm/                  # module / downloader / utils + core(manager / models)
 │   └── update/              # module / updater
-├── pages/template-editor/   # 管理界面（schema 驱动）
+├── views/template-editor/   # 管理界面（新版视图机制，schema 驱动）
 │   ├── index.html
 │   └── core.js
+├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）
 └── http_utils.py            # HTTP 工具（Cookie / opener / 代理 / 重试）
 ```
 

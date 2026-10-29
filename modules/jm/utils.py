@@ -1,6 +1,6 @@
 """JMComic 模块工具与默认配置
 
-默认值与 Pages 配置项定义统一来自 `modules/jm/config.yaml`（只读），
+默认值与 Views 配置项定义统一来自 `modules/jm/config.yaml`（只读），
 修改该文件即可调整默认行为，且不会覆盖用户已保存的配置。
 """
 
@@ -85,7 +85,7 @@ def get_default_config() -> dict:
 
 
 def get_config_fields() -> list[dict]:
-    """获取 Pages 配置项定义
+    """获取 Views 配置项定义
 
     以 config.yaml 中 fields 段的键顺序作为显示顺序，键名即配置键。
 

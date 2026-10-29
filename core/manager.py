@@ -1,7 +1,7 @@
 """总管理器
 
 协调各功能模块与 AstrBot 之间的通信：负责模块注册、账号汇总、
-Pages schema 汇总与跨模块查询转发。
+Views schema 汇总与跨模块查询转发。
 
 模块之间通过注册中心按名称取用，不直接互相依赖。
 """
@@ -137,11 +137,11 @@ class PluginManager:
         return module.delete_account(filename)
 
     # ══════════════════════════════════════════
-    #  Pages 支持
+    #  Views 支持
     # ══════════════════════════════════════════
 
     def get_page_schemas(self) -> list[dict]:
-        """汇总各模块的 Pages 描述
+        """汇总各模块的 Views 描述
 
         Returns:
             模块 schema 列表，供前端通用渲染配置页。

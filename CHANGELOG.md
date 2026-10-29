@@ -1,3 +1,14 @@
+## v5.9.0 (2026-10-30)
+
+### 变更
+
+- **插件页面迁移到 Views 机制**：管理界面目录由 `pages/` 改为 `views/`，适配 AstrBot 新版可视化视图（`pages/` 仅作兼容别名）
+- 前端 bridge 改用 `window.AstrBotPluginView`，旧版 AstrBot 自动回退 `window.AstrBotPluginPage`
+- 新增 `.astrbot-plugin/i18n/{zh-CN,en-US}.json`，为视图提供标题与描述
+- 代码与配置注释中的「Pages」措辞统一改为「Views」
+
+---
+
 ## v5.8.4 (2026-10-29)
 
 ### 修复

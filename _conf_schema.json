@@ -2,7 +2,7 @@
     "modules": {
         "description": "功能模块开关",
         "type": "object",
-        "hint": "关闭的模块不会加载，其指令与配置页同时隐藏；模块自身的配置在插件 Pages 页面中管理",
+        "hint": "关闭的模块不会加载，其指令与配置页同时隐藏；模块自身的配置在插件 Views 页面中管理",
         "items": {
             "mimo_enabled": {
                 "description": "启用 MiMo 查询",

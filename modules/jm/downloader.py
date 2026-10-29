@@ -36,7 +36,7 @@ class JMDownloader:
     def load_config(self) -> dict:
         """加载配置
 
-        默认值来自 `modules/jm/config.yaml`，用户经 Pages 保存的配置优先。
+        默认值来自 `modules/jm/config.yaml`，用户经 Views 保存的配置优先。
 
         Returns:
             配置字典。

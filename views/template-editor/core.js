@@ -1,5 +1,5 @@
 /**
- * 资源查询插件 Pages 通用外壳
+ * 资源查询插件 Views 通用外壳
  *
  * 设计原则：界面完全由后端返回的模块 schema 驱动。
  * 新增功能模块时，后端实现 ModuleBase 并声明 schema 即可，
@@ -12,7 +12,8 @@
 (function () {
   'use strict';
 
-  const bridge = window.AstrBotPluginPage;
+  // AstrBot 新版 bridge 名为 AstrBotPluginView，旧版为 AstrBotPluginPage
+  const bridge = window.AstrBotPluginView || window.AstrBotPluginPage;
 
   // ══════════════════════════════════════════
   //  状态

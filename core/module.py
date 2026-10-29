@@ -3,15 +3,15 @@
 所有功能模块（MiMo 查询 / 华数查询 / JM 下载 / 插件更新 ...）都继承此基类。
 
 模块自治原则：
-  1. 每个模块管理自己的配置、账号、模板、查询、指令与 Pages 接口；
+  1. 每个模块管理自己的配置、账号、模板、查询、指令与 Views 接口；
   2. 模块之间不直接依赖，需要协作时通过注册中心按名称取用；
-  3. 模块开关由 AstrBot 原生配置管理，模块自身配置由 Pages 管理。
+  3. 模块开关由 AstrBot 原生配置管理，模块自身配置由 Views 管理。
 
 新增模块的步骤：
   1. 在 `modules/` 下新建目录，实现 `XxxModule(ModuleBase)`；
   2. 按需覆盖 `supports_*` 属性与 `get_*_fields()`，声明自己的能力；
   3. 在 `main.py` 的模块清单中登记一行。
-  Pages 前端依据模块声明的 schema 自动渲染配置页，无需改动前端代码。
+  Views 前端依据模块声明的 schema 自动渲染配置页，无需改动前端代码。
 """
 
 from __future__ import annotations
@@ -43,7 +43,7 @@ class ModuleBase(ABC):
 
     Attributes:
         plugin_name: 所属插件名（用于定位数据目录）。
-        module_name: 模块唯一标识，同时作为配置目录名与 Pages 路由前缀。
+        module_name: 模块唯一标识，同时作为配置目录名与 Views 路由前缀。
     """
 
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
@@ -70,11 +70,11 @@ class ModuleBase(ABC):
     @property
     @abstractmethod
     def module_title(self) -> str:
-        """模块显示名（Pages 导航与帮助信息中使用）"""
+        """模块显示名（Views 导航与帮助信息中使用）"""
 
     @property
     def module_icon(self) -> str:
-        """模块图标（Pages 导航中使用）"""
+        """模块图标（Views 导航中使用）"""
         return ""
 
     @property
@@ -88,12 +88,12 @@ class ModuleBase(ABC):
 
     @property
     def supports_accounts(self) -> bool:
-        """是否管理多账号（决定 Pages 是否渲染账号列表）"""
+        """是否管理多账号（决定 Views 是否渲染账号列表）"""
         return False
 
     @property
     def supports_template(self) -> bool:
-        """是否支持消息模板（决定 Pages 是否渲染模板编辑器）"""
+        """是否支持消息模板（决定 Views 是否渲染模板编辑器）"""
         return False
 
     @property
@@ -103,12 +103,12 @@ class ModuleBase(ABC):
 
     @property
     def supports_login(self) -> bool:
-        """是否支持在 Pages 中登录（决定是否显示「登录」按钮）"""
+        """是否支持在 Views 中登录（决定是否显示「登录」按钮）"""
         return False
 
     @property
     def supports_test(self) -> bool:
-        """是否支持在 Pages 中测试凭据（决定是否显示「测试」按钮）"""
+        """是否支持在 Views 中测试凭据（决定是否显示「测试」按钮）"""
         return False
 
     @property
@@ -170,7 +170,7 @@ class ModuleBase(ABC):
         return get_platform_path(self._plugin_name, self.module_name)
 
     # ══════════════════════════════════════════
-    #  模块配置（Pages 管理）
+    #  模块配置（Views 管理）
     # ══════════════════════════════════════════
 
     def get_default_config(self) -> dict:
@@ -381,7 +381,7 @@ class ModuleBase(ABC):
         """模板变量名到中文描述的映射（子类覆盖）
 
         Returns:
-            形如 {"balance": "余额"} 的字典，供 Pages 变量面板展示。
+            形如 {"balance": "余额"} 的字典，供 Views 变量面板展示。
         """
         return {}
 
@@ -484,11 +484,11 @@ class ModuleBase(ABC):
         yield event.plain_result(f"❌ 模块「{self.module_title}」不支持指令 /{command}")
 
     # ══════════════════════════════════════════
-    #  Pages 支持
+    #  Views 支持
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块提供的 Pages 接口（子类覆盖）
+        """本模块提供的 Views 接口（子类覆盖）
 
         Returns:
             每项形如 {"path": "config", "handler": fn,
@@ -498,7 +498,7 @@ class ModuleBase(ABC):
         return []
 
     def get_page_schema(self) -> dict:
-        """Pages 渲染所需的模块描述
+        """Views 渲染所需的模块描述
 
         前端依据此 schema 通用渲染配置页，因此新增模块通常无需改动前端。
 

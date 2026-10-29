@@ -59,7 +59,7 @@ class JMManager:
         """初始化管理器
 
         Args:
-            config: 下载配置（来自 Pages）。
+            config: 下载配置（来自 Views）。
             download_dir: 下载根目录。
         """
         self._config = config or {}

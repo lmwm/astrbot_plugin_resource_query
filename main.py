@@ -2,7 +2,7 @@
 
 职责保持极薄：
   1. 按 AstrBot 原生配置决定启用哪些功能模块并注册；
-  2. 注册全局与各模块的 Pages 接口；
+  2. 注册全局与各模块的 Views 接口；
   3. 把指令分发到对应模块。
 
 四个功能模块（均继承 `core.module.ModuleBase`）：
@@ -14,7 +14,7 @@
 新增功能模块只需两步：
   1. 在 `modules/` 下新建包并实现 `XxxModule(ModuleBase)`；
   2. 在下方 `_MODULE_CLASSES` 中登记一行。
-  Pages 前端会依据模块声明的 schema 自动渲染配置页。
+  Views 前端会依据模块声明的 schema 自动渲染配置页。
 """
 
 from __future__ import annotations
@@ -92,7 +92,7 @@ class ResourceQueryPlugin(Star):
                 logger.warning(f"[{PLUGIN_NAME}] 模块 {name} 注册失败（名称重复）")
 
     # ══════════════════════════════════════════
-    #  Pages 接口
+    #  Views 接口
     # ══════════════════════════════════════════
 
     def _register_web_apis(self, context: Context) -> None:
@@ -125,7 +125,7 @@ class ResourceQueryPlugin(Star):
         """获取已启用模块的页面描述
 
         未启用的模块不会被注册，因此不会出现在返回结果中，
-        Pages 也就不会渲染它们的配置页。
+        Views 也就不会渲染它们的配置页。
 
         Returns:
             JSON 响应，包含模块 schema 列表与插件版本号。
@@ -203,8 +203,8 @@ class ResourceQueryPlugin(Star):
     async def get_template_vars(self):
         """获取各模块的模板变量定义
 
-        变量来源 = 模块声明的变量 + 用户在 Pages 中的自定义配置，
-        因此在 Pages 中新增的变量刷新后不会丢失。
+        变量来源 = 模块声明的变量 + 用户在 Views 中的自定义配置，
+        因此在 Views 中新增的变量刷新后不会丢失。
 
         Returns:
             JSON 响应，按模块名分组的变量列表。
@@ -235,7 +235,7 @@ class ResourceQueryPlugin(Star):
                 for name, desc in declared.items()
             ]
 
-            # 用户在 Pages 中额外添加的变量也一并保留
+            # 用户在 Views 中额外添加的变量也一并保留
             variables.extend(
                 item for name, item in saved_map.items() if name not in declared
             )
