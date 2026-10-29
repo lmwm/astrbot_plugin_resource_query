@@ -202,6 +202,9 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
 async def reload_plugin(context) -> str:
     """调用 Dashboard API 重载插件，使新版本生效
 
+    优先使用 AstrBot 4.29+ 的 REST 路由 `/api/plugins/{name}/reload`，
+    失败时回退到旧路由 `/api/plugin/reload`（旧版 AstrBot 仍在使用）。
+
     Args:
         context: AstrBot 的 Context 实例。
 
@@ -232,23 +235,38 @@ async def reload_plugin(context) -> str:
             if isinstance(token, bytes):
                 token = token.decode("utf-8")
 
-            opener, _ = new_opener()
-            request = Request(
-                f"http://{host}:{port}/api/plugin/reload",
-                data=json.dumps({"name": _REPO_NAME}).encode(),
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-                method="POST",
+            base = f"http://{host}:{port}"
+            routes = (
+                (f"{base}/api/plugins/{_REPO_NAME}/reload", None),
+                (f"{base}/api/plugin/reload", {"name": _REPO_NAME}),
             )
-            with opener.open(request, timeout=15) as response:
-                result = json.loads(response.read())
 
-            if result.get("status") == "ok":
-                return "√ 插件已自动重载，新版本已生效"
+            opener, _ = new_opener()
+            last_error = ""
 
-            return f"! 重载返回: {result.get('message', result)}"
+            for url, body in routes:
+                request = Request(
+                    url,
+                    data=json.dumps(body).encode() if body else None,
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        "Content-Type": "application/json",
+                    },
+                    method="POST",
+                )
+                try:
+                    with opener.open(request, timeout=15) as response:
+                        result = json.loads(response.read())
+                except (OSError, TimeoutError, json.JSONDecodeError) as e:
+                    last_error = str(e)
+                    continue
+
+                if result.get("status") == "ok":
+                    return "√ 插件已自动重载，新版本已生效"
+
+                last_error = f"重载返回: {result.get('message', result)}"
+
+            return f"! 自动重载失败: {last_error}，请手动在 WebUI 重载插件"
 
         except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
             return f"! 自动重载失败: {e}，请手动在 WebUI 重载插件"

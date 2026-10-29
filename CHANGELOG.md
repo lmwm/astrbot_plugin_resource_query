@@ -1,3 +1,12 @@
+## v5.8.2 (2026-10-29)
+
+### 适配
+
+- **适配 AstrBot 4.29.3**：`/query update` 的重载步骤优先调用新版 REST 路由 `/api/plugins/{name}/reload`，旧版 AstrBot 自动回退到 `/api/plugin/reload`
+- 已在本机 AstrBot 4.29.3 实测：插件加载、Dashboard 重载、JM 旧数据迁移（25 个目录）均正常
+
+---
+
 ## v5.8.1 (2026-10-29)
 
 ### 修复
