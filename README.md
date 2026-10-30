@@ -45,7 +45,7 @@ main.py                     插件入口：只做「注册 + 分发」
         ├── wasu/           华数查询
         ├── jm/             JM 下载（module / service / paths / cache / pdf）
         └── update/         插件更新
-  └── common/               通用工具层：路径、文件读写、YAML 解析
+  └── common/               通用工具层：路径、文件读写、YAML 解析、模块配置读取
   └── views/template-editor/  管理界面（schema 驱动，单文件入口，脚本内联）
   └── .astrbot-plugin/i18n/   视图元数据（标题 / 描述）
 ```
@@ -217,12 +217,13 @@ astrbot_plugin_resource_query/
 │   └── result.py            # 查询结果基类
 ├── common/                  # 通用工具层
 │   ├── utils.py             # 路径与文件读写
-│   └── yaml_utils.py        # 简易 YAML 解析
+│   ├── yaml_utils.py        # 简易 YAML 解析
+│   └── module_config.py     # 从 config.yaml 读默认值与字段定义
 ├── modules/                 # 功能模块层
 │   ├── mimo/                # module / manager / account / query / result / utils / config.yaml
 │   ├── wasu/                # module / result / constants / utils / config.yaml
 │   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.yaml
-│   └── update/              # module / updater
+│   └── update/              # module / updater / utils / config.yaml
 ├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
 │   └── index.html
 ├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）
