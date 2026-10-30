@@ -1,7 +1,6 @@
 # MiMo 模块工具与默认配置
 #
-# 默认值统一来自 `modules/mimo/config.yaml`（只读），
-# 代码中只保留 config.yaml 缺失时的兜底值。
+# 默认值统一来自 `modules/mimo/config.yaml`（只读），脚本内不写默认值。
 
 from __future__ import annotations
 
@@ -11,13 +10,6 @@ from ...common.yaml_utils import get_config_value, load_yaml_config
 
 _MODULE_DIR = Path(__file__).parent
 _CONFIG_FILE = _MODULE_DIR / "config.yaml"
-
-# config.yaml 缺失时的兜底值
-_FALLBACK_DEVICE_ID = "wb_MIQUERY000001"
-_FALLBACK_UA = (
-    "Mozilla/5.0 (Linux; Android 16; 23127PN0CC Build/BP2A.250605.031.A3; wv)"
-)
-_FALLBACK_TEMPLATE = "{label}\n  余额: {balance}元\n  赠送: {gift_balance}元"
 
 
 def _config() -> dict:
@@ -46,17 +38,17 @@ def fmt_num(value) -> str:
 
 def get_default_device_id() -> str:
     # 获取默认设备标识
-    return get_config_value(_config(), "device.default_device_id", _FALLBACK_DEVICE_ID)
+    return str(get_config_value(_config(), "device.default_device_id", "") or "")
 
 
 def get_default_ua() -> str:
     # 获取默认 User-Agent
-    return get_config_value(_config(), "device.default_ua", _FALLBACK_UA)
+    return str(get_config_value(_config(), "device.default_ua", "") or "")
 
 
 def get_default_template() -> str:
     # 获取默认消息模板
-    return get_config_value(_config(), "template.default", _FALLBACK_TEMPLATE)
+    return str(get_config_value(_config(), "template.default", "") or "")
 
 
 def get_var_definitions() -> dict[str, str]:

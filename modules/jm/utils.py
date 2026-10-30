@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from ...common.yaml_utils import get_config_value, load_yaml_config
+from ...common.module_config import load_defaults, load_fields
 
 _MODULE_DIR = Path(__file__).parent
 _CONFIG_FILE = _MODULE_DIR / "config.yaml"
@@ -29,60 +29,14 @@ def pick_display_name(oname: str, fallback: str) -> str:
     return str(fallback or "").strip()
 
 
-# config.yaml 缺失时的兜底默认值
-_FALLBACK_DEFAULTS: dict = {
-    "jm_send_file": True,
-    "jm_show_info": False,
-    "jm_info_after_download": False,
-    "jm_max_file_size": 10,
-    "jm_jpeg_quality": 75,
-    "jm_max_concurrent": 1,
-    "jm_image_threads": 16,
-    "jm_photo_threads": 4,
-    "jm_timeout": 20,
-    "jm_retry_times": 3,
-    "jm_proxy": "",
-    "jm_cookies": "",
-}
-
-# config.yaml 缺失时的兜底字段定义
-_FALLBACK_FIELDS: list[dict] = [
-    {"key": "jm_send_file", "label": "下载后发送 PDF", "type": "bool"},
-    {"key": "jm_show_info", "label": "发送漫画信息", "type": "bool"},
-    {"key": "jm_info_after_download", "label": "详情在下载完成后发送", "type": "bool"},
-    {"key": "jm_max_file_size", "label": "文件大小上限（MB）", "type": "int"},
-]
-
-
-def _config() -> dict:
-    # 加载模块 YAML 配置（结果带缓存）
-    return load_yaml_config(_CONFIG_FILE)
-
-
 def get_default_config() -> dict:
-    # 获取默认配置
-    defaults = get_config_value(_config(), "defaults", None)
-    if isinstance(defaults, dict) and defaults:
-        return dict(defaults)
-    return dict(_FALLBACK_DEFAULTS)
+    # 模块默认配置（来自 config.yaml）
+    return load_defaults(_CONFIG_FILE)
 
 
 def get_config_fields() -> list[dict]:
-    # 获取 Views 配置项定义
-    #
-    #     以 config.yaml 中 fields 段的键顺序作为显示顺序，键名即配置键。
-    raw = get_config_value(_config(), "fields", None)
-    if not isinstance(raw, dict) or not raw:
-        return [dict(item) for item in _FALLBACK_FIELDS]
-
-    fields: list[dict] = []
-    for key, meta in raw.items():
-        item = {"key": key}
-        if isinstance(meta, dict):
-            item.update(meta)
-        fields.append(item)
-
-    return fields or [dict(item) for item in _FALLBACK_FIELDS]
+    # Views 配置项定义（来自 config.yaml，键顺序即显示顺序）
+    return load_fields(_CONFIG_FILE)
 
 
 def normalize_album_id(raw: str) -> int | None:

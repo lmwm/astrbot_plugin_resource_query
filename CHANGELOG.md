@@ -1,3 +1,14 @@
+## v5.9.13 (2026-10-30)
+
+### 重构
+
+- **模块配置统一来自 YAML**：新增 `common/module_config.py`（`load_defaults` / `load_fields`）；`update` 与 `jm` 的默认值与字段定义改为读各自 `config.yaml`，删除 `update/module.py` 的 `_DEFAULT_CONFIG` / `_CONFIG_FIELDS` 与 `jm/utils.py` 的 `_FALLBACK_*`
+- **保存过滤也以 YAML 为准**：`accept_config_payload` 按 `config.yaml` 声明的键过滤，`current_version` 等只读字段不会写回
+- **mimo / wasu 去掉写死的兜底值**：默认模板、设备标识、User-Agent 全部以 `config.yaml` 为准
+- 优先级保持：`config/<模块>/config.json`（网页保存）> `modules/<模块>/config.yaml`（插件默认）
+
+---
+
 ## v5.9.12 (2026-10-30)
 
 ### 修复

@@ -9,28 +9,8 @@ from __future__ import annotations
 
 from ...core.module import ModuleBase
 from .updater import check_update, do_update, get_current_version, reload_plugin
-
-# 模块配置字段
-_CONFIG_FIELDS = [
-    {
-        "key": "proxy",
-        "label": "GitHub 代理",
-        "type": "text",
-        "hint": "如 https://gh-proxy.com/，留空使用默认代理",
-    },
-    {
-        "key": "max_retries",
-        "label": "请求重试次数",
-        "type": "int",
-        "hint": "网络请求失败时的重试次数",
-    },
-]
-
-# 默认配置
-_DEFAULT_CONFIG = {
-    "proxy": "https://gh-proxy.com/",
-    "max_retries": 3,
-}
+from .utils import get_config_fields as _load_config_fields
+from .utils import get_default_config as _load_default_config
 
 
 class UpdateModule(ModuleBase):
@@ -61,12 +41,12 @@ class UpdateModule(ModuleBase):
     #  模块配置
 
     def get_default_config(self) -> dict:
-        # 模块默认配置
-        return dict(_DEFAULT_CONFIG)
+        # 模块默认配置（来自 config.yaml）
+        return _load_default_config()
 
     def get_config_fields(self) -> list[dict]:
-        # 模块配置字段定义
-        return _CONFIG_FIELDS
+        # 模块配置字段定义（来自 config.yaml）
+        return _load_config_fields()
 
     #  指令
 
@@ -116,5 +96,6 @@ class UpdateModule(ModuleBase):
         return config
 
     def accept_config_payload(self, payload: dict, config: dict) -> dict:
-        # 只接受已知配置项，避免把 current_version 等只读字段写回
-        return {k: v for k, v in payload.items() if k in _DEFAULT_CONFIG}
+        # 只接受 config.yaml 声明的键，避免把 current_version 等只读字段写回
+        known = _load_default_config()
+        return {k: v for k, v in payload.items() if k in known}

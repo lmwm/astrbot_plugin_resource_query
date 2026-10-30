@@ -1,0 +1,22 @@
+# 插件更新模块配置
+#
+# 本文件只提供「默认值」与「Views 配置项定义」。
+# 用户在 Views 中保存的值写入 config/update/config.json，优先级高于本文件；
+# 修改这里可以调整默认行为，不会覆盖用户已保存的配置。
+
+defaults:
+  # GitHub 代理前缀；留空表示先直连，再回退内置镜像
+  proxy: "https://gh-proxy.com/"
+  # 网络请求失败时的重试次数
+  max_retries: 3
+
+# Views 配置项定义（顺序即显示顺序，键名即配置键）
+fields:
+  proxy:
+    label: GitHub 代理
+    type: text
+    hint: 如 https://gh-proxy.com/，留空使用默认代理
+  max_retries:
+    label: 请求重试次数
+    type: int
+    hint: 网络请求失败时的重试次数

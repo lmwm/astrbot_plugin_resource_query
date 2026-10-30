@@ -11,9 +11,6 @@ from ...common.yaml_utils import get_config_value, load_yaml_config
 _MODULE_DIR = Path(__file__).parent
 _CONFIG_FILE = _MODULE_DIR / "config.yaml"
 
-# config.yaml 缺失时的兜底模板
-_FALLBACK_TEMPLATE = "{label}\n  余额: {balance}\n  当月话费: {month_fee}"
-
 
 def _config() -> dict:
     # 加载模块 YAML 配置（结果带缓存）
@@ -22,7 +19,7 @@ def _config() -> dict:
 
 def get_default_template() -> str:
     # 获取默认消息模板
-    return get_config_value(_config(), "template.default", _FALLBACK_TEMPLATE)
+    return str(get_config_value(_config(), "template.default", "") or "")
 
 
 def get_var_definitions() -> dict[str, str]:
