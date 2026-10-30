@@ -271,54 +271,37 @@ class MimoModule(ModuleBase):
     #  查询
     # ══════════════════════════════════════════
 
-    async def query(self, account: dict) -> dict:
-        # 查询单个 MiMo 账号
-        #
-        #         Args:
-        #             account: 账号配置。
-        #
-        #         Returns:
-        #             统一结果字典。
-        label = account.get("name") or account.get("account") or "MiMo账号"
+    async def query(self, account: dict) -> MimoResult:
+        # 查询单个 MiMo 账号；凭据被自动刷新时持久化
+        label = self.account_display_name(account) or "MiMo账号"
         template = self.get_account_template(account)
         before = {key: account.get(key, "") for key in _CREDENTIAL_KEYS}
 
         try:
             data = await self._manager.query_one(account)
         except Exception as e:
-            return {
-                "success": False,
-                "account_name": label,
-                "error": f"{type(e).__name__}: {e}",
-                "template": template,
-            }
+            return MimoResult(
+                success=False,
+                account_name=label,
+                error=f"{type(e).__name__}: {e}",
+                template=template,
+            )
 
-        # 凭据被自动刷新时持久化，避免下次重复登录
         after = {key: account.get(key, "") for key in _CREDENTIAL_KEYS}
         if after != before:
             self.update_credentials(account, after)
 
         if "error" in data:
-            return {
-                "success": False,
-                "account_name": label,
-                "error": data["error"],
-                "template": template,
-            }
+            return MimoResult(
+                success=False,
+                account_name=label,
+                error=data["error"],
+                template=template,
+            )
 
-        return {
-            "success": True,
-            "account_name": label,
-            "data": data,
-            "template": template,
-        }
-
-    def get_result_class(self):
-        # 本模块使用的查询结果类
-        #
-        #         Returns:
-        #             MimoResult 类。
-        return MimoResult
+        return MimoResult(
+            success=True, account_name=label, data=data, template=template
+        )
 
     # ══════════════════════════════════════════
     #  指令
@@ -465,9 +448,9 @@ class MimoModule(ModuleBase):
                 {"status": "error", "message": f"{type(e).__name__}: {e}"}
             )
 
-        if not result.get("success"):
+        if not result.success:
             return json_response(
-                {"status": "error", "message": result.get("error", "查询失败")}
+                {"status": "error", "message": result.error or "查询失败"}
             )
 
         return json_response({"status": "ok", "message": "测试成功"})

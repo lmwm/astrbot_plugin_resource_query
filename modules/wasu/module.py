@@ -120,26 +120,9 @@ class WasuModule(ModuleBase):
         #             来自 config.yaml 的默认模板。
         return get_default_template()
 
-    def get_result_class(self):
-        # 本模块使用的查询结果类
-        #
-        #         Returns:
-        #             WasuResult 类。
-        return WasuResult
-
-    # ══════════════════════════════════════════
-    #  查询
-    # ══════════════════════════════════════════
-
-    async def query(self, account: dict) -> dict:
+    async def query(self, account: dict) -> WasuResult:
         # 查询单个华数账号
-        #
-        #         Args:
-        #             account: 账号配置。
-        #
-        #         Returns:
-        #             统一结果字典。
-        label = account.get("name") or account.get("phone") or "华数账号"
+        label = self.account_display_name(account) or "华数账号"
         template = self.get_account_template(account)
 
         user_key = str(account.get("user_key") or "").strip()
@@ -147,12 +130,12 @@ class WasuModule(ModuleBase):
         phone = str(account.get("phone") or "").strip()
 
         if not user_key or not token or not phone:
-            return {
-                "success": False,
-                "account_name": label,
-                "error": "缺少必要参数（User Key / Token / 手机号）",
-                "template": template,
-            }
+            return WasuResult(
+                success=False,
+                account_name=label,
+                error="缺少必要参数（User Key / Token / 手机号）",
+                template=template,
+            )
 
         try:
             loop = asyncio.get_running_loop()
@@ -166,26 +149,20 @@ class WasuModule(ModuleBase):
                 str(account.get("ua") or ""),
             )
         except WasuApiError as e:
-            return {
-                "success": False,
-                "account_name": label,
-                "error": str(e),
-                "template": template,
-            }
+            return WasuResult(
+                success=False, account_name=label, error=str(e), template=template
+            )
         except Exception as e:
-            return {
-                "success": False,
-                "account_name": label,
-                "error": f"{type(e).__name__}: {e}",
-                "template": template,
-            }
+            return WasuResult(
+                success=False,
+                account_name=label,
+                error=f"{type(e).__name__}: {e}",
+                template=template,
+            )
 
-        return {
-            "success": True,
-            "account_name": label,
-            "data": data,
-            "template": template,
-        }
+        return WasuResult(
+            success=True, account_name=label, data=data, template=template
+        )
 
     def _do_query(
         self,
@@ -367,11 +344,11 @@ class WasuModule(ModuleBase):
 
         result = await self.query(payload)
 
-        if not result.get("success"):
+        if not result.success:
             return json_response(
                 {
                     "status": "error",
-                    "message": result.get("error", "查询失败"),
+                    "message": result.error or "查询失败",
                 }
             )
 

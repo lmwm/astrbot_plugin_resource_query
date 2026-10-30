@@ -10,23 +10,14 @@
 from __future__ import annotations
 
 import logging
-from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
-class QueryResult(ABC):
-    # 查询结果统一格式
-    #
-    #     Attributes:
-    #         success: 是否查询成功。
-    #         platform: 平台标识，用于日志与兜底提示。
-    #         account_name: 账号显示名称。
-    #         data: 查询数据。
-    #         error: 错误信息，仅在 success 为 False 时有意义。
-    #         template: 消息模板，由调用方提供。
+class QueryResult:
+    # 查询结果统一格式；子类覆盖 build_variables 提供模板变量
 
     success: bool
     platform: str
@@ -52,10 +43,6 @@ class QueryResult(ABC):
             logger.error(f"[{self.platform}] 模板渲染失败: {type(e).__name__}: {e}")
             return f"{self.account_name}\n❌ 格式化错误: {e}"
 
-    @abstractmethod
     def build_variables(self) -> dict[str, str]:
-        # 构建模板变量
-        #
-        #         Returns:
-        #             变量名到字符串值的映射，用于填充 template。
-        raise NotImplementedError
+        # 模板变量映射；子类覆盖
+        return {}

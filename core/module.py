@@ -26,6 +26,7 @@ from ..common.utils import (
     load_json_file,
     save_json_file,
 )
+from .result import QueryResult
 
 if TYPE_CHECKING:
     from .registry import ModuleRegistry
@@ -375,70 +376,33 @@ class ModuleBase(ABC):
     #  查询（supports_query 为 True 时实现）
     # ══════════════════════════════════════════
 
-    async def query(self, account: dict) -> dict:
+    async def query(self, account: dict) -> QueryResult:
         # 查询单个账号（子类覆盖）
-        #
-        #         Args:
-        #             account: 账号配置。
-        #
-        #         Returns:
-        #             统一结果字典，包含 success / account_name / data / error / template。
         raise NotImplementedError(f"{self.module_name} 未实现查询能力")
 
-    async def query_all(self) -> list[dict]:
-        # 查询本模块全部账号
-        #
-        #         Returns:
-        #             查询结果列表；单个账号异常不会中断其余账号。
-        results: list[dict] = []
+    async def query_all(self) -> list[QueryResult]:
+        # 查询本模块全部账号；单个账号异常不会中断其余账号
+        results: list[QueryResult] = []
 
         for acc in self.get_accounts():
-            label = (
-                acc.get("name") or acc.get("account") or acc.get("phone") or "未命名"
-            )
+            label = self.account_display_name(acc) or "未命名"
             try:
                 results.append(await self.query(acc))
             except Exception as e:
                 results.append(
-                    {
-                        "success": False,
-                        "account_name": label,
-                        "error": f"{type(e).__name__}: {e}",
-                    }
+                    QueryResult(
+                        success=False,
+                        platform=self.module_title,
+                        account_name=label,
+                        error=f"{type(e).__name__}: {e}",
+                    )
                 )
 
         return results
 
-    def get_result_class(self):
-        # 本模块使用的查询结果类（子类覆盖）
-        #
-        #         Returns:
-        #             QueryResult 子类；返回 None 表示使用默认文本输出。
-        return
-
-    def render(self, result: dict) -> str:
-        # 把 query() 的返回值渲染为可直接发送的文本
-        #
-        #         Args:
-        #             result: query() 的返回值。
-        #
-        #         Returns:
-        #             渲染后的文本。
-        label = result.get("account_name") or self.module_title
-
-        if not result.get("success"):
-            return f"{label}\n❌ {result.get('error') or '查询失败'}"
-
-        result_cls = self.get_result_class()
-        if result_cls is None:
-            return f"{label}\n✅ 查询成功"
-
-        return result_cls(
-            success=True,
-            account_name=label,
-            data=result.get("data", {}),
-            template=result.get("template"),
-        ).to_text()
+    def render(self, result: QueryResult) -> str:
+        # 把查询结果渲染为可直接发送的文本
+        return result.to_text()
 
     # ══════════════════════════════════════════
     #  指令（子类按需覆盖）

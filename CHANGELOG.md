@@ -1,3 +1,14 @@
+## v5.9.6 (2026-10-30)
+
+### 重构
+
+- **入口拆层**：全局 Views 接口移到 `core/web.py`（`GlobalWebApi`），指令参数解析与帮助文本移到 `core/commands.py`，`main.py` 只保留模块注册、接口注册与指令分发
+- **删除 `PluginManager`**：直接使用 `ModuleRegistry`，去掉纯转发层；账号与页面描述的汇总并入 `GlobalWebApi`
+- **统一查询结果模型**：`query()` 一律返回 `QueryResult` 子类，`render()` 直接调用 `to_text()`；去掉 `get_result_class` 与 dict 协议，`QueryResult` 不再强制抽象
+- 指令参数解析容忍前导 `/`，避免唤醒前缀未被剥离的平台下无法识别指令
+
+---
+
 ## v5.9.5 (2026-10-30)
 
 ### 重构
