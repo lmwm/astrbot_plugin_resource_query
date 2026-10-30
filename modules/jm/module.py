@@ -40,9 +40,7 @@ class JMModule(ModuleBase):
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
 
-    # ══════════════════════════════════════════
     #  元信息
-    # ══════════════════════════════════════════
 
     @property
     def module_name(self) -> str:
@@ -60,9 +58,7 @@ class JMModule(ModuleBase):
     def module_desc(self) -> str:
         return "JMComic 漫画下载（仅私聊）"
 
-    # ══════════════════════════════════════════
     #  模块配置
-    # ══════════════════════════════════════════
 
     def get_default_config(self) -> dict:
         from .utils import get_default_config
@@ -83,9 +79,7 @@ class JMModule(ModuleBase):
             self._service.bind_config(self.load_module_config())
         return saved
 
-    # ══════════════════════════════════════════
     #  指令
-    # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
         return [{"name": "jm", "desc": "下载 JMComic 漫画：/jm <ID> [redownload]"}]
@@ -249,6 +243,4 @@ class JMModule(ModuleBase):
 
         return self._semaphore
 
-    # ══════════════════════════════════════════
     #  Views 接口
-    # ══════════════════════════════════════════

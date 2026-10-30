@@ -27,16 +27,11 @@ class MimoManager:
 
     def __init__(self, plugin_dir: Path):
         # 初始化 MiMo 管理器
-        #
-        #         Args:
-        #             plugin_dir: 插件目录路径
         self._plugin_dir = plugin_dir
         # 缓存 MiAccount 实例，用于保持 OTP 会话状态
         self._mi_account_cache: dict[str, MiAccount] = {}
 
-    # ══════════════════════════════════════════
     #  登录相关
-    # ══════════════════════════════════════════
 
     async def ensure_account(self, acc: dict) -> dict:
         # 异步：确保账号有可用凭据
@@ -54,24 +49,10 @@ class MimoManager:
         #         流程：
         #           1. 账号密码 → PassToken + User ID
         #           2. PassToken → ServiceToken
-        #
-        #         Args:
-        #             acc: 账号配置。
-        #             otp_code: OTP 验证码（可选）。
-        #
-        #         Returns:
-        #             dict: {"account", "password", "userId", "passToken", "serviceToken"}
         return self._sync_login_account(acc, otp_code)
 
     async def login_account_async(self, acc: dict, otp_code: str | None = None) -> dict:
         # 异步：完整登录流程（丢到线程池，避免阻塞事件循环）
-        #
-        #         Args:
-        #             acc: 账号配置。
-        #             otp_code: OTP 验证码（可选）。
-        #
-        #         Returns:
-        #             登录后的凭据字典。
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, lambda: self.login_account(acc, otp_code)
@@ -103,12 +84,6 @@ class MimoManager:
         self, mi: MiAccount, user_id: str, pass_token: str, acc: dict
     ) -> None:
         # 通过 PassToken 获取 ServiceToken 并更新账号配置
-        #
-        #         Args:
-        #             mi: MiAccount 实例
-        #             user_id: 用户 ID
-        #             pass_token: PassToken
-        #             acc: 账号配置字典（会被修改）
         user_id, service_token = mi.login_with_passtoken(user_id, pass_token)
         acc["userId"] = user_id
         acc["serviceToken"] = service_token
@@ -117,15 +92,6 @@ class MimoManager:
         self, mi: MiAccount, user_id: str, pass_token: str, acc: dict
     ) -> bool:
         # 尝试使用 passToken 获取 serviceToken
-        #
-        #         Args:
-        #             mi: MiAccount 实例
-        #             user_id: 用户 ID
-        #             pass_token: PassToken
-        #             acc: 账号配置字典（会被修改）
-        #
-        #         Returns:
-        #             是否成功获取 serviceToken
         try:
             self._get_service_token(mi, user_id, pass_token, acc)
             return True
@@ -141,13 +107,6 @@ class MimoManager:
         #         流程：
         #           1. 账号密码 → PassToken + User ID
         #           2. PassToken → ServiceToken
-        #
-        #         Args:
-        #             mi: MiAccount 实例
-        #             acc: 账号配置字典（会被修改）
-        #
-        #         Returns:
-        #             是否成功登录
         account = acc.get("account", "")
         password = acc.get("password", "")
 
@@ -222,9 +181,6 @@ class MimoManager:
         #         流程：
         #           1. 账号密码 → PassToken + User ID（或 OTP 验证）
         #           2. PassToken → ServiceToken
-        #
-        #         Returns:
-        #             dict: {"account", "password", "userId", "passToken", "serviceToken"}
         mi = self._create_mi_account(acc)
 
         # 第一步：账号密码 → PassToken + User ID
@@ -260,14 +216,6 @@ class MimoManager:
         #           1. 提交 OTP 验证码，获取 PassToken + User ID
         #           2. 通过 PassToken 获取 ServiceToken
         #
-        #         Args:
-        #             otp_code: OTP 验证码。
-        #
-        #         Returns:
-        #             登录成功的凭据 dict: {"userId", "passToken", "serviceToken"}
-        #
-        #         Raises:
-        #             LoginError: 登录失败。
         # 找到有 OTP 会话的 MiAccount
         for key, mi in self._mi_account_cache.items():
             if mi._otp_session is not None:
@@ -287,9 +235,7 @@ class MimoManager:
 
         raise LoginError("没有等待 OTP 验证的账号")
 
-    # ══════════════════════════════════════════
     #  查询相关
-    # ══════════════════════════════════════════
 
     async def query_one(self, acc: dict) -> dict:
         # 查询单个 MiMo 账号，失败时自动重登录并重试

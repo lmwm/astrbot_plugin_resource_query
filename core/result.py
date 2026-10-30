@@ -28,9 +28,6 @@ class QueryResult:
 
     def to_text(self) -> str:
         # 渲染为可直接发送的文本
-        #
-        #         Returns:
-        #             查询成功时为模板渲染结果；失败时为错误提示文本。
         if not self.success:
             return f"{self.account_name}\n❌ {self.error or '查询失败'}"
 

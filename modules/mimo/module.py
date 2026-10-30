@@ -91,16 +91,10 @@ class MimoModule(ModuleBase):
 
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
         # 初始化模块
-        #
-        #         Args:
-        #             plugin_dir: 插件目录路径。
-        #             plugin_name: 插件名称。
         super().__init__(plugin_dir, plugin_name)
         self._manager = MimoManager(plugin_dir)
 
-    # ══════════════════════════════════════════
     #  元信息
-    # ══════════════════════════════════════════
 
     @property
     def module_name(self) -> str:
@@ -122,9 +116,7 @@ class MimoModule(ModuleBase):
         # 模块描述
         return "小米 MiMo 平台余额与用量查询"
 
-    # ══════════════════════════════════════════
     #  能力声明
-    # ══════════════════════════════════════════
 
     @property
     def supports_accounts(self) -> bool:
@@ -160,22 +152,14 @@ class MimoModule(ModuleBase):
     def account_label(self) -> str:
         return "MiMo 账号"
 
-    # ══════════════════════════════════════════
     #  字段定义
-    # ══════════════════════════════════════════
 
     def get_account_groups(self) -> list[dict]:
         # 账号字段分组定义
-        #
-        #         Returns:
-        #             分组列表：三种凭据方式为标签页，设备信息为内联区块。
         return _ACCOUNT_GROUPS
 
     def get_account_fields(self) -> list[dict]:
         # 账号表单字段定义
-        #
-        #         Returns:
-        #             字段列表；设备字段附带插件默认值，供「恢复默认」按钮使用。
         fields = [dict(field) for field in _ACCOUNT_FIELDS]
         defaults = {
             "device_id": get_default_device_id(),
@@ -190,27 +174,16 @@ class MimoModule(ModuleBase):
 
     def get_var_definitions(self) -> dict[str, str]:
         # 模板变量说明（来自 modules/mimo/config.yaml）
-        #
-        #         Returns:
-        #             变量名到中文描述的映射。
         return _load_var_definitions()
 
     def get_default_template(self) -> str:
         # 默认消息模板
-        #
-        #         Returns:
-        #             来自 config.yaml 的默认模板。
         return get_default_template()
 
-    # ══════════════════════════════════════════
     #  账号管理
-    # ══════════════════════════════════════════
 
     def get_accounts(self) -> list[dict]:
         # 读取账号并补齐默认设备信息（仅内存，不落盘）
-        #
-        #         Returns:
-        #             账号配置列表；设备字段为空时填入插件默认值供前端展示。
         accounts = super().get_accounts()
         default_device_id = get_default_device_id()
         default_ua = get_default_ua()
@@ -225,12 +198,6 @@ class MimoModule(ModuleBase):
 
     def save_accounts(self, accounts: list[dict]) -> bool:
         # 保存账号：空白的设备字段自动填充默认值
-        #
-        #         Args:
-        #             accounts: 账号配置列表。
-        #
-        #         Returns:
-        #             是否保存成功。
         defaults = {
             "device_id": get_default_device_id(),
             "ua": get_default_ua(),
@@ -248,13 +215,6 @@ class MimoModule(ModuleBase):
 
     def update_credentials(self, account: dict, credentials: dict) -> bool:
         # 把刷新后的凭据写回账号文件
-        #
-        #         Args:
-        #             account: 账号配置（需带 _filename）。
-        #             credentials: 要更新的字段。
-        #
-        #         Returns:
-        #             是否更新成功。
         filename = str(account.get("_filename") or "").strip()
         if not filename:
             return False
@@ -267,9 +227,7 @@ class MimoModule(ModuleBase):
 
         return False
 
-    # ══════════════════════════════════════════
     #  查询
-    # ══════════════════════════════════════════
 
     async def query(self, account: dict) -> MimoResult:
         # 查询单个 MiMo 账号；凭据被自动刷新时持久化
@@ -303,15 +261,10 @@ class MimoModule(ModuleBase):
             success=True, account_name=label, data=data, template=template
         )
 
-    # ══════════════════════════════════════════
     #  指令
-    # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
         # 本模块指令列表
-        #
-        #         Returns:
-        #             指令定义列表。
         return [{"name": "mimo", "desc": "MiMo 用量查询：/mimo [ls|del|otp|账号]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
@@ -363,9 +316,7 @@ class MimoModule(ModuleBase):
             yield event.plain_result("正在查询...")
             yield event.plain_result(self.render(await self.query(target)))
 
-    # ══════════════════════════════════════════
     #  Views 接口
-    # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
         # 配置读写由基类提供，这里只追加登录与测试
@@ -457,13 +408,6 @@ class MimoModule(ModuleBase):
 
     def _with_updated_account(self, filename: str, updates: dict) -> list[dict]:
         # 返回把指定账号更新后的完整账号列表
-        #
-        #         Args:
-        #             filename: 目标账号文件名。
-        #             updates: 要更新的字段。
-        #
-        #         Returns:
-        #             更新后的账号列表。
         accounts = super().get_accounts()
         for acc in accounts:
             if acc.get("_filename") == filename:

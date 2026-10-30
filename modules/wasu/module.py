@@ -43,9 +43,7 @@ class WasuApiError(Exception):
 class WasuModule(ModuleBase):
     # 华数广电查询模块
 
-    # ══════════════════════════════════════════
     #  元信息
-    # ══════════════════════════════════════════
 
     @property
     def module_name(self) -> str:
@@ -67,9 +65,7 @@ class WasuModule(ModuleBase):
         # 模块描述
         return "华数广电流量 / 话费 / 余量查询"
 
-    # ══════════════════════════════════════════
     #  能力声明
-    # ══════════════════════════════════════════
 
     @property
     def supports_accounts(self) -> bool:
@@ -95,29 +91,18 @@ class WasuModule(ModuleBase):
     def account_label(self) -> str:
         return "华数账号"
 
-    # ══════════════════════════════════════════
     #  字段定义
-    # ══════════════════════════════════════════
 
     def get_account_fields(self) -> list[dict]:
         # 账号表单字段定义
-        #
-        #         Returns:
-        #             字段列表。
         return _ACCOUNT_FIELDS
 
     def get_var_definitions(self) -> dict[str, str]:
         # 模板变量说明（来自 modules/wasu/config.yaml）
-        #
-        #         Returns:
-        #             变量名到中文描述的映射。
         return _load_var_definitions()
 
     def get_default_template(self) -> str:
         # 默认消息模板
-        #
-        #         Returns:
-        #             来自 config.yaml 的默认模板。
         return get_default_template()
 
     async def query(self, account: dict) -> WasuResult:
@@ -173,19 +158,6 @@ class WasuModule(ModuleBase):
         ua: str = "",
     ) -> dict:
         # 执行查询（同步，在线程池中运行）
-        #
-        #         Args:
-        #             user_key: 用户 key。
-        #             token: 认证 token。
-        #             phone: 手机号。
-        #             sign: 签名。
-        #             ua: User-Agent。
-        #
-        #         Returns:
-        #             结构化查询数据。
-        #
-        #         Raises:
-        #             WasuApiError: 接口返回业务错误或缺少数据。
         base_url = DEFAULT_BASE_URL
         headers = {**DEFAULT_HEADERS, "x-sign": sign}
         if ua:
@@ -193,16 +165,6 @@ class WasuModule(ModuleBase):
 
         def _post(path: str, payload: dict) -> dict:
             # 发起 POST 请求并校验业务码
-            #
-            #             Args:
-            #                 path: 接口路径。
-            #                 payload: 请求体。
-            #
-            #             Returns:
-            #                 响应中的 data 字段。
-            #
-            #             Raises:
-            #                 WasuApiError: 业务码非 0 或缺少 data。
             body = json.dumps(payload, separators=(",", ":"))
             opener, _ = new_opener()
             req = Request(
@@ -241,13 +203,6 @@ class WasuModule(ModuleBase):
     @staticmethod
     def _parse_response(fee: dict, resource: dict) -> dict:
         # 解析话费与资源接口响应
-        #
-        #         Args:
-        #             fee: fee 接口返回的 data。
-        #             resource: resource 接口返回的 data。
-        #
-        #         Returns:
-        #             结构化的余额、流量与语音数据。
         balance = {
             "balance": fmt_yuan(fee.get("BALANCE", 0)),
             "month_fee": fmt_yuan(fee.get("CURREAL_FEE", 0)),
@@ -301,24 +256,17 @@ class WasuModule(ModuleBase):
             "query_time": fee.get("X_SYSDATE", ""),
         }
 
-    # ══════════════════════════════════════════
     #  指令
-    # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
         # 本模块指令列表
-        #
-        #         Returns:
-        #             指令定义列表。
         return [{"name": "wasu", "desc": "华数广电查询：/wasu [ls|del|账号]"}]
 
     def describe_account(self, acc: dict, index: int) -> str:
         name = self.account_display_name(acc) or f"华数账号{index}"
         return f"{name} | 手机号: {acc.get('phone', '未填写')}"
 
-    # ══════════════════════════════════════════
     #  Views 接口
-    # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
         # 配置读写由基类提供，这里只追加凭据测试
@@ -333,9 +281,6 @@ class WasuModule(ModuleBase):
 
     async def _api_test(self):
         # 测试凭据是否可用
-        #
-        #         Returns:
-        #             JSON 响应。
         from astrbot.api.web import json_response, request
 
         payload = await request.json(default={})

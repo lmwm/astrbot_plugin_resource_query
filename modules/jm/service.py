@@ -40,9 +40,7 @@ class JMService:
         self._ready = False
         self._config: dict = {}
 
-    # ══════════════════════════════════════════
     #  配置与生命周期
-    # ══════════════════════════════════════════
 
     def bind_config(self, config: dict) -> None:
         # 绑定当前配置；由模块在加载与保存后调用，避免每次下载都读盘
@@ -59,9 +57,7 @@ class JMService:
             if moved:
                 logger.info(f"[jm] 已迁移 {moved} 个旧版漫画目录")
 
-    # ══════════════════════════════════════════
     #  配置构建
-    # ══════════════════════════════════════════
 
     def _int(self, key: str, default: int) -> int:
         try:
@@ -115,16 +111,12 @@ class JMService:
 
         return cookies
 
-    # ══════════════════════════════════════════
     #  本地缓存
-    # ══════════════════════════════════════════
 
     def check_local(self, album_id: str) -> dict | None:
         return self.cache.check_local(album_id)
 
-    # ══════════════════════════════════════════
     #  漫画信息
-    # ══════════════════════════════════════════
 
     async def get_album_info(self, album_id: str) -> AlbumInfo:
         # 优先读 info.json 缓存，未命中时请求站点并写回
@@ -166,9 +158,7 @@ class JMService:
             tags=list(getattr(album, "tags", None) or []),
         )
 
-    # ══════════════════════════════════════════
     #  下载
-    # ══════════════════════════════════════════
 
     async def download(
         self,

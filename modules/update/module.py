@@ -36,9 +36,7 @@ _DEFAULT_CONFIG = {
 class UpdateModule(ModuleBase):
     # 插件更新模块
 
-    # ══════════════════════════════════════════
     #  元信息
-    # ══════════════════════════════════════════
 
     @property
     def module_name(self) -> str:
@@ -60,48 +58,27 @@ class UpdateModule(ModuleBase):
         # 模块描述
         return "从 GitHub 检查并更新插件自身"
 
-    # ══════════════════════════════════════════
     #  模块配置
-    # ══════════════════════════════════════════
 
     def get_default_config(self) -> dict:
         # 模块默认配置
-        #
-        #         Returns:
-        #             代理与重试次数默认值。
         return dict(_DEFAULT_CONFIG)
 
     def get_config_fields(self) -> list[dict]:
         # 模块配置字段定义
-        #
-        #         Returns:
-        #             字段列表。
         return _CONFIG_FIELDS
 
-    # ══════════════════════════════════════════
     #  指令
-    # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
         # 本模块指令列表
         #
         #         该模块通过 `/query update` 触发，因此指令名带 `query ` 前缀，
         #         便于帮助信息正确展示。
-        #
-        #         Returns:
-        #             指令定义列表。
         return [{"name": "query update", "desc": "检查并更新插件"}]
 
     async def handle_command(self, command: str, args: list[str], event):
         # 处理更新指令
-        #
-        #         Args:
-        #             command: 指令名称（固定为 "update"）。
-        #             args: 指令参数（未使用）。
-        #             event: 消息事件。
-        #
-        #         Yields:
-        #             消息结果。
         if command != "update":
             return
 
@@ -131,9 +108,7 @@ class UpdateModule(ModuleBase):
 
         yield event.plain_result(f"{result}\n{await reload_plugin(self._context)}")
 
-    # ══════════════════════════════════════════
     #  Views 接口
-    # ══════════════════════════════════════════
 
     def config_payload(self, config: dict) -> dict:
         # 额外返回当前版本号，供 Views 展示

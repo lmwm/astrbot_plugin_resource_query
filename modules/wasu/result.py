@@ -19,13 +19,6 @@ class WasuResult(QueryResult):
         template: str | None = None,
     ) -> None:
         # 初始化查询结果
-        #
-        #         Args:
-        #             success: 是否查询成功。
-        #             account_name: 账号显示名称。
-        #             data: 查询数据。
-        #             error: 错误信息。
-        #             template: 消息模板。
         super().__init__(
             success=success,
             platform="华数广电",
@@ -37,9 +30,6 @@ class WasuResult(QueryResult):
 
     def build_variables(self) -> dict[str, str]:
         # 构建华数模板变量
-        #
-        #         Returns:
-        #             模板变量字典。
         data = self.data
         balance = data.get("balance") or {}
         traffic = data.get("traffic") or {}

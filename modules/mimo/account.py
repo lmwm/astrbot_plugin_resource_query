@@ -37,9 +37,7 @@ class MiAccount:
         # 缓存OTP会话状态，保持 opener/jar 在整个OTP流程中不变
         self._otp_session = None
 
-    # ══════════════════════════════════════════
     #  1. 账号登录 → 获取 PassToken + User ID
-    # ══════════════════════════════════════════
 
     def login_with_password(
         self, account: str, password: str, otp_code: str | None = None
@@ -49,17 +47,6 @@ class MiAccount:
         #         功能：完成账号密码认证，获取 PassToken 和 User ID。
         #         如果需要 OTP 验证码，会缓存会话并抛出 OtpRequired。
         #
-        #         Args:
-        #             account: 小米账号（手机号或邮箱）
-        #             password: 密码
-        #             otp_code: OTP 验证码（可选，用于二次调用）
-        #
-        #         Returns:
-        #             dict: {"userId": str, "passToken": str}
-        #
-        #         Raises:
-        #             OtpRequired: 需要 OTP 验证码（第一次调用）
-        #             LoginError: 登录失败
         # === 第二次调用：提交 OTP 码 ===
         if otp_code and self._otp_session:
             return self._handle_otp_submit(otp_code)
@@ -112,12 +99,6 @@ class MiAccount:
 
     def _handle_otp_submit(self, otp_code: str) -> dict:
         # 处理 OTP 验证码提交，返回 PassToken + User ID
-        #
-        #         Args:
-        #             otp_code: OTP 验证码
-        #
-        #         Returns:
-        #             dict: {"userId": str, "passToken": str}
         session = self._otp_session
         self._otp_session = None
 
@@ -143,25 +124,12 @@ class MiAccount:
             "passToken": resp["passToken"],
         }
 
-    # ══════════════════════════════════════════
     #  2. PassToken → 获取 ServiceToken
-    # ══════════════════════════════════════════
 
     def login_with_passtoken(self, user_id: str, pass_token: str) -> tuple[str, str]:
         # 使用 PassToken 获取 ServiceToken
         #
         #         功能：通过 PassToken 换取 ServiceToken。
-        #
-        #         Args:
-        #             user_id: 用户 ID
-        #             pass_token: PassToken
-        #
-        #         Returns:
-        #             tuple: (userId, serviceToken)
-        #
-        #         Raises:
-        #             PassTokenExpired: PassToken 已过期
-        #             StsError: STS 换取失败
         opener, jar = new_opener()
         for n, v in [
             ("sdkVersion", "3.9"),
