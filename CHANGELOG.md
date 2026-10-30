@@ -1,3 +1,11 @@
+## v5.9.10 (2026-10-30)
+
+### 修复
+
+- **JM 模块初始化失败**：`get_astrbot_data_path()` 返回 `str`，构造 `JMService` 时缺少 `Path()` 包装，导致 `TypeError: unsupported operand type(s) for /: 'str' and 'str'`，插件加载后立即失败、`query update` 不可用；已补回包装
+
+---
+
 ## v5.9.9 (2026-10-30)
 
 ### 重构

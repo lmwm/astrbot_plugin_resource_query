@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 
 from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
@@ -35,7 +36,7 @@ class JMModule(ModuleBase):
         super().__init__(plugin_dir, plugin_name)
         self._service = JMService(
             download_dir=self.get_data_path() / "JMDownload",
-            legacy_dir=get_astrbot_data_path() / "JMDownload",
+            legacy_dir=Path(get_astrbot_data_path()) / "JMDownload",
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
