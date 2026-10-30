@@ -34,16 +34,19 @@
 main.py                     插件入口：只做「注册 + 分发」
   └── core/                 核心框架层
         ├── module.py       ModuleBase：统一的模块契约
+        ├── accounts.py     AccountStore：账号增删改
+        ├── config_store.py ConfigStore：模块配置读写
         ├── registry.py     模块注册中心
-        ├── manager.py      总管理器：账号汇总 / 页面 schema 汇总
+        ├── web.py          GlobalWebApi：Views 全局接口
+        ├── commands.py     参数解析与帮助文本
         └── result.py       QueryResult：统一的模板渲染
   └── modules/              功能模块层（每个功能一个包）
         ├── mimo/           MiMo 查询
         ├── wasu/           华数查询
-        ├── jm/             JM 下载（downloader 适配层 + core 下载核心）
+        ├── jm/             JM 下载（module / service / paths / cache / pdf）
         └── update/         插件更新
   └── common/               通用工具层：路径、文件读写、YAML 解析
-  └── views/template-editor/  管理界面（新版权图机制，schema 驱动，2 个文件）
+  └── views/template-editor/  管理界面（schema 驱动，单文件入口，脚本内联）
   └── .astrbot-plugin/i18n/   视图元数据（标题 / 描述）
 ```
 
@@ -206,8 +209,11 @@ astrbot_plugin_resource_query/
 ├── requirements.txt         # 依赖声明
 ├── core/                    # 核心框架层
 │   ├── module.py            # 模块基类
+│   ├── accounts.py          # 账号存储
+│   ├── config_store.py      # 模块配置存储
 │   ├── registry.py          # 注册中心
-│   ├── manager.py           # 总管理器
+│   ├── web.py               # Views 全局接口
+│   ├── commands.py          # 参数解析与帮助文本
 │   └── result.py            # 查询结果基类
 ├── common/                  # 通用工具层
 │   ├── utils.py             # 路径与文件读写
@@ -215,11 +221,10 @@ astrbot_plugin_resource_query/
 ├── modules/                 # 功能模块层
 │   ├── mimo/                # module / manager / account / query / result / utils / config.yaml
 │   ├── wasu/                # module / result / constants / utils / config.yaml
-│   ├── jm/                  # module / downloader / utils + core(manager / models)
+│   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.yaml
 │   └── update/              # module / updater
-├── views/template-editor/   # 管理界面（新版视图机制，schema 驱动）
-│   ├── index.html
-│   └── core.js
+├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
+│   └── index.html
 ├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）
 └── http_utils.py            # HTTP 工具（Cookie / opener / 代理 / 重试）
 ```
