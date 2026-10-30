@@ -107,8 +107,9 @@ class UpdateModule(ModuleBase):
 
         config = self.load_module_config()
         proxy = str(config.get("proxy") or "").strip()
+        max_retries = config.get("max_retries", 3)
         try:
-            max_retries = int(config.get("max_retries") or 3)
+            max_retries = int(max_retries)
         except (TypeError, ValueError):
             max_retries = 3
 
@@ -134,46 +135,11 @@ class UpdateModule(ModuleBase):
     #  Views 接口
     # ══════════════════════════════════════════
 
-    def get_web_apis(self) -> list[dict]:
-        # 本模块的 Views 接口
-        #
-        #         Returns:
-        #             接口定义列表。
-        return [
-            {
-                "path": "config",
-                "handler": self._api_get_config,
-                "methods": ["GET"],
-                "desc": "获取更新配置",
-            },
-            {
-                "path": "config",
-                "handler": self._api_save_config,
-                "methods": ["POST"],
-                "desc": "保存更新配置",
-            },
-        ]
-
-    async def _api_get_config(self):
-        # 获取更新配置
-        from astrbot.api.web import json_response
-
-        config = self.load_module_config()
+    def config_payload(self, config: dict) -> dict:
+        # 额外返回当前版本号，供 Views 展示
         config["current_version"] = get_current_version()
-        return json_response(config)
+        return config
 
-    async def _api_save_config(self):
-        # 保存更新配置
-        from astrbot.api.web import error_response, json_response, request
-
-        payload = await request.json(default={})
-        if not isinstance(payload, dict) or not payload:
-            return error_response("缺少配置数据")
-
-        config = self.load_module_config()
-        config.update({k: v for k, v in payload.items() if k in _DEFAULT_CONFIG})
-
-        if not self.save_module_config(config):
-            return error_response("保存失败")
-
-        return json_response({"status": "ok"})
+    def accept_config_payload(self, payload: dict, config: dict) -> dict:
+        # 只接受已知配置项，避免把 current_version 等只读字段写回
+        return {k: v for k, v in payload.items() if k in _DEFAULT_CONFIG}

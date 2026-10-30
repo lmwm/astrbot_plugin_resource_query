@@ -252,39 +252,3 @@ class JMModule(ModuleBase):
     # ══════════════════════════════════════════
     #  Views 接口
     # ══════════════════════════════════════════
-
-    def get_web_apis(self) -> list[dict]:
-        return [
-            {
-                "path": "config",
-                "handler": self._api_get_config,
-                "methods": ["GET"],
-                "desc": "获取下载配置",
-            },
-            {
-                "path": "config",
-                "handler": self._api_save_config,
-                "methods": ["POST"],
-                "desc": "保存下载配置",
-            },
-        ]
-
-    async def _api_get_config(self):
-        from astrbot.api.web import json_response
-
-        return json_response(self.load_module_config())
-
-    async def _api_save_config(self):
-        from astrbot.api.web import error_response, json_response, request
-
-        payload = await request.json(default={})
-        if not isinstance(payload, dict) or not payload:
-            return error_response("缺少配置数据")
-
-        config = self.load_module_config()
-        config.update(payload)
-
-        if not self.save_module_config(config):
-            return error_response("保存失败")
-
-        return json_response({"status": "ok"})

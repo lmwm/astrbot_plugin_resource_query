@@ -91,6 +91,10 @@ class WasuModule(ModuleBase):
         # 支持在 Views 中测试凭据
         return True
 
+    @property
+    def account_label(self) -> str:
+        return "华数账号"
+
     # ══════════════════════════════════════════
     #  字段定义
     # ══════════════════════════════════════════
@@ -331,133 +335,17 @@ class WasuModule(ModuleBase):
         #             指令定义列表。
         return [{"name": "wasu", "desc": "华数广电查询：/wasu [ls|del|账号]"}]
 
-    async def handle_command(self, command: str, args: list[str], event):
-        # 处理 /wasu 指令
-        #
-        #         Args:
-        #             command: 指令名称。
-        #             args: 参数列表。
-        #             event: 消息事件。
-        #
-        #         Yields:
-        #             消息结果。
-        if command != "wasu":
-            return
-
-        accounts = self.get_accounts()
-
-        if args and args[0].lower() == "ls":
-            async for r in self._cmd_list(event, accounts):
-                yield r
-            return
-
-        if args and args[0].lower() == "del":
-            async for r in self._cmd_delete(args, event, accounts):
-                yield r
-            return
-
-        if not args:
-            async for r in self._cmd_query_all(event, accounts):
-                yield r
-            return
-
-        async for r in self._cmd_query_one(args[0], event, accounts):
-            yield r
-
-    async def _cmd_list(self, event, accounts: list[dict]):
-        # 列出全部账号
-        if not accounts:
-            yield event.plain_result("× 还没有配置华数账号\n请在网页管理界面添加账号")
-            return
-
-        lines = [f"共 {len(accounts)} 个华数账号:"]
-        for i, acc in enumerate(accounts, start=1):
-            name = acc.get("name") or acc.get("phone") or f"华数账号{i}"
-            lines.append(f"  {i}. {name} | 手机号: {acc.get('phone', '未填写')}")
-
-        yield event.plain_result("\n".join(lines))
-
-    async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
-        # 删除指定账号
-        if len(args) < 2:
-            yield event.plain_result("用法: /wasu del <序号或名称>")
-            return
-
-        target = args[1]
-        account: dict | None = None
-
-        if target.isdigit():
-            index = int(target) - 1
-            if 0 <= index < len(accounts):
-                account = accounts[index]
-        else:
-            for acc in accounts:
-                if target in (acc.get("name"), acc.get("phone")):
-                    account = acc
-                    break
-
-        if not account:
-            yield event.plain_result(f"× 未找到账号: {target}")
-            return
-
-        deleted = self.delete_account(str(account.get("_filename", "")))
-        if not deleted:
-            yield event.plain_result("× 删除失败")
-            return
-
-        name = deleted.get("name") or deleted.get("phone") or target
-        yield event.plain_result(f"√ 已删除: {name}")
-
-    async def _cmd_query_all(self, event, accounts: list[dict]):
-        # 查询全部账号
-        if not accounts:
-            yield event.plain_result("× 还没有配置华数账号\n请在网页管理界面添加账号")
-            return
-
-        yield event.plain_result("正在查询所有华数账号...")
-
-        for acc in accounts:
-            yield event.plain_result(self.render(await self.query(acc)))
-
-    async def _cmd_query_one(self, identifier: str, event, accounts: list[dict]):
-        # 查询指定账号
-        account = None
-        for acc in accounts:
-            if identifier in (acc.get("name"), acc.get("phone"), acc.get("_filename")):
-                account = acc
-                break
-
-        if not account:
-            yield event.plain_result(
-                f"× 未找到账号: {identifier}\n使用 /wasu ls 查看所有账号"
-            )
-            return
-
-        yield event.plain_result("正在查询...")
-        yield event.plain_result(self.render(await self.query(account)))
+    def describe_account(self, acc: dict, index: int) -> str:
+        name = self.account_display_name(acc) or f"华数账号{index}"
+        return f"{name} | 手机号: {acc.get('phone', '未填写')}"
 
     # ══════════════════════════════════════════
     #  Views 接口
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        # 本模块的 Views 接口
-        #
-        #         Returns:
-        #             接口定义列表。
-        return [
-            {
-                "path": "config",
-                "handler": self._api_get_config,
-                "methods": ["GET"],
-                "desc": "获取模块配置",
-            },
-            {
-                "path": "config",
-                "handler": self._api_save_config,
-                "methods": ["POST"],
-                "desc": "保存模块配置",
-            },
+        # 配置读写由基类提供，这里只追加凭据测试
+        return super().get_web_apis() + [
             {
                 "path": "test",
                 "handler": self._api_test,
@@ -488,24 +376,3 @@ class WasuModule(ModuleBase):
             )
 
         return json_response({"status": "ok", "message": "凭据有效"})
-
-    async def _api_get_config(self):
-        # 获取模块配置
-        from astrbot.api.web import json_response
-
-        return json_response(self.load_module_config())
-
-    async def _api_save_config(self):
-        # 保存模块配置
-        from astrbot.api.web import error_response, json_response, request
-
-        payload = await request.json(default={})
-        if not isinstance(payload, dict) or not payload:
-            return error_response("缺少配置数据")
-
-        config = self.load_module_config()
-        config.update(payload)
-        if not self.save_module_config(config):
-            return error_response("保存失败")
-
-        return json_response({"status": "ok"})

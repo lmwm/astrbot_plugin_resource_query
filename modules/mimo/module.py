@@ -156,6 +156,10 @@ class MimoModule(ModuleBase):
         # 账号文件名前缀
         return "mimo_"
 
+    @property
+    def account_label(self) -> str:
+        return "MiMo 账号"
+
     # ══════════════════════════════════════════
     #  字段定义
     # ══════════════════════════════════════════
@@ -263,24 +267,6 @@ class MimoModule(ModuleBase):
 
         return False
 
-    def _find_account(self, accounts: list[dict], identifier: str) -> dict | None:
-        # 按名称、账号或文件名查找账号
-        #
-        #         Args:
-        #             accounts: 账号列表。
-        #             identifier: 账号名称、小米账号或文件名。
-        #
-        #         Returns:
-        #             匹配到的账号；未找到返回 None。
-        for acc in accounts:
-            if identifier in (
-                acc.get("name", ""),
-                acc.get("account", ""),
-                acc.get("_filename", ""),
-            ):
-                return acc
-        return None
-
     # ══════════════════════════════════════════
     #  查询
     # ══════════════════════════════════════════
@@ -346,87 +332,25 @@ class MimoModule(ModuleBase):
         return [{"name": "mimo", "desc": "MiMo 用量查询：/mimo [ls|del|otp|账号]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        # 处理 /mimo 指令
-        #
-        #         Args:
-        #             command: 指令名称。
-        #             args: 参数列表。
-        #             event: 消息事件。
-        #
-        #         Yields:
-        #             消息结果。
+        # 列表/删除/查询交给基类，这里只处理 MiMo 特有的 OTP 验证码
         if command != "mimo":
             return
 
-        accounts = self.get_accounts()
-
-        if args and args[0].lower() == "ls":
-            async for r in self._cmd_list(event, accounts):
-                yield r
-            return
-
-        if args and args[0].lower() == "del":
-            async for r in self._cmd_delete(args, event, accounts):
-                yield r
-            return
-
         if args and args[0].lower() == "otp":
-            async for r in self._cmd_otp(args, event, accounts):
+            async for r in self._cmd_otp(args, event):
                 yield r
             return
 
-        if not args:
-            async for r in self._cmd_query_all(event, accounts):
-                yield r
-            return
-
-        async for r in self._cmd_query_one(args[0], event, accounts):
+        async for r in super().handle_command(command, args, event):
             yield r
 
-    async def _cmd_list(self, event, accounts: list[dict]):
-        # 列出全部账号
-        if not accounts:
-            yield event.plain_result("× 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
-            return
+    def describe_account(self, acc: dict, index: int) -> str:
+        status = "√" if acc.get("serviceToken") else "×"
+        name = self.account_display_name(acc) or f"MiMo账号{index}"
+        return f"{status} {name}"
 
-        lines = [f"共 {len(accounts)} 个 MiMo 账号:"]
-        for i, acc in enumerate(accounts, start=1):
-            status = "√" if acc.get("serviceToken") else "×"
-            name = acc.get("name") or acc.get("account") or f"MiMo账号{i}"
-            lines.append(f"  {i}. {status} {name}")
-
-        yield event.plain_result("\n".join(lines))
-
-    async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
-        # 删除指定账号
-        if len(args) < 2:
-            yield event.plain_result("用法: /mimo del <序号或名称>")
-            return
-
-        target = args[1]
-        account: dict | None = None
-
-        if target.isdigit():
-            index = int(target) - 1
-            if 0 <= index < len(accounts):
-                account = accounts[index]
-        else:
-            account = self._find_account(accounts, target)
-
-        if not account:
-            yield event.plain_result(f"× 未找到账号: {target}")
-            return
-
-        deleted = self.delete_account(str(account.get("_filename", "")))
-        if not deleted:
-            yield event.plain_result("× 删除失败")
-            return
-
-        name = deleted.get("name") or deleted.get("account") or target
-        yield event.plain_result(f"√ 已删除: {name}")
-
-    async def _cmd_otp(self, args: list[str], event, accounts: list[dict]):
-        # 提交 OTP 验证码
+    async def _cmd_otp(self, args: list[str], event):
+        # 提交 OTP 验证码，成功后自动查询一次
         if len(args) < 2 or not args[1].strip():
             yield event.plain_result("用法: /mimo otp <验证码>")
             return
@@ -444,63 +368,25 @@ class MimoModule(ModuleBase):
             yield event.plain_result(f"× OTP 验证失败: {e}")
             return
 
-        account = self._find_account(accounts, pending)
+        account = self.find_account(pending)
         if account:
             self.update_credentials(account, credentials)
 
         yield event.plain_result(f"√ OTP 验证成功，账号 {pending} 已登录")
 
-        # 登录成功后自动查询一次
-        target = self._find_account(self.get_accounts(), pending)
+        # 凭据已刷新，需要重新读取账号后再查询
+        target = self.find_account(pending)
         if target:
             yield event.plain_result("正在查询...")
             yield event.plain_result(self.render(await self.query(target)))
-
-    async def _cmd_query_all(self, event, accounts: list[dict]):
-        # 查询全部账号
-        if not accounts:
-            yield event.plain_result("× 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
-            return
-
-        yield event.plain_result("正在查询所有 MiMo 账号...")
-
-        for acc in accounts:
-            yield event.plain_result(self.render(await self.query(acc)))
-
-    async def _cmd_query_one(self, identifier: str, event, accounts: list[dict]):
-        # 查询指定账号
-        account = self._find_account(accounts, identifier)
-        if not account:
-            yield event.plain_result(
-                f"× 未找到账号: {identifier}\n使用 /mimo ls 查看所有账号"
-            )
-            return
-
-        yield event.plain_result("正在查询...")
-        yield event.plain_result(self.render(await self.query(account)))
 
     # ══════════════════════════════════════════
     #  Views 接口
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        # 本模块的 Views 接口
-        #
-        #         Returns:
-        #             接口定义列表。
-        return [
-            {
-                "path": "config",
-                "handler": self._api_get_config,
-                "methods": ["GET"],
-                "desc": "获取模块配置",
-            },
-            {
-                "path": "config",
-                "handler": self._api_save_config,
-                "methods": ["POST"],
-                "desc": "保存模块配置",
-            },
+        # 配置读写由基类提供，这里只追加登录与测试
+        return super().get_web_apis() + [
             {
                 "path": "login",
                 "handler": self._api_login,
@@ -515,27 +401,6 @@ class MimoModule(ModuleBase):
             },
         ]
 
-    async def _api_get_config(self):
-        # 获取模块配置
-        from astrbot.api.web import json_response
-
-        return json_response(self.load_module_config())
-
-    async def _api_save_config(self):
-        # 保存模块配置
-        from astrbot.api.web import error_response, json_response, request
-
-        payload = await request.json(default={})
-        if not isinstance(payload, dict) or not payload:
-            return error_response("缺少配置数据")
-
-        config = self.load_module_config()
-        config.update(payload)
-        if not self.save_module_config(config):
-            return error_response("保存失败")
-
-        return json_response({"status": "ok"})
-
     async def _api_login(self):
         # 登录指定账号（支持 OTP）
         from astrbot.api.web import error_response, json_response, request
@@ -549,7 +414,7 @@ class MimoModule(ModuleBase):
         if not filename:
             return error_response("缺少 filename 参数")
 
-        account = self._find_account(self.get_accounts(), filename)
+        account = self.find_account(filename)
         if not account:
             return error_response("账号不存在")
 
