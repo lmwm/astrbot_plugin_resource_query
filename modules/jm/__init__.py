@@ -2,12 +2,15 @@
 #
 # 提供 JMComic 漫画的下载和 PDF 转换功能。
 
-from .downloader import JMDownloader
+from .models import AlbumInfo, DownloadResult
 from .module import JMModule
+from .service import JMService
 from .utils import normalize_album_id
 
 __all__ = [
-    "JMDownloader",
+    "AlbumInfo",
+    "DownloadResult",
     "JMModule",
+    "JMService",
     "normalize_album_id",
 ]
