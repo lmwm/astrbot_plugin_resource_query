@@ -1,3 +1,12 @@
+## v5.9.9 (2026-10-30)
+
+### 重构
+
+- **Views 前端拆分**：`views/template-editor/core.js`（1110 行）拆为 `js/base.js`（状态、工具、API 与加载）、`js/render.js`（导航与页面渲染）、`js/account.js`（账号模态框与增删改登录）、`js/template.js`（模板与变量）、`js/main.js`（刷新、事件与初始化）；内联样式抽为 `style.css`
+- 脚本按 `index.html` 顺序加载并共享全局作用域，行为不变；拆分后各文件 126–344 行
+
+---
+
 ## v5.9.8 (2026-10-30)
 
 ### 重构
