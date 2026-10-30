@@ -1,21 +1,20 @@
-"""资源查询插件入口
-
-职责保持极薄：
-  1. 按 AstrBot 原生配置决定启用哪些功能模块并注册；
-  2. 注册全局与各模块的 Views 接口；
-  3. 把指令分发到对应模块。
-
-四个功能模块（均继承 `core.module.ModuleBase`）：
-  - mimo   ：小米 MiMo 用量查询
-  - wasu   ：华数广电流量 / 话费查询
-  - jm     ：JMComic 漫画下载
-  - update ：插件自身更新
-
-新增功能模块只需两步：
-  1. 在 `modules/` 下新建包并实现 `XxxModule(ModuleBase)`；
-  2. 在下方 `_MODULE_CLASSES` 中登记一行。
-  Views 前端会依据模块声明的 schema 自动渲染配置页。
-"""
+# 资源查询插件入口
+#
+# 职责保持极薄：
+#   1. 按 AstrBot 原生配置决定启用哪些功能模块并注册；
+#   2. 注册全局与各模块的 Views 接口；
+#   3. 把指令分发到对应模块。
+#
+# 四个功能模块（均继承 `core.module.ModuleBase`）：
+#   - mimo   ：小米 MiMo 用量查询
+#   - wasu   ：华数广电流量 / 话费查询
+#   - jm     ：JMComic 漫画下载
+#   - update ：插件自身更新
+#
+# 新增功能模块只需两步：
+#   1. 在 `modules/` 下新建包并实现 `XxxModule(ModuleBase)`；
+#   2. 在下方 `_MODULE_CLASSES` 中登记一行。
+#   Views 前端会依据模块声明的 schema 自动渲染配置页。
 
 from __future__ import annotations
 
@@ -47,18 +46,16 @@ _VAR_CONFIG_FILE = "var_config.json"
 
 
 class ResourceQueryPlugin(Star):
-    """资源查询插件
-
-    只做「注册 + 分发」，具体功能全部由各模块自治实现。
-    """
+    # 资源查询插件
+    #
+    #     只做「注册 + 分发」，具体功能全部由各模块自治实现。
 
     def __init__(self, context: Context, config: AstrBotConfig | None = None) -> None:
-        """初始化插件
-
-        Args:
-            context: AstrBot 上下文。
-            config: AstrBot 原生配置（模块启用开关）。
-        """
+        # 初始化插件
+        #
+        #         Args:
+        #             context: AstrBot 上下文。
+        #             config: AstrBot 原生配置（模块启用开关）。
         super().__init__(context)
         self.config = config or {}
         self._plugin_dir = Path(__file__).parent
@@ -72,11 +69,10 @@ class ResourceQueryPlugin(Star):
     # ══════════════════════════════════════════
 
     def _register_modules(self, context: Context) -> None:
-        """按 AstrBot 原生配置注册已启用的模块
-
-        Args:
-            context: AstrBot 上下文，会注入到每个模块。
-        """
+        # 按 AstrBot 原生配置注册已启用的模块
+        #
+        #         Args:
+        #             context: AstrBot 上下文，会注入到每个模块。
         enabled = self.config.get("modules") or {}
 
         for name, module_cls in _MODULE_CLASSES.items():
@@ -96,11 +92,10 @@ class ResourceQueryPlugin(Star):
     # ══════════════════════════════════════════
 
     def _register_web_apis(self, context: Context) -> None:
-        """注册全局接口与各模块自有接口
-
-        Args:
-            context: AstrBot 上下文。
-        """
+        # 注册全局接口与各模块自有接口
+        #
+        #         Args:
+        #             context: AstrBot 上下文。
         for path, handler, methods, desc in (
             ("modules", self.get_modules, ["GET"], "获取已启用模块及其页面描述"),
             ("accounts", self.get_accounts, ["GET"], "获取所有模块的账号"),
@@ -122,14 +117,13 @@ class ResourceQueryPlugin(Star):
                 )
 
     async def get_modules(self):
-        """获取已启用模块的页面描述
-
-        未启用的模块不会被注册，因此不会出现在返回结果中，
-        Views 也就不会渲染它们的配置页。
-
-        Returns:
-            JSON 响应，包含模块 schema 列表与插件版本号。
-        """
+        # 获取已启用模块的页面描述
+        #
+        #         未启用的模块不会被注册，因此不会出现在返回结果中，
+        #         Views 也就不会渲染它们的配置页。
+        #
+        #         Returns:
+        #             JSON 响应，包含模块 schema 列表与插件版本号。
         from astrbot.api.web import json_response
 
         return json_response(
@@ -140,21 +134,19 @@ class ResourceQueryPlugin(Star):
         )
 
     async def get_accounts(self):
-        """获取所有已启用模块的账号
-
-        Returns:
-            JSON 响应，账号列表（每项带 platform 字段）。
-        """
+        # 获取所有已启用模块的账号
+        #
+        #         Returns:
+        #             JSON 响应，账号列表（每项带 platform 字段）。
         from astrbot.api.web import json_response
 
         return json_response({"accounts": self._manager.get_all_accounts()})
 
     async def save_accounts(self):
-        """保存指定模块的账号列表
-
-        Returns:
-            JSON 响应。
-        """
+        # 保存指定模块的账号列表
+        #
+        #         Returns:
+        #             JSON 响应。
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})
@@ -174,11 +166,10 @@ class ResourceQueryPlugin(Star):
         return json_response({"status": "ok"})
 
     async def delete_account(self):
-        """删除指定账号
-
-        Returns:
-            JSON 响应。
-        """
+        # 删除指定账号
+        #
+        #         Returns:
+        #             JSON 响应。
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})
@@ -201,14 +192,13 @@ class ResourceQueryPlugin(Star):
         return json_response({"status": "ok", "deleted": name})
 
     async def get_template_vars(self):
-        """获取各模块的模板变量定义
-
-        变量来源 = 模块声明的变量 + 用户在 Views 中的自定义配置，
-        因此在 Views 中新增的变量刷新后不会丢失。
-
-        Returns:
-            JSON 响应，按模块名分组的变量列表。
-        """
+        # 获取各模块的模板变量定义
+        #
+        #         变量来源 = 模块声明的变量 + 用户在 Views 中的自定义配置，
+        #         因此在 Views 中新增的变量刷新后不会丢失。
+        #
+        #         Returns:
+        #             JSON 响应，按模块名分组的变量列表。
         from astrbot.api.web import json_response
 
         result: dict[str, dict] = {}
@@ -245,11 +235,10 @@ class ResourceQueryPlugin(Star):
         return json_response(result)
 
     async def save_template_vars(self):
-        """保存指定模块的模板变量配置
-
-        Returns:
-            JSON 响应。
-        """
+        # 保存指定模块的模板变量配置
+        #
+        #         Returns:
+        #             JSON 响应。
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})
@@ -275,14 +264,13 @@ class ResourceQueryPlugin(Star):
 
     @filter.command("query")
     async def query_cmd(self, event: AstrMessageEvent):
-        """/query — 显示帮助，或分发 /query <模块名>
-
-        Args:
-            event: 消息事件。
-
-        Yields:
-            消息结果。
-        """
+        # /query — 显示帮助，或分发 /query <模块名>
+        #
+        #         Args:
+        #             event: 消息事件。
+        #
+        #         Yields:
+        #             消息结果。
         args = self._parse_args(event, "query")
 
         if not args:
@@ -302,32 +290,31 @@ class ResourceQueryPlugin(Star):
 
     @filter.command("mimo")
     async def mimo_cmd(self, event: AstrMessageEvent):
-        """/mimo — MiMo 查询指令"""
+        # /mimo — MiMo 查询指令
         async for result in self._dispatch("mimo", event):
             yield result
 
     @filter.command("wasu")
     async def wasu_cmd(self, event: AstrMessageEvent):
-        """/wasu — 华数广电查询指令"""
+        # /wasu — 华数广电查询指令
         async for result in self._dispatch("wasu", event):
             yield result
 
     @filter.command("jm", alias={"JM", "Jm", "jM"})
     async def jm_cmd(self, event: AstrMessageEvent):
-        """/jm — JMComic 漫画下载指令"""
+        # /jm — JMComic 漫画下载指令
         async for result in self._dispatch("jm", event):
             yield result
 
     async def _dispatch(self, name: str, event: AstrMessageEvent):
-        """把指令分发到指定模块
-
-        Args:
-            name: 模块名称。
-            event: 消息事件。
-
-        Yields:
-            模块返回的消息结果。
-        """
+        # 把指令分发到指定模块
+        #
+        #         Args:
+        #             name: 模块名称。
+        #             event: 消息事件。
+        #
+        #         Yields:
+        #             模块返回的消息结果。
         module = self._manager.get_module(name)
         if not module:
             yield event.plain_result(f"× 模块「{name}」未启用")
@@ -339,17 +326,16 @@ class ResourceQueryPlugin(Star):
 
     @staticmethod
     def _parse_args(event: AstrMessageEvent, command: str) -> list[str]:
-        """解析指令参数
-
-        AstrBot 的唤醒检查会剥离唤醒前缀，因此这里只需去掉指令名本身。
-
-        Args:
-            event: 消息事件。
-            command: 指令名称。
-
-        Returns:
-            参数列表。
-        """
+        # 解析指令参数
+        #
+        #         AstrBot 的唤醒检查会剥离唤醒前缀，因此这里只需去掉指令名本身。
+        #
+        #         Args:
+        #             event: 消息事件。
+        #             command: 指令名称。
+        #
+        #         Returns:
+        #             参数列表。
         parts = event.get_message_str().strip().split()
 
         if parts and parts[0].lower() == command.lower():
@@ -358,11 +344,10 @@ class ResourceQueryPlugin(Star):
         return parts
 
     def _help_text(self) -> str:
-        """生成帮助文本
-
-        Returns:
-            帮助信息文本。
-        """
+        # 生成帮助文本
+        #
+        #         Returns:
+        #             帮助信息文本。
         lines = [
             f"▤ 资源查询插件 v{get_current_version()}",
             "────────────────",

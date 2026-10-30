@@ -1,10 +1,9 @@
-"""插件更新模块
-
-把「插件自身更新」也做成一个标准功能模块：
-  - 配置（代理、重试次数）由 Views 管理
-  - 通过 `/query update` 触发检查与更新
-  - 启用开关由 AstrBot 原生配置管理
-"""
+# 插件更新模块
+#
+# 把「插件自身更新」也做成一个标准功能模块：
+#   - 配置（代理、重试次数）由 Views 管理
+#   - 通过 `/query update` 触发检查与更新
+#   - 启用开关由 AstrBot 原生配置管理
 
 from __future__ import annotations
 
@@ -17,7 +16,7 @@ _CONFIG_FIELDS = [
         "key": "proxy",
         "label": "GitHub 代理",
         "type": "text",
-        "hint": "如 https://gh-proxy.cn/，留空不使用代理",
+        "hint": "如 https://gh-proxy.com/，留空使用默认代理",
     },
     {
         "key": "max_retries",
@@ -29,13 +28,13 @@ _CONFIG_FIELDS = [
 
 # 默认配置
 _DEFAULT_CONFIG = {
-    "proxy": "",
+    "proxy": "https://gh-proxy.com/",
     "max_retries": 3,
 }
 
 
 class UpdateModule(ModuleBase):
-    """插件更新模块"""
+    # 插件更新模块
 
     # ══════════════════════════════════════════
     #  元信息
@@ -43,22 +42,22 @@ class UpdateModule(ModuleBase):
 
     @property
     def module_name(self) -> str:
-        """模块标识"""
+        # 模块标识
         return "update"
 
     @property
     def module_title(self) -> str:
-        """模块显示名"""
+        # 模块显示名
         return "插件更新"
 
     @property
     def module_icon(self) -> str:
-        """模块图标"""
+        # 模块图标
         return "⇧"
 
     @property
     def module_desc(self) -> str:
-        """模块描述"""
+        # 模块描述
         return "从 GitHub 检查并更新插件自身"
 
     # ══════════════════════════════════════════
@@ -66,19 +65,17 @@ class UpdateModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_default_config(self) -> dict:
-        """模块默认配置
-
-        Returns:
-            代理与重试次数默认值。
-        """
+        # 模块默认配置
+        #
+        #         Returns:
+        #             代理与重试次数默认值。
         return dict(_DEFAULT_CONFIG)
 
     def get_config_fields(self) -> list[dict]:
-        """模块配置字段定义
-
-        Returns:
-            字段列表。
-        """
+        # 模块配置字段定义
+        #
+        #         Returns:
+        #             字段列表。
         return _CONFIG_FIELDS
 
     # ══════════════════════════════════════════
@@ -86,27 +83,25 @@ class UpdateModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
-        """本模块指令列表
-
-        该模块通过 `/query update` 触发，因此指令名带 `query ` 前缀，
-        便于帮助信息正确展示。
-
-        Returns:
-            指令定义列表。
-        """
+        # 本模块指令列表
+        #
+        #         该模块通过 `/query update` 触发，因此指令名带 `query ` 前缀，
+        #         便于帮助信息正确展示。
+        #
+        #         Returns:
+        #             指令定义列表。
         return [{"name": "query update", "desc": "检查并更新插件"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理更新指令
-
-        Args:
-            command: 指令名称（固定为 "update"）。
-            args: 指令参数（未使用）。
-            event: 消息事件。
-
-        Yields:
-            消息结果。
-        """
+        # 处理更新指令
+        #
+        #         Args:
+        #             command: 指令名称（固定为 "update"）。
+        #             args: 指令参数（未使用）。
+        #             event: 消息事件。
+        #
+        #         Yields:
+        #             消息结果。
         if command != "update":
             return
 
@@ -140,11 +135,10 @@ class UpdateModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Views 接口
-
-        Returns:
-            接口定义列表。
-        """
+        # 本模块的 Views 接口
+        #
+        #         Returns:
+        #             接口定义列表。
         return [
             {
                 "path": "config",
@@ -161,7 +155,7 @@ class UpdateModule(ModuleBase):
         ]
 
     async def _api_get_config(self):
-        """获取更新配置"""
+        # 获取更新配置
         from astrbot.api.web import json_response
 
         config = self.load_module_config()
@@ -169,7 +163,7 @@ class UpdateModule(ModuleBase):
         return json_response(config)
 
     async def _api_save_config(self):
-        """保存更新配置"""
+        # 保存更新配置
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})

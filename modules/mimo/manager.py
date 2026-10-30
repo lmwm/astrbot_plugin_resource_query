@@ -1,12 +1,11 @@
-"""MiMo 平台管理器 - 统一管理登录、查询等功能
-
-注意：此管理器是 MiMo 模块的内部实现，不对外暴露。
-MiMoModule 通过组合方式使用此管理器。
-
-登录流程：
-  1. 账号密码 → PassToken + User ID（login_with_password）
-  2. PassToken → ServiceToken（login_with_passtoken）
-"""
+# MiMo 平台管理器 - 统一管理登录、查询等功能
+#
+# 注意：此管理器是 MiMo 模块的内部实现，不对外暴露。
+# MiMoModule 通过组合方式使用此管理器。
+#
+# 登录流程：
+#   1. 账号密码 → PassToken + User ID（login_with_password）
+#   2. PassToken → ServiceToken（login_with_passtoken）
 
 import asyncio
 from pathlib import Path
@@ -22,17 +21,15 @@ _QUERY_TIMEOUT = 15
 
 
 class MimoManager:
-    """MiMo 平台管理器（内部实现）
-
-    负责处理 MiMo 平台的登录和查询逻辑。
-    """
+    # MiMo 平台管理器（内部实现）
+    #
+    #     负责处理 MiMo 平台的登录和查询逻辑。
 
     def __init__(self, plugin_dir: Path):
-        """初始化 MiMo 管理器
-
-        Args:
-            plugin_dir: 插件目录路径
-        """
+        # 初始化 MiMo 管理器
+        #
+        #         Args:
+        #             plugin_dir: 插件目录路径
         self._plugin_dir = plugin_dir
         # 缓存 MiAccount 实例，用于保持 OTP 会话状态
         self._mi_account_cache: dict[str, MiAccount] = {}
@@ -42,51 +39,48 @@ class MimoManager:
     # ══════════════════════════════════════════
 
     async def ensure_account(self, acc: dict) -> dict:
-        """异步：确保账号有可用凭据"""
+        # 异步：确保账号有可用凭据
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._sync_ensure_account, acc)
 
     async def re_login_account(self, acc: dict) -> dict:
-        """异步：查询失败后重新登录"""
+        # 异步：查询失败后重新登录
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, self._sync_re_login_account, acc)
 
     def login_account(self, acc: dict, otp_code: str | None = None) -> dict:
-        """同步：完整登录流程（在线程中调用）
-
-        流程：
-          1. 账号密码 → PassToken + User ID
-          2. PassToken → ServiceToken
-
-        Args:
-            acc: 账号配置。
-            otp_code: OTP 验证码（可选）。
-
-        Returns:
-            dict: {"account", "password", "userId", "passToken", "serviceToken"}
-        """
+        # 同步：完整登录流程（在线程中调用）
+        #
+        #         流程：
+        #           1. 账号密码 → PassToken + User ID
+        #           2. PassToken → ServiceToken
+        #
+        #         Args:
+        #             acc: 账号配置。
+        #             otp_code: OTP 验证码（可选）。
+        #
+        #         Returns:
+        #             dict: {"account", "password", "userId", "passToken", "serviceToken"}
         return self._sync_login_account(acc, otp_code)
 
     async def login_account_async(self, acc: dict, otp_code: str | None = None) -> dict:
-        """异步：完整登录流程（丢到线程池，避免阻塞事件循环）
-
-        Args:
-            acc: 账号配置。
-            otp_code: OTP 验证码（可选）。
-
-        Returns:
-            登录后的凭据字典。
-        """
+        # 异步：完整登录流程（丢到线程池，避免阻塞事件循环）
+        #
+        #         Args:
+        #             acc: 账号配置。
+        #             otp_code: OTP 验证码（可选）。
+        #
+        #         Returns:
+        #             登录后的凭据字典。
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(
             None, lambda: self.login_account(acc, otp_code)
         )
 
     def _create_mi_account(self, acc: dict) -> MiAccount:
-        """创建或获取缓存的 MiAccount 实例
-
-        使用 account + device_id 作为缓存 key，保持 OTP 会话状态
-        """
+        # 创建或获取缓存的 MiAccount 实例
+        #
+        #         使用 account + device_id 作为缓存 key，保持 OTP 会话状态
         account = acc.get("account", "")
         device_id = acc.get("device_id", "")
         cache_key = f"{account}:{device_id}"
@@ -108,14 +102,13 @@ class MimoManager:
     def _get_service_token(
         self, mi: MiAccount, user_id: str, pass_token: str, acc: dict
     ) -> None:
-        """通过 PassToken 获取 ServiceToken 并更新账号配置
-
-        Args:
-            mi: MiAccount 实例
-            user_id: 用户 ID
-            pass_token: PassToken
-            acc: 账号配置字典（会被修改）
-        """
+        # 通过 PassToken 获取 ServiceToken 并更新账号配置
+        #
+        #         Args:
+        #             mi: MiAccount 实例
+        #             user_id: 用户 ID
+        #             pass_token: PassToken
+        #             acc: 账号配置字典（会被修改）
         user_id, service_token = mi.login_with_passtoken(user_id, pass_token)
         acc["userId"] = user_id
         acc["serviceToken"] = service_token
@@ -123,17 +116,16 @@ class MimoManager:
     def _try_pass_token_login(
         self, mi: MiAccount, user_id: str, pass_token: str, acc: dict
     ) -> bool:
-        """尝试使用 passToken 获取 serviceToken
-
-        Args:
-            mi: MiAccount 实例
-            user_id: 用户 ID
-            pass_token: PassToken
-            acc: 账号配置字典（会被修改）
-
-        Returns:
-            是否成功获取 serviceToken
-        """
+        # 尝试使用 passToken 获取 serviceToken
+        #
+        #         Args:
+        #             mi: MiAccount 实例
+        #             user_id: 用户 ID
+        #             pass_token: PassToken
+        #             acc: 账号配置字典（会被修改）
+        #
+        #         Returns:
+        #             是否成功获取 serviceToken
         try:
             self._get_service_token(mi, user_id, pass_token, acc)
             return True
@@ -144,19 +136,18 @@ class MimoManager:
             return False
 
     def _try_password_login(self, mi: MiAccount, acc: dict) -> bool:
-        """尝试使用账号密码登录
-
-        流程：
-          1. 账号密码 → PassToken + User ID
-          2. PassToken → ServiceToken
-
-        Args:
-            mi: MiAccount 实例
-            acc: 账号配置字典（会被修改）
-
-        Returns:
-            是否成功登录
-        """
+        # 尝试使用账号密码登录
+        #
+        #         流程：
+        #           1. 账号密码 → PassToken + User ID
+        #           2. PassToken → ServiceToken
+        #
+        #         Args:
+        #             mi: MiAccount 实例
+        #             acc: 账号配置字典（会被修改）
+        #
+        #         Returns:
+        #             是否成功登录
         account = acc.get("account", "")
         password = acc.get("password", "")
 
@@ -184,10 +175,9 @@ class MimoManager:
             return False
 
     def _sync_ensure_account(self, acc: dict) -> dict:
-        """同步：确保账号有可用凭据
-
-        优先级：serviceToken > passToken > account+password
-        """
+        # 同步：确保账号有可用凭据
+        #
+        #         优先级：serviceToken > passToken > account+password
         service_token = acc.get("serviceToken", "")
         pass_token = acc.get("passToken", "")
         user_id = acc.get("userId", "")
@@ -208,10 +198,9 @@ class MimoManager:
         return acc
 
     def _sync_re_login_account(self, acc: dict) -> dict:
-        """同步：查询失败后重新登录
-
-        优先级：passToken > account+password
-        """
+        # 同步：查询失败后重新登录
+        #
+        #         优先级：passToken > account+password
         acc["serviceToken"] = ""
         pass_token = acc.get("passToken", "")
         user_id = acc.get("userId", "")
@@ -228,15 +217,14 @@ class MimoManager:
         return acc
 
     def _sync_login_account(self, acc: dict, otp_code: str | None = None) -> dict:
-        """同步：完整登录流程，返回凭据 dict
-
-        流程：
-          1. 账号密码 → PassToken + User ID（或 OTP 验证）
-          2. PassToken → ServiceToken
-
-        Returns:
-            dict: {"account", "password", "userId", "passToken", "serviceToken"}
-        """
+        # 同步：完整登录流程，返回凭据 dict
+        #
+        #         流程：
+        #           1. 账号密码 → PassToken + User ID（或 OTP 验证）
+        #           2. PassToken → ServiceToken
+        #
+        #         Returns:
+        #             dict: {"account", "password", "userId", "passToken", "serviceToken"}
         mi = self._create_mi_account(acc)
 
         # 第一步：账号密码 → PassToken + User ID
@@ -258,7 +246,7 @@ class MimoManager:
         }
 
     def get_pending_otp_account(self) -> str | None:
-        """获取等待 OTP 验证的账号名称"""
+        # 获取等待 OTP 验证的账号名称
         for key, mi in self._mi_account_cache.items():
             if mi._otp_session is not None:
                 # key 格式是 "account:device_id"
@@ -266,21 +254,20 @@ class MimoManager:
         return None
 
     def submit_otp(self, otp_code: str) -> dict:
-        """提交 OTP 验证码，完成登录
-
-        流程：
-          1. 提交 OTP 验证码，获取 PassToken + User ID
-          2. 通过 PassToken 获取 ServiceToken
-
-        Args:
-            otp_code: OTP 验证码。
-
-        Returns:
-            登录成功的凭据 dict: {"userId", "passToken", "serviceToken"}
-
-        Raises:
-            LoginError: 登录失败。
-        """
+        # 提交 OTP 验证码，完成登录
+        #
+        #         流程：
+        #           1. 提交 OTP 验证码，获取 PassToken + User ID
+        #           2. 通过 PassToken 获取 ServiceToken
+        #
+        #         Args:
+        #             otp_code: OTP 验证码。
+        #
+        #         Returns:
+        #             登录成功的凭据 dict: {"userId", "passToken", "serviceToken"}
+        #
+        #         Raises:
+        #             LoginError: 登录失败。
         # 找到有 OTP 会话的 MiAccount
         for key, mi in self._mi_account_cache.items():
             if mi._otp_session is not None:
@@ -305,7 +292,7 @@ class MimoManager:
     # ══════════════════════════════════════════
 
     async def query_one(self, acc: dict) -> dict:
-        """查询单个 MiMo 账号，失败时自动重登录并重试"""
+        # 查询单个 MiMo 账号，失败时自动重登录并重试
         if acc.pop("_otp_required", False):
             return {"error": "需要短信验证，请使用 /mimo otp <验证码> 提交验证码"}
 

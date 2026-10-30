@@ -1,4 +1,4 @@
-"""华数广电平台常量"""
+# 华数广电平台常量
 
 # 默认 API 地址
 DEFAULT_BASE_URL = "https://ups.wasu.cn"

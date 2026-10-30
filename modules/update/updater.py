@@ -1,13 +1,12 @@
-"""插件自动更新实现
-
-包含三部分：
-  - `check_update`：读取远端 metadata.yaml 并比较版本号
-  - `do_update`：下载远端压缩包并覆盖插件目录
-  - `reload_plugin`：调用 Dashboard API 让新版本生效
-
-注意：`do_update` 采用「先清空再覆盖」策略，会删除插件目录下除
-`.git` / `.github` / `__pycache__` / `.gitignore` / `tests` 之外的所有文件。
-"""
+# 插件自动更新实现
+#
+# 包含三部分：
+#   - `check_update`：读取远端 metadata.yaml 并比较版本号
+#   - `do_update`：下载远端压缩包并覆盖插件目录
+#   - `reload_plugin`：调用 Dashboard API 让新版本生效
+#
+# 注意：`do_update` 采用「先清空再覆盖」策略，会删除插件目录下除
+# `.git` / `.github` / `__pycache__` / `.gitignore` / `tests` 之外的所有文件。
 
 from __future__ import annotations
 
@@ -38,21 +37,20 @@ _EXCLUDE = {".git", ".github", "__pycache__", ".gitignore", "tests"}
 
 
 def _proxy_candidates(proxy: str) -> tuple[str, ...]:
-    """返回本次请求要依次尝试的代理前缀
-
-    用户配置的代理排在最前；若它不可用，再回退到直连与公共镜像，
-    避免一个失效镜像让整个更新流程不可用。
-
-    Args:
-        proxy: 用户配置的代理前缀。
-
-    Returns:
-        去重后的候选前缀列表（空字符串表示直连）。
-    """
+    # 返回本次请求要依次尝试的代理前缀
+    #
+    #     用户配置的代理排在最前；若它不可用，再回退到默认镜像与直连，
+    #     避免一个失效代理让整个更新流程不可用。
+    #
+    #     Args:
+    #         proxy: 用户配置的代理前缀。
+    #
+    #     Returns:
+    #         去重后的候选前缀列表（空字符串表示直连）。
     proxy = proxy.strip().rstrip("/")
 
     candidates = [proxy] if proxy else []
-    candidates.extend(["", "https://gh-proxy.com/", "https://gh-proxy.cn/"])
+    candidates.extend(["https://gh-proxy.com/", ""])
 
     seen: set[str] = set()
     result: list[str] = []
@@ -66,11 +64,10 @@ def _proxy_candidates(proxy: str) -> tuple[str, ...]:
 
 
 def get_current_version() -> str:
-    """读取当前插件版本号
-
-    Returns:
-        metadata.yaml 中的 version 字段；读取失败时返回 "0.0.0"。
-    """
+    # 读取当前插件版本号
+    #
+    #     Returns:
+    #         metadata.yaml 中的 version 字段；读取失败时返回 "0.0.0"。
     try:
         content = (_PLUGIN_DIR / "metadata.yaml").read_text(encoding="utf-8")
     except OSError:
@@ -87,16 +84,15 @@ def get_current_version() -> str:
 async def check_update(
     proxy: str = "", max_retries: int = 3, force: bool = False
 ) -> dict:
-    """检查远端是否有新版本
-
-    Args:
-        proxy: GitHub 代理前缀；留空时依次尝试直连与内置镜像。
-        max_retries: 网络请求重试次数。
-        force: 是否强制视为需要更新。
-
-    Returns:
-        含 latest / current / has_update / force / error 字段的字典。
-    """
+    # 检查远端是否有新版本
+    #
+    #     Args:
+    #         proxy: GitHub 代理前缀；留空时依次尝试直连与内置镜像。
+    #         max_retries: 网络请求重试次数。
+    #         force: 是否强制视为需要更新。
+    #
+    #     Returns:
+    #         含 latest / current / has_update / force / error 字段的字典。
     current_version = get_current_version()
 
     def _fetch_one(prefix: str) -> dict:
@@ -154,15 +150,14 @@ async def check_update(
 
 
 async def do_update(proxy: str = "", max_retries: int = 3) -> str:
-    """下载远端最新版本并覆盖插件文件
-
-    Args:
-        proxy: GitHub 代理前缀；留空时依次尝试直连与内置镜像。
-        max_retries: 网络请求重试次数。
-
-    Returns:
-        面向用户的更新结果文本。
-    """
+    # 下载远端最新版本并覆盖插件文件
+    #
+    #     Args:
+    #         proxy: GitHub 代理前缀；留空时依次尝试直连与内置镜像。
+    #         max_retries: 网络请求重试次数。
+    #
+    #     Returns:
+    #         面向用户的更新结果文本。
 
     def _download_with(prefix: str) -> str:
         def _get_sha() -> str:
@@ -250,17 +245,16 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
 
 
 async def reload_plugin(context) -> str:
-    """调用 Dashboard API 重载插件，使新版本生效
-
-    优先使用 AstrBot 4.29+ 的 REST 路由 `/api/v1/plugins/{name}/reload`，
-    失败时回退到旧路由 `/api/plugin/reload`（旧版 AstrBot 仍在使用）。
-
-    Args:
-        context: AstrBot 的 Context 实例。
-
-    Returns:
-        面向用户的重载结果文本。
-    """
+    # 调用 Dashboard API 重载插件，使新版本生效
+    #
+    #     优先使用 AstrBot 4.29+ 的 REST 路由 `/api/v1/plugins/{name}/reload`，
+    #     失败时回退到旧路由 `/api/plugin/reload`（旧版 AstrBot 仍在使用）。
+    #
+    #     Args:
+    #         context: AstrBot 的 Context 实例。
+    #
+    #     Returns:
+    #         面向用户的重载结果文本。
 
     def _do_reload() -> str:
         try:

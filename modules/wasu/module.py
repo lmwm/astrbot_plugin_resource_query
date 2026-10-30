@@ -1,14 +1,13 @@
-"""华数广电平台模块
-
-继承 ModuleBase，实现华数广电的账号管理与流量/话费查询。
-
-接口说明：
-  POST /msm-local-hub/api/v3/gd/query/fee       话费余额
-  POST /msm-local-hub/api/v3/gd/query/resource  流量与语音资源
-
-注意：接口用 `code` 字段表示业务结果，`code != 0` 时响应中**不含 data**，
-因此必须显式校验业务码，不能直接取 data。
-"""
+# 华数广电平台模块
+#
+# 继承 ModuleBase，实现华数广电的账号管理与流量/话费查询。
+#
+# 接口说明：
+#   POST /msm-local-hub/api/v3/gd/query/fee       话费余额
+#   POST /msm-local-hub/api/v3/gd/query/resource  流量与语音资源
+#
+# 注意：接口用 `code` 字段表示业务结果，`code != 0` 时响应中**不含 data**，
+# 因此必须显式校验业务码，不能直接取 data。
 
 from __future__ import annotations
 
@@ -37,11 +36,12 @@ _CODE_TOKEN_INVALID = 14
 
 
 class WasuApiError(Exception):
-    """华数接口调用错误"""
+    # 华数接口调用错误
+    pass
 
 
 class WasuModule(ModuleBase):
-    """华数广电查询模块"""
+    # 华数广电查询模块
 
     # ══════════════════════════════════════════
     #  元信息
@@ -49,22 +49,22 @@ class WasuModule(ModuleBase):
 
     @property
     def module_name(self) -> str:
-        """模块标识"""
+        # 模块标识
         return "wasu"
 
     @property
     def module_title(self) -> str:
-        """模块显示名"""
+        # 模块显示名
         return "华数查询"
 
     @property
     def module_icon(self) -> str:
-        """模块图标"""
+        # 模块图标
         return "◎"
 
     @property
     def module_desc(self) -> str:
-        """模块描述"""
+        # 模块描述
         return "华数广电流量 / 话费 / 余量查询"
 
     # ══════════════════════════════════════════
@@ -73,22 +73,22 @@ class WasuModule(ModuleBase):
 
     @property
     def supports_accounts(self) -> bool:
-        """支持多账号管理"""
+        # 支持多账号管理
         return True
 
     @property
     def supports_template(self) -> bool:
-        """支持消息模板"""
+        # 支持消息模板
         return True
 
     @property
     def supports_query(self) -> bool:
-        """支持查询"""
+        # 支持查询
         return True
 
     @property
     def supports_test(self) -> bool:
-        """支持在 Views 中测试凭据"""
+        # 支持在 Views 中测试凭据
         return True
 
     # ══════════════════════════════════════════
@@ -96,35 +96,31 @@ class WasuModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_account_fields(self) -> list[dict]:
-        """账号表单字段定义
-
-        Returns:
-            字段列表。
-        """
+        # 账号表单字段定义
+        #
+        #         Returns:
+        #             字段列表。
         return _ACCOUNT_FIELDS
 
     def get_var_definitions(self) -> dict[str, str]:
-        """模板变量说明（来自 modules/wasu/config.yaml）
-
-        Returns:
-            变量名到中文描述的映射。
-        """
+        # 模板变量说明（来自 modules/wasu/config.yaml）
+        #
+        #         Returns:
+        #             变量名到中文描述的映射。
         return _load_var_definitions()
 
     def get_default_template(self) -> str:
-        """默认消息模板
-
-        Returns:
-            来自 config.yaml 的默认模板。
-        """
+        # 默认消息模板
+        #
+        #         Returns:
+        #             来自 config.yaml 的默认模板。
         return get_default_template()
 
     def get_result_class(self):
-        """本模块使用的查询结果类
-
-        Returns:
-            WasuResult 类。
-        """
+        # 本模块使用的查询结果类
+        #
+        #         Returns:
+        #             WasuResult 类。
         return WasuResult
 
     # ══════════════════════════════════════════
@@ -132,14 +128,13 @@ class WasuModule(ModuleBase):
     # ══════════════════════════════════════════
 
     async def query(self, account: dict) -> dict:
-        """查询单个华数账号
-
-        Args:
-            account: 账号配置。
-
-        Returns:
-            统一结果字典。
-        """
+        # 查询单个华数账号
+        #
+        #         Args:
+        #             account: 账号配置。
+        #
+        #         Returns:
+        #             统一结果字典。
         label = account.get("name") or account.get("phone") or "华数账号"
         template = self.get_account_template(account)
 
@@ -196,39 +191,37 @@ class WasuModule(ModuleBase):
         sign: str = "",
         ua: str = "",
     ) -> dict:
-        """执行查询（同步，在线程池中运行）
-
-        Args:
-            user_key: 用户 key。
-            token: 认证 token。
-            phone: 手机号。
-            sign: 签名。
-            ua: User-Agent。
-
-        Returns:
-            结构化查询数据。
-
-        Raises:
-            WasuApiError: 接口返回业务错误或缺少数据。
-        """
+        # 执行查询（同步，在线程池中运行）
+        #
+        #         Args:
+        #             user_key: 用户 key。
+        #             token: 认证 token。
+        #             phone: 手机号。
+        #             sign: 签名。
+        #             ua: User-Agent。
+        #
+        #         Returns:
+        #             结构化查询数据。
+        #
+        #         Raises:
+        #             WasuApiError: 接口返回业务错误或缺少数据。
         base_url = DEFAULT_BASE_URL
         headers = {**DEFAULT_HEADERS, "x-sign": sign}
         if ua:
             headers["User-Agent"] = ua
 
         def _post(path: str, payload: dict) -> dict:
-            """发起 POST 请求并校验业务码
-
-            Args:
-                path: 接口路径。
-                payload: 请求体。
-
-            Returns:
-                响应中的 data 字段。
-
-            Raises:
-                WasuApiError: 业务码非 0 或缺少 data。
-            """
+            # 发起 POST 请求并校验业务码
+            #
+            #             Args:
+            #                 path: 接口路径。
+            #                 payload: 请求体。
+            #
+            #             Returns:
+            #                 响应中的 data 字段。
+            #
+            #             Raises:
+            #                 WasuApiError: 业务码非 0 或缺少 data。
             body = json.dumps(payload, separators=(",", ":"))
             opener, _ = new_opener()
             req = Request(
@@ -266,15 +259,14 @@ class WasuModule(ModuleBase):
 
     @staticmethod
     def _parse_response(fee: dict, resource: dict) -> dict:
-        """解析话费与资源接口响应
-
-        Args:
-            fee: fee 接口返回的 data。
-            resource: resource 接口返回的 data。
-
-        Returns:
-            结构化的余额、流量与语音数据。
-        """
+        # 解析话费与资源接口响应
+        #
+        #         Args:
+        #             fee: fee 接口返回的 data。
+        #             resource: resource 接口返回的 data。
+        #
+        #         Returns:
+        #             结构化的余额、流量与语音数据。
         balance = {
             "balance": fmt_yuan(fee.get("BALANCE", 0)),
             "month_fee": fmt_yuan(fee.get("CURREAL_FEE", 0)),
@@ -333,24 +325,22 @@ class WasuModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
-        """本模块指令列表
-
-        Returns:
-            指令定义列表。
-        """
+        # 本模块指令列表
+        #
+        #         Returns:
+        #             指令定义列表。
         return [{"name": "wasu", "desc": "华数广电查询：/wasu [ls|del|账号]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理 /wasu 指令
-
-        Args:
-            command: 指令名称。
-            args: 参数列表。
-            event: 消息事件。
-
-        Yields:
-            消息结果。
-        """
+        # 处理 /wasu 指令
+        #
+        #         Args:
+        #             command: 指令名称。
+        #             args: 参数列表。
+        #             event: 消息事件。
+        #
+        #         Yields:
+        #             消息结果。
         if command != "wasu":
             return
 
@@ -375,7 +365,7 @@ class WasuModule(ModuleBase):
             yield r
 
     async def _cmd_list(self, event, accounts: list[dict]):
-        """列出全部账号"""
+        # 列出全部账号
         if not accounts:
             yield event.plain_result("× 还没有配置华数账号\n请在网页管理界面添加账号")
             return
@@ -388,7 +378,7 @@ class WasuModule(ModuleBase):
         yield event.plain_result("\n".join(lines))
 
     async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
-        """删除指定账号"""
+        # 删除指定账号
         if len(args) < 2:
             yield event.plain_result("用法: /wasu del <序号或名称>")
             return
@@ -419,7 +409,7 @@ class WasuModule(ModuleBase):
         yield event.plain_result(f"√ 已删除: {name}")
 
     async def _cmd_query_all(self, event, accounts: list[dict]):
-        """查询全部账号"""
+        # 查询全部账号
         if not accounts:
             yield event.plain_result("× 还没有配置华数账号\n请在网页管理界面添加账号")
             return
@@ -430,7 +420,7 @@ class WasuModule(ModuleBase):
             yield event.plain_result(self.render(await self.query(acc)))
 
     async def _cmd_query_one(self, identifier: str, event, accounts: list[dict]):
-        """查询指定账号"""
+        # 查询指定账号
         account = None
         for acc in accounts:
             if identifier in (acc.get("name"), acc.get("phone"), acc.get("_filename")):
@@ -451,11 +441,10 @@ class WasuModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Views 接口
-
-        Returns:
-            接口定义列表。
-        """
+        # 本模块的 Views 接口
+        #
+        #         Returns:
+        #             接口定义列表。
         return [
             {
                 "path": "config",
@@ -478,11 +467,10 @@ class WasuModule(ModuleBase):
         ]
 
     async def _api_test(self):
-        """测试凭据是否可用
-
-        Returns:
-            JSON 响应。
-        """
+        # 测试凭据是否可用
+        #
+        #         Returns:
+        #             JSON 响应。
         from astrbot.api.web import json_response, request
 
         payload = await request.json(default={})
@@ -502,13 +490,13 @@ class WasuModule(ModuleBase):
         return json_response({"status": "ok", "message": "凭据有效"})
 
     async def _api_get_config(self):
-        """获取模块配置"""
+        # 获取模块配置
         from astrbot.api.web import json_response
 
         return json_response(self.load_module_config())
 
     async def _api_save_config(self):
-        """保存模块配置"""
+        # 保存模块配置
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})

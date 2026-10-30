@@ -1,14 +1,13 @@
-"""简易 YAML 配置解析（插件内部只读配置专用）
-
-各模块的默认值写在 `modules/<模块>/config.yaml`，结构固定
-（两级键值 + 块标量），因此这里用手写解析器，保持零外部依赖。
-
-支持：
-  - 两级缩进的键值对
-  - 字符串（含引号）、bool、int、float、null 的类型推断
-  - 块标量 `|` `|-` `|+` `>` `>-` `>+`
-  - `#` 注释与空行
-"""
+# 简易 YAML 配置解析（插件内部只读配置专用）
+#
+# 各模块的默认值写在 `modules/<模块>/config.yaml`，结构固定
+# （两级键值 + 块标量），因此这里用手写解析器，保持零外部依赖。
+#
+# 支持：
+#   - 两级缩进的键值对
+#   - 字符串（含引号）、bool、int、float、null 的类型推断
+#   - 块标量 `|` `|-` `|+` `>` `>-` `>+`
+#   - `#` 注释与空行
 
 from __future__ import annotations
 
@@ -23,14 +22,13 @@ _KEY_RE = re.compile(r"^(\w+):\s*(.*)?$")
 
 
 def _convert_value(value: str):
-    """把 YAML 标量字符串转换为合适的 Python 类型
-
-    Args:
-        value: YAML 标量字符串。
-
-    Returns:
-        bool、int、float、None 或 str。
-    """
+    # 把 YAML 标量字符串转换为合适的 Python 类型
+    #
+    #     Args:
+    #         value: YAML 标量字符串。
+    #
+    #     Returns:
+    #         bool、int、float、None 或 str。
     if not value:
         return ""
 
@@ -54,14 +52,13 @@ def _convert_value(value: str):
 
 
 def _unquote(value: str) -> str:
-    """去掉成对的单引号或双引号
-
-    Args:
-        value: 原始字符串。
-
-    Returns:
-        去除外层引号后的字符串。
-    """
+    # 去掉成对的单引号或双引号
+    #
+    #     Args:
+    #         value: 原始字符串。
+    #
+    #     Returns:
+    #         去除外层引号后的字符串。
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
         return value[1:-1]
     return value
@@ -70,16 +67,15 @@ def _unquote(value: str) -> str:
 def _read_block_scalar(
     lines: list[str], start: int, parent_indent: int
 ) -> tuple[str, int]:
-    """读取块标量内容
-
-    Args:
-        lines: 全部文本行。
-        start: 块内容起始行号。
-        parent_indent: 父级键的缩进。
-
-    Returns:
-        (块内容, 块结束后的行号)。
-    """
+    # 读取块标量内容
+    #
+    #     Args:
+    #         lines: 全部文本行。
+    #         start: 块内容起始行号。
+    #         parent_indent: 父级键的缩进。
+    #
+    #     Returns:
+    #         (块内容, 块结束后的行号)。
     block_lines: list[str] = []
     block_base_indent: int | None = None
     i = start
@@ -105,14 +101,13 @@ def _read_block_scalar(
 
 
 def _fold_block_scalar(text: str) -> str:
-    """按折叠模式（>）合并块标量：空行分段，段内以空格连接
-
-    Args:
-        text: 块标量原文。
-
-    Returns:
-        折叠后的字符串。
-    """
+    # 按折叠模式（>）合并块标量：空行分段，段内以空格连接
+    #
+    #     Args:
+    #         text: 块标量原文。
+    #
+    #     Returns:
+    #         折叠后的字符串。
     paragraphs: list[str] = []
     current: list[str] = []
 
@@ -131,17 +126,16 @@ def _fold_block_scalar(text: str) -> str:
 
 
 def parse_yaml(text: str) -> dict:
-    """解析简易 YAML 文本
-
-    基于缩进栈实现，支持任意层级嵌套（键值对可以一直往下缩进），
-    以及 `|` / `>` 系列块标量。
-
-    Args:
-        text: YAML 文本内容。
-
-    Returns:
-        解析后的嵌套字典；无法识别的行会被忽略。
-    """
+    # 解析简易 YAML 文本
+    #
+    #     基于缩进栈实现，支持任意层级嵌套（键值对可以一直往下缩进），
+    #     以及 `|` / `>` 系列块标量。
+    #
+    #     Args:
+    #         text: YAML 文本内容。
+    #
+    #     Returns:
+    #         解析后的嵌套字典；无法识别的行会被忽略。
     root: dict = {}
     # 栈元素为 (该层缩进, 对应字典)，栈底是根字典
     stack: list[tuple[int, dict]] = [(-1, root)]
@@ -195,14 +189,13 @@ def parse_yaml(text: str) -> dict:
 
 
 def load_yaml_config(path: Path) -> dict:
-    """加载并缓存 YAML 配置文件
-
-    Args:
-        path: 配置文件路径。
-
-    Returns:
-        解析后的配置字典；文件不存在或读取失败时返回空字典。
-    """
+    # 加载并缓存 YAML 配置文件
+    #
+    #     Args:
+    #         path: 配置文件路径。
+    #
+    #     Returns:
+    #         解析后的配置字典；文件不存在或读取失败时返回空字典。
     cache_key = str(path)
     if cache_key in _CACHE:
         return _CACHE[cache_key]
@@ -219,16 +212,15 @@ def load_yaml_config(path: Path) -> dict:
 
 
 def get_config_value(config: dict, key_path: str, default=None):
-    """按点号路径读取配置值
-
-    Args:
-        config: 配置字典。
-        key_path: 点号分隔的路径，如 "template.default"。
-        default: 找不到时的默认值。
-
-    Returns:
-        配置值或默认值。
-    """
+    # 按点号路径读取配置值
+    #
+    #     Args:
+    #         config: 配置字典。
+    #         key_path: 点号分隔的路径，如 "template.default"。
+    #         default: 找不到时的默认值。
+    #
+    #     Returns:
+    #         配置值或默认值。
     value = config
     for key in key_path.split("."):
         if isinstance(value, dict) and key in value:

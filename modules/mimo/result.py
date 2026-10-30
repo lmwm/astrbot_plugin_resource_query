@@ -1,8 +1,7 @@
-"""MiMo 查询结果
-
-模板变量覆盖余额、Token 用量、费用与限额（TPM / RPM / 并发），
-与 `modules/mimo/config.yaml` 中的默认模板保持一致。
-"""
+# MiMo 查询结果
+#
+# 模板变量覆盖余额、Token 用量、费用与限额（TPM / RPM / 并发），
+# 与 `modules/mimo/config.yaml` 中的默认模板保持一致。
 
 from __future__ import annotations
 
@@ -11,30 +10,28 @@ from .utils import fmt_num
 
 
 def _get_str(data: dict, key: str, default: str = "?") -> str:
-    """从字典取值并转为字符串
-
-    Args:
-        data: 数据字典。
-        key: 键名。
-        default: 缺失或为 None 时的默认值。
-
-    Returns:
-        字符串形式的值。
-    """
+    # 从字典取值并转为字符串
+    #
+    #     Args:
+    #         data: 数据字典。
+    #         key: 键名。
+    #         default: 缺失或为 None 时的默认值。
+    #
+    #     Returns:
+    #         字符串形式的值。
     value = data.get(key, default)
     return default if value is None else str(value)
 
 
 def _get_limit(limits: dict, key: str) -> str:
-    """读取并格式化限额字段
-
-    Args:
-        limits: 限额数据字典（accountRateLimit）。
-        key: 字段名，如 "tpm"。
-
-    Returns:
-        格式化后的字符串；字段缺失或为 0 时返回 "-"。
-    """
+    # 读取并格式化限额字段
+    #
+    #     Args:
+    #         limits: 限额数据字典（accountRateLimit）。
+    #         key: 字段名，如 "tpm"。
+    #
+    #     Returns:
+    #         格式化后的字符串；字段缺失或为 0 时返回 "-"。
     value = limits.get(key) if isinstance(limits, dict) else None
     if not value:
         return "-"
@@ -42,7 +39,7 @@ def _get_limit(limits: dict, key: str) -> str:
 
 
 class MimoResult(QueryResult):
-    """MiMo 查询结果"""
+    # MiMo 查询结果
 
     def __init__(
         self,
@@ -52,15 +49,14 @@ class MimoResult(QueryResult):
         error: str = "",
         template: str | None = None,
     ) -> None:
-        """初始化查询结果
-
-        Args:
-            success: 是否查询成功。
-            account_name: 账号显示名称。
-            data: 查询数据（接口原始响应）。
-            error: 错误信息。
-            template: 消息模板。
-        """
+        # 初始化查询结果
+        #
+        #         Args:
+        #             success: 是否查询成功。
+        #             account_name: 账号显示名称。
+        #             data: 查询数据（接口原始响应）。
+        #             error: 错误信息。
+        #             template: 消息模板。
         super().__init__(
             success=success,
             platform="MiMo",
@@ -71,11 +67,10 @@ class MimoResult(QueryResult):
         )
 
     def build_variables(self) -> dict[str, str]:
-        """构建 MiMo 模板变量
-
-        Returns:
-            模板变量字典。
-        """
+        # 构建 MiMo 模板变量
+        #
+        #         Returns:
+        #             模板变量字典。
         balance_data = self.data.get("balance", {})
         usage_data = self.data.get("usage", {})
 

@@ -1,9 +1,8 @@
-"""通用工具层
-
-提供与业务无关的基础能力：
-- 路径解析与 JSON/文本读写（utils）
-- 简易 YAML 解析（yaml_utils）
-"""
+# 通用工具层
+#
+# 提供与业务无关的基础能力：
+# - 路径解析与 JSON/文本读写（utils）
+# - 简易 YAML 解析（yaml_utils）
 
 from .utils import (
     get_account_filename,

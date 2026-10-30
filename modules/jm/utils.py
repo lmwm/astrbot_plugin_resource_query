@@ -1,8 +1,7 @@
-"""JMComic 模块工具与默认配置
-
-默认值与 Views 配置项定义统一来自 `modules/jm/config.yaml`（只读），
-修改该文件即可调整默认行为，且不会覆盖用户已保存的配置。
-"""
+# JMComic 模块工具与默认配置
+#
+# 默认值与 Views 配置项定义统一来自 `modules/jm/config.yaml`（只读），
+# 修改该文件即可调整默认行为，且不会覆盖用户已保存的配置。
 
 from __future__ import annotations
 
@@ -19,18 +18,17 @@ CN_CHAR_PATTERN = re.compile(r"[\u4e00-\u9fff]")
 
 
 def pick_display_name(oname: str, fallback: str) -> str:
-    """选择展示名称：优先使用含中文的简短名
-
-    站点提供的 oname（原始名）通常更简洁，但可能是日文/英文；
-    只有在它非空且包含中文时才采用，否则退回完整标题。
-
-    Args:
-        oname: 首选名称（原始名）。
-        fallback: 回退名称（完整标题）。
-
-    Returns:
-        选中的名称（未做非法字符清洗）。
-    """
+    # 选择展示名称：优先使用含中文的简短名
+    #
+    #     站点提供的 oname（原始名）通常更简洁，但可能是日文/英文；
+    #     只有在它非空且包含中文时才采用，否则退回完整标题。
+    #
+    #     Args:
+    #         oname: 首选名称（原始名）。
+    #         fallback: 回退名称（完整标题）。
+    #
+    #     Returns:
+    #         选中的名称（未做非法字符清洗）。
     preferred = str(oname or "").strip()
     if preferred and CN_CHAR_PATTERN.search(preferred):
         return preferred
@@ -64,20 +62,18 @@ _FALLBACK_FIELDS: list[dict] = [
 
 
 def _config() -> dict:
-    """加载模块 YAML 配置（结果带缓存）
-
-    Returns:
-        配置字典。
-    """
+    # 加载模块 YAML 配置（结果带缓存）
+    #
+    #     Returns:
+    #         配置字典。
     return load_yaml_config(_CONFIG_FILE)
 
 
 def get_default_config() -> dict:
-    """获取默认配置
-
-    Returns:
-        默认配置字典（config.yaml 中 defaults 段的副本）。
-    """
+    # 获取默认配置
+    #
+    #     Returns:
+    #         默认配置字典（config.yaml 中 defaults 段的副本）。
     defaults = get_config_value(_config(), "defaults", None)
     if isinstance(defaults, dict) and defaults:
         return dict(defaults)
@@ -85,13 +81,12 @@ def get_default_config() -> dict:
 
 
 def get_config_fields() -> list[dict]:
-    """获取 Views 配置项定义
-
-    以 config.yaml 中 fields 段的键顺序作为显示顺序，键名即配置键。
-
-    Returns:
-        字段定义列表。
-    """
+    # 获取 Views 配置项定义
+    #
+    #     以 config.yaml 中 fields 段的键顺序作为显示顺序，键名即配置键。
+    #
+    #     Returns:
+    #         字段定义列表。
     raw = get_config_value(_config(), "fields", None)
     if not isinstance(raw, dict) or not raw:
         return [dict(item) for item in _FALLBACK_FIELDS]
@@ -107,14 +102,13 @@ def get_config_fields() -> list[dict]:
 
 
 def normalize_album_id(raw: str) -> int | None:
-    """标准化漫画 ID
-
-    Args:
-        raw: 原始输入，可能是纯数字、JM+数字、URL 等。
-
-    Returns:
-        标准化的数字 ID，无效输入返回 None。
-    """
+    # 标准化漫画 ID
+    #
+    #     Args:
+    #         raw: 原始输入，可能是纯数字、JM+数字、URL 等。
+    #
+    #     Returns:
+    #         标准化的数字 ID，无效输入返回 None。
     if not raw:
         return None
 

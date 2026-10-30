@@ -1,13 +1,12 @@
-"""MiMo 平台模块
-
-继承 ModuleBase，实现小米 MiMo 的账号管理与用量查询。
-登录、凭据刷新等底层逻辑由内部 MimoManager 负责。
-
-配置分层：
-  - 模块级默认值（Views「模块设置」）→ config/mimo/config.json
-  - 只读兜底默认值 → modules/mimo/config.yaml
-  - 账号级覆盖 → config/mimo/<账号>.json
-"""
+# MiMo 平台模块
+#
+# 继承 ModuleBase，实现小米 MiMo 的账号管理与用量查询。
+# 登录、凭据刷新等底层逻辑由内部 MimoManager 负责。
+#
+# 配置分层：
+#   - 模块级默认值（Views「模块设置」）→ config/mimo/config.json
+#   - 只读兜底默认值 → modules/mimo/config.yaml
+#   - 账号级覆盖 → config/mimo/<账号>.json
 
 from __future__ import annotations
 
@@ -88,15 +87,14 @@ _CREDENTIAL_KEYS = ("userId", "passToken", "serviceToken")
 
 
 class MimoModule(ModuleBase):
-    """小米 MiMo 用量查询模块"""
+    # 小米 MiMo 用量查询模块
 
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
-        """初始化模块
-
-        Args:
-            plugin_dir: 插件目录路径。
-            plugin_name: 插件名称。
-        """
+        # 初始化模块
+        #
+        #         Args:
+        #             plugin_dir: 插件目录路径。
+        #             plugin_name: 插件名称。
         super().__init__(plugin_dir, plugin_name)
         self._manager = MimoManager(plugin_dir)
 
@@ -106,22 +104,22 @@ class MimoModule(ModuleBase):
 
     @property
     def module_name(self) -> str:
-        """模块标识"""
+        # 模块标识
         return "mimo"
 
     @property
     def module_title(self) -> str:
-        """模块显示名"""
+        # 模块显示名
         return "MiMo 查询"
 
     @property
     def module_icon(self) -> str:
-        """模块图标"""
+        # 模块图标
         return "▤"
 
     @property
     def module_desc(self) -> str:
-        """模块描述"""
+        # 模块描述
         return "小米 MiMo 平台余额与用量查询"
 
     # ══════════════════════════════════════════
@@ -130,32 +128,32 @@ class MimoModule(ModuleBase):
 
     @property
     def supports_accounts(self) -> bool:
-        """支持多账号管理"""
+        # 支持多账号管理
         return True
 
     @property
     def supports_template(self) -> bool:
-        """支持消息模板"""
+        # 支持消息模板
         return True
 
     @property
     def supports_query(self) -> bool:
-        """支持查询"""
+        # 支持查询
         return True
 
     @property
     def supports_login(self) -> bool:
-        """支持在 Views 中登录（含 OTP）"""
+        # 支持在 Views 中登录（含 OTP）
         return True
 
     @property
     def supports_test(self) -> bool:
-        """支持在 Views 中测试凭据"""
+        # 支持在 Views 中测试凭据
         return True
 
     @property
     def account_file_prefix(self) -> str:
-        """账号文件名前缀"""
+        # 账号文件名前缀
         return "mimo_"
 
     # ══════════════════════════════════════════
@@ -163,19 +161,17 @@ class MimoModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_account_groups(self) -> list[dict]:
-        """账号字段分组定义
-
-        Returns:
-            分组列表：三种凭据方式为标签页，设备信息为内联区块。
-        """
+        # 账号字段分组定义
+        #
+        #         Returns:
+        #             分组列表：三种凭据方式为标签页，设备信息为内联区块。
         return _ACCOUNT_GROUPS
 
     def get_account_fields(self) -> list[dict]:
-        """账号表单字段定义
-
-        Returns:
-            字段列表；设备字段附带插件默认值，供「恢复默认」按钮使用。
-        """
+        # 账号表单字段定义
+        #
+        #         Returns:
+        #             字段列表；设备字段附带插件默认值，供「恢复默认」按钮使用。
         fields = [dict(field) for field in _ACCOUNT_FIELDS]
         defaults = {
             "device_id": get_default_device_id(),
@@ -189,19 +185,17 @@ class MimoModule(ModuleBase):
         return fields
 
     def get_var_definitions(self) -> dict[str, str]:
-        """模板变量说明（来自 modules/mimo/config.yaml）
-
-        Returns:
-            变量名到中文描述的映射。
-        """
+        # 模板变量说明（来自 modules/mimo/config.yaml）
+        #
+        #         Returns:
+        #             变量名到中文描述的映射。
         return _load_var_definitions()
 
     def get_default_template(self) -> str:
-        """默认消息模板
-
-        Returns:
-            来自 config.yaml 的默认模板。
-        """
+        # 默认消息模板
+        #
+        #         Returns:
+        #             来自 config.yaml 的默认模板。
         return get_default_template()
 
     # ══════════════════════════════════════════
@@ -209,11 +203,10 @@ class MimoModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_accounts(self) -> list[dict]:
-        """读取账号并补齐默认设备信息（仅内存，不落盘）
-
-        Returns:
-            账号配置列表；设备字段为空时填入插件默认值供前端展示。
-        """
+        # 读取账号并补齐默认设备信息（仅内存，不落盘）
+        #
+        #         Returns:
+        #             账号配置列表；设备字段为空时填入插件默认值供前端展示。
         accounts = super().get_accounts()
         default_device_id = get_default_device_id()
         default_ua = get_default_ua()
@@ -227,14 +220,13 @@ class MimoModule(ModuleBase):
         return accounts
 
     def save_accounts(self, accounts: list[dict]) -> bool:
-        """保存账号：空白的设备字段自动填充默认值
-
-        Args:
-            accounts: 账号配置列表。
-
-        Returns:
-            是否保存成功。
-        """
+        # 保存账号：空白的设备字段自动填充默认值
+        #
+        #         Args:
+        #             accounts: 账号配置列表。
+        #
+        #         Returns:
+        #             是否保存成功。
         defaults = {
             "device_id": get_default_device_id(),
             "ua": get_default_ua(),
@@ -251,15 +243,14 @@ class MimoModule(ModuleBase):
         return super().save_accounts(normalized)
 
     def update_credentials(self, account: dict, credentials: dict) -> bool:
-        """把刷新后的凭据写回账号文件
-
-        Args:
-            account: 账号配置（需带 _filename）。
-            credentials: 要更新的字段。
-
-        Returns:
-            是否更新成功。
-        """
+        # 把刷新后的凭据写回账号文件
+        #
+        #         Args:
+        #             account: 账号配置（需带 _filename）。
+        #             credentials: 要更新的字段。
+        #
+        #         Returns:
+        #             是否更新成功。
         filename = str(account.get("_filename") or "").strip()
         if not filename:
             return False
@@ -273,15 +264,14 @@ class MimoModule(ModuleBase):
         return False
 
     def _find_account(self, accounts: list[dict], identifier: str) -> dict | None:
-        """按名称、账号或文件名查找账号
-
-        Args:
-            accounts: 账号列表。
-            identifier: 账号名称、小米账号或文件名。
-
-        Returns:
-            匹配到的账号；未找到返回 None。
-        """
+        # 按名称、账号或文件名查找账号
+        #
+        #         Args:
+        #             accounts: 账号列表。
+        #             identifier: 账号名称、小米账号或文件名。
+        #
+        #         Returns:
+        #             匹配到的账号；未找到返回 None。
         for acc in accounts:
             if identifier in (
                 acc.get("name", ""),
@@ -296,14 +286,13 @@ class MimoModule(ModuleBase):
     # ══════════════════════════════════════════
 
     async def query(self, account: dict) -> dict:
-        """查询单个 MiMo 账号
-
-        Args:
-            account: 账号配置。
-
-        Returns:
-            统一结果字典。
-        """
+        # 查询单个 MiMo 账号
+        #
+        #         Args:
+        #             account: 账号配置。
+        #
+        #         Returns:
+        #             统一结果字典。
         label = account.get("name") or account.get("account") or "MiMo账号"
         template = self.get_account_template(account)
         before = {key: account.get(key, "") for key in _CREDENTIAL_KEYS}
@@ -339,11 +328,10 @@ class MimoModule(ModuleBase):
         }
 
     def get_result_class(self):
-        """本模块使用的查询结果类
-
-        Returns:
-            MimoResult 类。
-        """
+        # 本模块使用的查询结果类
+        #
+        #         Returns:
+        #             MimoResult 类。
         return MimoResult
 
     # ══════════════════════════════════════════
@@ -351,24 +339,22 @@ class MimoModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
-        """本模块指令列表
-
-        Returns:
-            指令定义列表。
-        """
+        # 本模块指令列表
+        #
+        #         Returns:
+        #             指令定义列表。
         return [{"name": "mimo", "desc": "MiMo 用量查询：/mimo [ls|del|otp|账号]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理 /mimo 指令
-
-        Args:
-            command: 指令名称。
-            args: 参数列表。
-            event: 消息事件。
-
-        Yields:
-            消息结果。
-        """
+        # 处理 /mimo 指令
+        #
+        #         Args:
+        #             command: 指令名称。
+        #             args: 参数列表。
+        #             event: 消息事件。
+        #
+        #         Yields:
+        #             消息结果。
         if command != "mimo":
             return
 
@@ -398,7 +384,7 @@ class MimoModule(ModuleBase):
             yield r
 
     async def _cmd_list(self, event, accounts: list[dict]):
-        """列出全部账号"""
+        # 列出全部账号
         if not accounts:
             yield event.plain_result("× 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
             return
@@ -412,7 +398,7 @@ class MimoModule(ModuleBase):
         yield event.plain_result("\n".join(lines))
 
     async def _cmd_delete(self, args: list[str], event, accounts: list[dict]):
-        """删除指定账号"""
+        # 删除指定账号
         if len(args) < 2:
             yield event.plain_result("用法: /mimo del <序号或名称>")
             return
@@ -440,7 +426,7 @@ class MimoModule(ModuleBase):
         yield event.plain_result(f"√ 已删除: {name}")
 
     async def _cmd_otp(self, args: list[str], event, accounts: list[dict]):
-        """提交 OTP 验证码"""
+        # 提交 OTP 验证码
         if len(args) < 2 or not args[1].strip():
             yield event.plain_result("用法: /mimo otp <验证码>")
             return
@@ -471,7 +457,7 @@ class MimoModule(ModuleBase):
             yield event.plain_result(self.render(await self.query(target)))
 
     async def _cmd_query_all(self, event, accounts: list[dict]):
-        """查询全部账号"""
+        # 查询全部账号
         if not accounts:
             yield event.plain_result("× 还没有配置 MiMo 账号\n请在网页管理界面添加账号")
             return
@@ -482,7 +468,7 @@ class MimoModule(ModuleBase):
             yield event.plain_result(self.render(await self.query(acc)))
 
     async def _cmd_query_one(self, identifier: str, event, accounts: list[dict]):
-        """查询指定账号"""
+        # 查询指定账号
         account = self._find_account(accounts, identifier)
         if not account:
             yield event.plain_result(
@@ -498,11 +484,10 @@ class MimoModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Views 接口
-
-        Returns:
-            接口定义列表。
-        """
+        # 本模块的 Views 接口
+        #
+        #         Returns:
+        #             接口定义列表。
         return [
             {
                 "path": "config",
@@ -531,13 +516,13 @@ class MimoModule(ModuleBase):
         ]
 
     async def _api_get_config(self):
-        """获取模块配置"""
+        # 获取模块配置
         from astrbot.api.web import json_response
 
         return json_response(self.load_module_config())
 
     async def _api_save_config(self):
-        """保存模块配置"""
+        # 保存模块配置
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})
@@ -552,7 +537,7 @@ class MimoModule(ModuleBase):
         return json_response({"status": "ok"})
 
     async def _api_login(self):
-        """登录指定账号（支持 OTP）"""
+        # 登录指定账号（支持 OTP）
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})
@@ -599,7 +584,7 @@ class MimoModule(ModuleBase):
         return json_response({"status": "ok", "message": "登录成功"})
 
     async def _api_test(self):
-        """测试查询（不落盘，仅验证凭据可用）"""
+        # 测试查询（不落盘，仅验证凭据可用）
         from astrbot.api import logger
         from astrbot.api.web import json_response, request
 
@@ -623,15 +608,14 @@ class MimoModule(ModuleBase):
         return json_response({"status": "ok", "message": "测试成功"})
 
     def _with_updated_account(self, filename: str, updates: dict) -> list[dict]:
-        """返回把指定账号更新后的完整账号列表
-
-        Args:
-            filename: 目标账号文件名。
-            updates: 要更新的字段。
-
-        Returns:
-            更新后的账号列表。
-        """
+        # 返回把指定账号更新后的完整账号列表
+        #
+        #         Args:
+        #             filename: 目标账号文件名。
+        #             updates: 要更新的字段。
+        #
+        #         Returns:
+        #             更新后的账号列表。
         accounts = super().get_accounts()
         for acc in accounts:
             if acc.get("_filename") == filename:

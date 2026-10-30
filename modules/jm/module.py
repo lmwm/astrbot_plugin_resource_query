@@ -1,14 +1,13 @@
-"""JMComic 漫画下载模块
-
-继承 ModuleBase，实现漫画下载与 PDF 发送。
-
-模块只提供「配置 + 指令」两类能力（没有账号与模板），
-因此 Views 只会渲染它的模块设置区，不显示账号管理。
-
-限制：
-  - 仅允许私聊使用，避免群内分发大文件。
-  - 下载与 PDF 生成都在线程池中执行，不阻塞 AstrBot 事件循环。
-"""
+# JMComic 漫画下载模块
+#
+# 继承 ModuleBase，实现漫画下载与 PDF 发送。
+#
+# 模块只提供「配置 + 指令」两类能力（没有账号与模板），
+# 因此 Views 只会渲染它的模块设置区，不显示账号管理。
+#
+# 限制：
+#   - 仅允许私聊使用，避免群内分发大文件。
+#   - 下载与 PDF 生成都在线程池中执行，不阻塞 AstrBot 事件循环。
 
 from __future__ import annotations
 
@@ -23,15 +22,14 @@ from .utils import normalize_album_id, pick_display_name
 
 
 def _to_int(value, default: int) -> int:
-    """把配置值安全转换为整数
-
-    Args:
-        value: 原始值。
-        default: 转换失败时的默认值。
-
-    Returns:
-        整数。
-    """
+    # 把配置值安全转换为整数
+    #
+    #     Args:
+    #         value: 原始值。
+    #         default: 转换失败时的默认值。
+    #
+    #     Returns:
+    #         整数。
     try:
         return int(value)
     except (TypeError, ValueError):
@@ -39,15 +37,14 @@ def _to_int(value, default: int) -> int:
 
 
 class JMModule(ModuleBase):
-    """JMComic 漫画下载模块"""
+    # JMComic 漫画下载模块
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
-        """初始化模块
-
-        Args:
-            plugin_dir: 插件目录路径。
-            plugin_name: 插件名称。
-        """
+        # 初始化模块
+        #
+        #         Args:
+        #             plugin_dir: 插件目录路径。
+        #             plugin_name: 插件名称。
         super().__init__(plugin_dir, plugin_name)
         self._downloader = JMDownloader(self.get_config_path(), self.get_data_path())
         self._semaphore: asyncio.Semaphore | None = None
@@ -59,22 +56,22 @@ class JMModule(ModuleBase):
 
     @property
     def module_name(self) -> str:
-        """模块标识"""
+        # 模块标识
         return "jm"
 
     @property
     def module_title(self) -> str:
-        """模块显示名"""
+        # 模块显示名
         return "JM 下载"
 
     @property
     def module_icon(self) -> str:
-        """模块图标"""
+        # 模块图标
         return "⇩"
 
     @property
     def module_desc(self) -> str:
-        """模块描述"""
+        # 模块描述
         return "JMComic 漫画下载（仅私聊）"
 
     # ══════════════════════════════════════════
@@ -82,30 +79,27 @@ class JMModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_default_config(self) -> dict:
-        """模块默认配置
-
-        Returns:
-            默认下载配置。
-        """
+        # 模块默认配置
+        #
+        #         Returns:
+        #             默认下载配置。
         return self._downloader.load_config()
 
     def get_config_fields(self) -> list[dict]:
-        """模块配置字段定义（来自 modules/jm/config.yaml）
-
-        Returns:
-            字段列表。
-        """
+        # 模块配置字段定义（来自 modules/jm/config.yaml）
+        #
+        #         Returns:
+        #             字段列表。
         return _load_config_fields()
 
     def save_module_config(self, config: dict) -> bool:
-        """保存模块配置并让下载器立即生效
-
-        Args:
-            config: 配置字典。
-
-        Returns:
-            是否保存成功。
-        """
+        # 保存模块配置并让下载器立即生效
+        #
+        #         Args:
+        #             config: 配置字典。
+        #
+        #         Returns:
+        #             是否保存成功。
         saved = super().save_module_config(config)
         if saved:
             self._downloader.reload_config()
@@ -116,24 +110,22 @@ class JMModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_commands(self) -> list[dict]:
-        """本模块指令列表
-
-        Returns:
-            指令定义列表。
-        """
+        # 本模块指令列表
+        #
+        #         Returns:
+        #             指令定义列表。
         return [{"name": "jm", "desc": "下载 JMComic 漫画：/jm <ID> [redownload]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        """处理 /jm 指令
-
-        Args:
-            command: 指令名称。
-            args: 参数列表。
-            event: 消息事件。
-
-        Yields:
-            消息结果。
-        """
+        # 处理 /jm 指令
+        #
+        #         Args:
+        #             command: 指令名称。
+        #             args: 参数列表。
+        #             event: 消息事件。
+        #
+        #         Yields:
+        #             消息结果。
         if command != "jm":
             return
 
@@ -160,16 +152,15 @@ class JMModule(ModuleBase):
             yield r
 
     async def _download_and_send(self, album_id: int, event, force: bool):
-        """下载漫画并按配置发送
-
-        Args:
-            album_id: 漫画 ID。
-            event: 消息事件。
-            force: 是否强制重新下载。
-
-        Yields:
-            消息结果。
-        """
+        # 下载漫画并按配置发送
+        #
+        #         Args:
+        #             album_id: 漫画 ID。
+        #             event: 消息事件。
+        #             force: 是否强制重新下载。
+        #
+        #         Yields:
+        #             消息结果。
         config = self.load_module_config()
         send_file = bool(config.get("jm_send_file", True))
         show_info = bool(config.get("jm_show_info", False))
@@ -207,7 +198,7 @@ class JMModule(ModuleBase):
         last = {"text": ""}
 
         def progress(current: int, total: int, message: str) -> None:
-            """下载线程中的进度回调，线程安全地转发到事件循环"""
+            # 下载线程中的进度回调，线程安全地转发到事件循环
             if total <= 0 or current <= 0:
                 return
 
@@ -254,19 +245,18 @@ class JMModule(ModuleBase):
         send_file: bool,
         max_size_mb: int,
     ):
-        """发送 PDF 文件（含大小上限判断）
-
-        Args:
-            event: 消息事件。
-            pdf_path: PDF 绝对路径。
-            pdf_name: PDF 文件名。
-            size_mb: 文件大小（MB）。
-            send_file: 是否发送文件。
-            max_size_mb: 大小上限（MB），0 表示不限制。
-
-        Yields:
-            消息结果。
-        """
+        # 发送 PDF 文件（含大小上限判断）
+        #
+        #         Args:
+        #             event: 消息事件。
+        #             pdf_path: PDF 绝对路径。
+        #             pdf_name: PDF 文件名。
+        #             size_mb: 文件大小（MB）。
+        #             send_file: 是否发送文件。
+        #             max_size_mb: 大小上限（MB），0 表示不限制。
+        #
+        #         Yields:
+        #             消息结果。
         if not send_file:
             yield event.plain_result("√ 下载完成")
             return
@@ -286,18 +276,17 @@ class JMModule(ModuleBase):
 
     @staticmethod
     def _info_message(album_id: int, info) -> str:
-        """构建漫画详情消息
-
-        固定三行（ID / 标题 / 作者），标签按全角宽度对齐；
-        缺失的字段用占位符补齐。
-
-        Args:
-            album_id: 漫画 ID。
-            info: AlbumInfo 实例。
-
-        Returns:
-            多行文本。
-        """
+        # 构建漫画详情消息
+        #
+        #         固定三行（ID / 标题 / 作者），标签按全角宽度对齐；
+        #         缺失的字段用占位符补齐。
+        #
+        #         Args:
+        #             album_id: 漫画 ID。
+        #             info: AlbumInfo 实例。
+        #
+        #         Returns:
+        #             多行文本。
         author = str(getattr(info, "author", "") or "").strip() or "未知"
 
         return "\n".join(
@@ -310,17 +299,16 @@ class JMModule(ModuleBase):
 
     @staticmethod
     def _message_title(info) -> str:
-        """消息中显示的标题
-
-        优先使用含中文的 oname，否则用完整标题。
-        消息只用于展示，因此既不截断也不做非法字符清洗。
-
-        Args:
-            info: AlbumInfo 实例。
-
-        Returns:
-            完整标题文本。
-        """
+        # 消息中显示的标题
+        #
+        #         优先使用含中文的 oname，否则用完整标题。
+        #         消息只用于展示，因此既不截断也不做非法字符清洗。
+        #
+        #         Args:
+        #             info: AlbumInfo 实例。
+        #
+        #         Returns:
+        #             完整标题文本。
         title = pick_display_name(
             getattr(info, "oname", ""),
             getattr(info, "name", ""),
@@ -329,23 +317,21 @@ class JMModule(ModuleBase):
         return title or "未知"
 
     async def _send_progress(self, event, text: str) -> None:
-        """发送进度提示（失败不影响下载）
-
-        Args:
-            event: 消息事件。
-            text: 提示文本。
-        """
+        # 发送进度提示（失败不影响下载）
+        #
+        #         Args:
+        #             event: 消息事件。
+        #             text: 提示文本。
         try:
             await event.send(event.message_result().message(text))
         except Exception:
             pass
 
     def _get_semaphore(self) -> asyncio.Semaphore:
-        """获取下载并发信号量（按配置延迟创建）
-
-        Returns:
-            asyncio.Semaphore 实例。
-        """
+        # 获取下载并发信号量（按配置延迟创建）
+        #
+        #         Returns:
+        #             asyncio.Semaphore 实例。
         limit = max(
             1, _to_int(self.load_module_config().get("jm_max_concurrent", 1), 1)
         )
@@ -361,11 +347,10 @@ class JMModule(ModuleBase):
     # ══════════════════════════════════════════
 
     def get_web_apis(self) -> list[dict]:
-        """本模块的 Views 接口
-
-        Returns:
-            接口定义列表。
-        """
+        # 本模块的 Views 接口
+        #
+        #         Returns:
+        #             接口定义列表。
         return [
             {
                 "path": "config",
@@ -382,13 +367,13 @@ class JMModule(ModuleBase):
         ]
 
     async def _api_get_config(self):
-        """获取下载配置"""
+        # 获取下载配置
         from astrbot.api.web import json_response
 
         return json_response(self.load_module_config())
 
     async def _api_save_config(self):
-        """保存下载配置"""
+        # 保存下载配置
         from astrbot.api.web import error_response, json_response, request
 
         payload = await request.json(default={})

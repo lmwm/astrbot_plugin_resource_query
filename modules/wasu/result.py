@@ -1,7 +1,6 @@
-"""华数广电查询结果
-
-模板变量覆盖余额、话费、流量与语音明细。
-"""
+# 华数广电查询结果
+#
+# 模板变量覆盖余额、话费、流量与语音明细。
 
 from __future__ import annotations
 
@@ -9,7 +8,7 @@ from ...core.result import QueryResult
 
 
 class WasuResult(QueryResult):
-    """华数广电查询结果"""
+    # 华数广电查询结果
 
     def __init__(
         self,
@@ -19,15 +18,14 @@ class WasuResult(QueryResult):
         error: str = "",
         template: str | None = None,
     ) -> None:
-        """初始化查询结果
-
-        Args:
-            success: 是否查询成功。
-            account_name: 账号显示名称。
-            data: 查询数据。
-            error: 错误信息。
-            template: 消息模板。
-        """
+        # 初始化查询结果
+        #
+        #         Args:
+        #             success: 是否查询成功。
+        #             account_name: 账号显示名称。
+        #             data: 查询数据。
+        #             error: 错误信息。
+        #             template: 消息模板。
         super().__init__(
             success=success,
             platform="华数广电",
@@ -38,11 +36,10 @@ class WasuResult(QueryResult):
         )
 
     def build_variables(self) -> dict[str, str]:
-        """构建华数模板变量
-
-        Returns:
-            模板变量字典。
-        """
+        # 构建华数模板变量
+        #
+        #         Returns:
+        #             模板变量字典。
         data = self.data
         balance = data.get("balance") or {}
         traffic = data.get("traffic") or {}

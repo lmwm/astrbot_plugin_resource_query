@@ -1,11 +1,10 @@
-"""小米账号登录封装
-
-参考 MiService (https://github.com/Yonsm/MiService) 的 miaccount.py 实现。
-
-功能拆分：
-  1. login_with_password() - 账号密码登录 → 获取 PassToken + User ID（包括 OTP）
-  2. login_with_passtoken() - PassToken → 获取 ServiceToken
-"""
+# 小米账号登录封装
+#
+# 参考 MiService (https://github.com/Yonsm/MiService) 的 miaccount.py 实现。
+#
+# 功能拆分：
+#   1. login_with_password() - 账号密码登录 → 获取 PassToken + User ID（包括 OTP）
+#   2. login_with_passtoken() - PassToken → 获取 ServiceToken
 
 import base64
 import hashlib
@@ -29,7 +28,7 @@ _ACCOUNT_BASE = "https://account.xiaomi.com"
 
 
 class MiAccount:
-    """小米账号登录封装"""
+    # 小米账号登录封装
 
     def __init__(self, device_id: str, ua: str, account_base: str | None = None):
         self.device_id = device_id
@@ -45,23 +44,22 @@ class MiAccount:
     def login_with_password(
         self, account: str, password: str, otp_code: str | None = None
     ) -> dict:
-        """使用账号密码登录，获取 PassToken + User ID
-
-        功能：完成账号密码认证，获取 PassToken 和 User ID。
-        如果需要 OTP 验证码，会缓存会话并抛出 OtpRequired。
-
-        Args:
-            account: 小米账号（手机号或邮箱）
-            password: 密码
-            otp_code: OTP 验证码（可选，用于二次调用）
-
-        Returns:
-            dict: {"userId": str, "passToken": str}
-
-        Raises:
-            OtpRequired: 需要 OTP 验证码（第一次调用）
-            LoginError: 登录失败
-        """
+        # 使用账号密码登录，获取 PassToken + User ID
+        #
+        #         功能：完成账号密码认证，获取 PassToken 和 User ID。
+        #         如果需要 OTP 验证码，会缓存会话并抛出 OtpRequired。
+        #
+        #         Args:
+        #             account: 小米账号（手机号或邮箱）
+        #             password: 密码
+        #             otp_code: OTP 验证码（可选，用于二次调用）
+        #
+        #         Returns:
+        #             dict: {"userId": str, "passToken": str}
+        #
+        #         Raises:
+        #             OtpRequired: 需要 OTP 验证码（第一次调用）
+        #             LoginError: 登录失败
         # === 第二次调用：提交 OTP 码 ===
         if otp_code and self._otp_session:
             return self._handle_otp_submit(otp_code)
@@ -113,14 +111,13 @@ class MiAccount:
         }
 
     def _handle_otp_submit(self, otp_code: str) -> dict:
-        """处理 OTP 验证码提交，返回 PassToken + User ID
-
-        Args:
-            otp_code: OTP 验证码
-
-        Returns:
-            dict: {"userId": str, "passToken": str}
-        """
+        # 处理 OTP 验证码提交，返回 PassToken + User ID
+        #
+        #         Args:
+        #             otp_code: OTP 验证码
+        #
+        #         Returns:
+        #             dict: {"userId": str, "passToken": str}
         session = self._otp_session
         self._otp_session = None
 
@@ -151,21 +148,20 @@ class MiAccount:
     # ══════════════════════════════════════════
 
     def login_with_passtoken(self, user_id: str, pass_token: str) -> tuple[str, str]:
-        """使用 PassToken 获取 ServiceToken
-
-        功能：通过 PassToken 换取 ServiceToken。
-
-        Args:
-            user_id: 用户 ID
-            pass_token: PassToken
-
-        Returns:
-            tuple: (userId, serviceToken)
-
-        Raises:
-            PassTokenExpired: PassToken 已过期
-            StsError: STS 换取失败
-        """
+        # 使用 PassToken 获取 ServiceToken
+        #
+        #         功能：通过 PassToken 换取 ServiceToken。
+        #
+        #         Args:
+        #             user_id: 用户 ID
+        #             pass_token: PassToken
+        #
+        #         Returns:
+        #             tuple: (userId, serviceToken)
+        #
+        #         Raises:
+        #             PassTokenExpired: PassToken 已过期
+        #             StsError: STS 换取失败
         opener, jar = new_opener()
         for n, v in [
             ("sdkVersion", "3.9"),
@@ -194,7 +190,7 @@ class MiAccount:
     # ──────────────────────────────────────────────
 
     def _serviceLogin(self, opener, jar=None, extra_cookies=None) -> dict:
-        """调用 /pass/serviceLogin"""
+        # 调用 /pass/serviceLogin
         url = f"{self.account_base}/pass/serviceLogin?sid=api-platform&_json=true"
         headers = {"User-Agent": self.ua}
         cookies = {"sdkVersion": "3.9", "deviceId": self.device_id}
@@ -211,7 +207,7 @@ class MiAccount:
             return {"code": -1, "error": str(e)}
 
     def _serviceLoginAuth2(self, opener, account, password, login_resp) -> dict:
-        """调用 /pass/serviceLoginAuth2 — 提交账号密码"""
+        # 调用 /pass/serviceLoginAuth2 — 提交账号密码
         data = {
             "_json": "true",
             "qs": login_resp["qs"],
@@ -237,10 +233,9 @@ class MiAccount:
     # ──────────────────────────────────────────────
 
     def _trigger_otp_send(self, opener, notification_url):
-        """触发 OTP 验证码发送（参考 MiService _verify_otp 步骤 1-4）
-
-        只负责发送验证码，不等待用户输入。
-        """
+        # 触发 OTP 验证码发送（参考 MiService _verify_otp 步骤 1-4）
+        #
+        #         只负责发送验证码，不等待用户输入。
         if not notification_url.startswith("http"):
             notification_url = self.account_base + notification_url
         headers = {"User-Agent": self.ua}
@@ -314,10 +309,9 @@ class MiAccount:
         logger.info("[_trigger_otp_send] OTP 验证码发送完成")
 
     def _submit_otp_code(self, opener, jar, notification_url, code):
-        """提交 OTP 验证码（参考 MiService _verify_otp 步骤 5-7）
-
-        提交验证码、跟随 location、设置认证 cookies。
-        """
+        # 提交 OTP 验证码（参考 MiService _verify_otp 步骤 5-7）
+        #
+        #         提交验证码、跟随 location、设置认证 cookies。
         if not notification_url.startswith("http"):
             notification_url = self.account_base + notification_url
         headers = {"User-Agent": self.ua}
@@ -389,7 +383,7 @@ class MiAccount:
     # ──────────────────────────────────────────────
 
     def _sts(self, opener, jar, resp) -> str:
-        """通过 STS 换取 serviceToken"""
+        # 通过 STS 换取 serviceToken
         nonce = resp["nonce"]
         ssecurity = resp["ssecurity"]
         location = resp["location"]

@@ -1,4 +1,4 @@
-"""MiMo 平台查询逻辑"""
+# MiMo 平台查询逻辑
 
 import asyncio
 from urllib.request import Request
@@ -14,19 +14,18 @@ async def query_mimo(
     usage_url: str,
     timeout: int = 15,
 ) -> dict:
-    """查询 MiMo 平台余额和用量，返回原始 API 响应
-
-    Args:
-        service_token: 账号的 serviceToken。
-        user_id: 小米账号 User ID。
-        ua: User-Agent。
-        balance_url: 余额查询接口地址。
-        usage_url: 用量查询接口地址。
-        timeout: 单次请求超时秒数。
-
-    Returns:
-        包含 balance 与 usage 两个原始 API 响应的字典。
-    """
+    # 查询 MiMo 平台余额和用量，返回原始 API 响应
+    #
+    #     Args:
+    #         service_token: 账号的 serviceToken。
+    #         user_id: 小米账号 User ID。
+    #         ua: User-Agent。
+    #         balance_url: 余额查询接口地址。
+    #         usage_url: 用量查询接口地址。
+    #         timeout: 单次请求超时秒数。
+    #
+    #     Returns:
+    #         包含 balance 与 usage 两个原始 API 响应的字典。
 
     def _query():
         opener, jar = new_opener()
@@ -66,14 +65,13 @@ _AUTH_ERROR_KEYWORDS = (
 
 
 def is_auth_error(results: dict) -> bool:
-    """检测接口响应是否属于认证失效
-
-    Args:
-        results: 接口原始响应字典。
-
-    Returns:
-        是否属于认证失效。
-    """
+    # 检测接口响应是否属于认证失效
+    #
+    #     Args:
+    #         results: 接口原始响应字典。
+    #
+    #     Returns:
+    #         是否属于认证失效。
     for value in results.values():
         if not isinstance(value, dict):
             continue
@@ -88,7 +86,7 @@ def is_auth_error(results: dict) -> bool:
 
 
 def is_valid_response(results: dict) -> bool:
-    """检测 API 响应是否包含有效数据（非空/非错误）"""
+    # 检测 API 响应是否包含有效数据（非空/非错误）
     for v in results.values():
         if not isinstance(v, dict):
             continue
