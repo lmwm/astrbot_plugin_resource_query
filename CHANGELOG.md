@@ -1,3 +1,12 @@
+## v5.9.8 (2026-10-30)
+
+### 重构
+
+- **基类拆出存储对象**：账号增删改移到 `core/accounts.py`（`AccountStore`），配置读写移到 `core/config_store.py`（`ConfigStore`）；`ModuleBase` 只保留模块契约与薄转发，由 468 行降到 301 行
+- 对外接口不变：`get_accounts` / `save_accounts` / `delete_account` / `load_module_config` / `save_module_config` 保持原签名，子类覆盖行为不受影响
+
+---
+
 ## v5.9.7 (2026-10-30)
 
 ### 样式

@@ -20,33 +20,28 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..common import utils as common_utils
-from ..common.utils import (
-    get_account_filename,
-    get_platform_path,
-    load_json_file,
-    save_json_file,
-)
+from ..common.utils import get_platform_path
+from .accounts import AccountStore
+from .config_store import ConfigStore
 from .result import QueryResult
 
 if TYPE_CHECKING:
     from .registry import ModuleRegistry
-
-# 模块自身配置文件名
-MODULE_CONFIG_FILE = "config.json"
-
-# 配置目录中非账号的保留文件
-RESERVED_FILES = {"config.json", "var_config.json"}
 
 
 class ModuleBase(ABC):
     # 功能模块基类
 
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
-        # 初始化模块
+        # 初始化模块；配置目录与账号存储在构造时一次性定位
         self._plugin_dir = plugin_dir
         self._plugin_name = plugin_name
         self._registry: ModuleRegistry | None = None
         self._context: Any = None
+        self._config_store = ConfigStore(self.get_config_path())
+        self._account_store = AccountStore(
+            self.get_config_path(), self.account_file_prefix
+        )
 
     #  元信息（子类必须实现）
 
@@ -147,15 +142,10 @@ class ModuleBase(ABC):
 
     def load_module_config(self) -> dict:
         # 读取模块配置（默认值与已保存值合并）
-        config = dict(self.get_default_config())
-        saved = load_json_file(self.get_config_path() / MODULE_CONFIG_FILE)
-        if saved:
-            config.update(saved)
-        return config
+        return self._config_store.load(self.get_default_config())
 
     def save_module_config(self, config: dict) -> bool:
-        # 保存模块配置
-        return save_json_file(self.get_config_path() / MODULE_CONFIG_FILE, config)
+        return self._config_store.save(config)
 
     #  账号管理（supports_accounts 为 True 时实现）
 
@@ -168,90 +158,14 @@ class ModuleBase(ABC):
         return []
 
     def get_accounts(self) -> list[dict]:
-        # 读取本模块全部账号
-        #
-        #         每项额外携带 `_filename` 内部字段，供稳定删除使用。
-        config_path = self.get_config_path()
-        accounts: list[dict] = []
-
-        for json_file in sorted(config_path.glob("*.json")):
-            if json_file.name in RESERVED_FILES:
-                continue
-            acc = load_json_file(json_file)
-            if not acc:
-                continue
-            acc["_filename"] = json_file.name
-            accounts.append(acc)
-
-        return accounts
+        # 读取本模块全部账号；每项带 `_filename` 供稳定删除
+        return self._account_store.list()
 
     def save_accounts(self, accounts: list[dict]) -> bool:
-        # 保存账号列表
-        #
-        #         以文件名为单位增量写入，本次未提交的账号文件会被删除；
-        #         同名账号自动追加序号，避免互相覆盖。
-        config_path = self.get_config_path()
-        filenames = self._resolve_filenames(accounts)
-        ok = True
-
-        for acc, filename in zip(accounts, filenames):
-            payload = {k: v for k, v in acc.items() if not k.startswith("_")}
-            if not save_json_file(config_path / filename, payload):
-                ok = False
-
-        # 清理本次未提交的账号文件
-        keep = set(filenames) | RESERVED_FILES
-        for old_file in config_path.glob("*.json"):
-            if old_file.name not in keep:
-                old_file.unlink(missing_ok=True)
-
-        return ok
+        return self._account_store.save(accounts)
 
     def delete_account(self, filename: str) -> dict | None:
-        # 按文件名删除账号
-        #
-        # 只接受纯文件名，防止路径穿越
-        if not filename or Path(filename).name != filename:
-            return None
-
-        target = self.get_config_path() / filename
-        if not target.exists():
-            return None
-
-        deleted = load_json_file(target) or {}
-        deleted["_filename"] = filename
-
-        try:
-            target.unlink()
-        except OSError:
-            return None
-
-        return deleted
-
-    def _resolve_filenames(self, accounts: list[dict]) -> list[str]:
-        # 为账号列表分配唯一文件名
-        #
-        #         已有文件名的账号沿用原名，避免改名导致数据搬迁；
-        #         新账号按名称生成，冲突时追加序号。
-        used: set[str] = set()
-        filenames: list[str] = []
-
-        for acc in accounts:
-            name = str(acc.get("_filename") or "").strip()
-            if not name or name in used or name in RESERVED_FILES:
-                name = get_account_filename(acc, self.account_file_prefix)
-
-            if name in used:
-                stem, _, suffix = name.rpartition(".")
-                index = 2
-                while f"{stem}_{index}.{suffix}" in used:
-                    index += 1
-                name = f"{stem}_{index}.{suffix}"
-
-            used.add(name)
-            filenames.append(name)
-
-        return filenames
+        return self._account_store.delete(filename)
 
     #  模板（supports_template 为 True 时实现）
 
