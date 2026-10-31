@@ -54,6 +54,7 @@ class UpdateModule(ModuleBase):
 
     async def on_load(self) -> None:
         # 插件加载完成后注册定时更新
+        await super().on_load()
         self._schedule = UpdateSchedule(
             self._context, self._plugin_name, self._run_scheduled
         )

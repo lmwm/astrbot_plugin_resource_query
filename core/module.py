@@ -122,7 +122,8 @@ class ModuleBase(ABC):
 
     async def on_load(self) -> None:
         # 插件加载完成后的异步初始化（子类按需覆盖）
-        pass
+        # 读取一次配置，顺带把旧的 config.json 迁移为 config.yaml
+        self.load_module_config()
 
     async def on_unload(self) -> None:
         # 插件卸载前的清理（子类按需覆盖）
