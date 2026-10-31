@@ -255,7 +255,9 @@
     if (hasUngrouped) tabs.push({ key: 'settings', label: '模块设置' });
     groups.forEach((g) => tabs.push({ key: 'config:' + g.key, label: g.label || g.key }));
     if (mod.supports_accounts) tabs.push({ key: 'accounts', label: '账号管理' });
-    if (Object.keys(mod.variables || {}).length) tabs.push({ key: 'variables', label: '模板变量' });
+    if (mod.variables_editable !== false && Object.keys(mod.variables || {}).length) {
+      tabs.push({ key: 'variables', label: '模板变量' });
+    }
     return tabs;
   }
 
@@ -287,7 +289,14 @@
       container.appendChild(page);
 
       if (mod.supports_accounts) renderAccountList(mod);
-      if (Object.keys(mod.variables || {}).length) renderVarTable(mod);
+      if (mod.variables_editable !== false && Object.keys(mod.variables || {}).length) {
+        renderVarTable(mod);
+      }
+
+      (mod.config_fields || []).filter((field) => field.type === 'template').forEach((field) => {
+        updateConfigTemplatePreview(mod.name, field.key);
+        renderConfigVarTags(mod, field.key);
+      });
     });
   }
 
@@ -409,6 +418,10 @@
       const value = raw === undefined ? (field.default === undefined ? '' : field.default) : raw;
       const id = 'cfg-' + mod.name + '-' + field.key;
 
+      if (field.type === 'template') {
+        return buildTemplateConfigFieldHtml(mod, field, value);
+      }
+
       if (field.type === 'bool') {
         return '<div class="form-group">' + fieldInputHtml(id, field, value) +
           (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
@@ -423,6 +436,71 @@
         (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
         '</div>';
     }).join('');
+  }
+
+  /** 消息模板字段：左侧编辑、右侧预览、下方变量标签 */
+  function buildTemplateConfigFieldHtml(mod, field, value) {
+    const id = 'cfg-' + mod.name + '-' + field.key;
+    const previewId = 'preview-' + mod.name + '-' + field.key;
+
+    return '<div class="form-group">' +
+      '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
+      '<div class="template-layout">' +
+        '<div class="template-editor">' +
+          '<div class="template-label">模板编辑</div>' +
+          '<textarea class="form-textarea" id="' + esc(id) + '" spellcheck="false">' + esc(value) + '</textarea>' +
+        '</div>' +
+        '<div class="template-preview-box">' +
+          '<div class="template-label">预览效果</div>' +
+          '<div class="template-preview" id="' + esc(previewId) + '"></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="variable-tags" id="tags-' + esc(mod.name) + '-' + esc(field.key) + '"></div>' +
+      (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
+      '</div>';
+  }
+
+  function renderConfigVarTags(mod, fieldKey) {
+    const box = $('tags-' + mod.name + '-' + fieldKey);
+    if (!box) return;
+
+    const variables = mod.variables || {};
+    box.innerHTML = Object.keys(variables).map((name) =>
+      '<button class="variable-tag" data-action="insert-config-var" ' +
+        'data-module="' + esc(mod.name) + '" data-field="' + esc(fieldKey) + '" ' +
+        'data-name="' + esc(name) + '" title="' + esc(variables[name]) + '">' +
+        esc('{' + name + '}') + '</button>'
+    ).join('');
+  }
+
+  function updateConfigTemplatePreview(moduleName, fieldKey) {
+    const mod = moduleByName(moduleName);
+    const textarea = $('cfg-' + moduleName + '-' + fieldKey);
+    const preview = $('preview-' + moduleName + '-' + fieldKey);
+    if (!mod || !textarea || !preview) return;
+
+    const samples = mod.variable_samples || {};
+    let text = textarea.value;
+    Object.keys(mod.variables || {}).forEach((name) => {
+      const sample = samples[name] === undefined ? '' : samples[name];
+      text = text.split('{' + name + '}').join(sample);
+    });
+
+    preview.textContent = text || '（请输入模板）';
+  }
+
+  function insertConfigVariable(moduleName, fieldKey, name) {
+    const textarea = $('cfg-' + moduleName + '-' + fieldKey);
+    if (!textarea) return;
+
+    const token = '{' + name + '}';
+    const start = textarea.selectionStart || 0;
+    const end = textarea.selectionEnd || 0;
+
+    textarea.value = textarea.value.slice(0, start) + token + textarea.value.slice(end);
+    textarea.selectionStart = textarea.selectionEnd = start + token.length;
+    textarea.focus();
+    updateConfigTemplatePreview(moduleName, fieldKey);
   }
 
   function renderAccountList(mod) {
@@ -1093,6 +1171,10 @@
         insertVariable(target.dataset.name);
         break;
 
+      case 'insert-config-var':
+        insertConfigVariable(moduleName, target.dataset.field, target.dataset.name);
+        break;
+
       case 'save-config':
         await saveModuleConfig(moduleName);
         break;
@@ -1111,8 +1193,26 @@
   }
 
   function onInput(event) {
-    if (event.target && event.target.id === 'account-template' && state.editing) {
+    const target = event.target;
+    if (!target || !target.id) return;
+
+    if (target.id === 'account-template' && state.editing) {
       updateTemplatePreview(state.editing.module.name);
+      return;
+    }
+
+    if (target.id.startsWith('cfg-')) {
+      const rest = target.id.slice(4);
+      const index = rest.indexOf('-');
+      if (index <= 0) return;
+
+      const moduleName = rest.slice(0, index);
+      const fieldKey = rest.slice(index + 1);
+      const mod = moduleByName(moduleName);
+      const field = mod && (mod.config_fields || []).find((f) => f.key === fieldKey);
+      if (field && field.type === 'template') {
+        updateConfigTemplatePreview(moduleName, fieldKey);
+      }
     }
   }
 

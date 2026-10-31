@@ -92,13 +92,35 @@ class UpdateModule(ModuleBase):
             {
                 "key": "messages",
                 "label": "消息模板",
-                "hint": (
-                    "可用变量：{current} 当前版本；{latest} 远端版本；"
-                    "{sha}/{sha7} 完整/短提交号；{elapsed} 耗时（秒）；"
-                    "{error} 错误信息"
-                ),
             }
         ]
+
+    def get_var_definitions(self) -> dict[str, str]:
+        # 消息模板可用变量（模板页的变量标签与预览使用）
+        return {
+            "current": "当前版本",
+            "latest": "远端版本",
+            "sha": "完整提交号",
+            "sha7": "短提交号",
+            "elapsed": "耗时（秒）",
+            "error": "错误信息",
+        }
+
+    def get_var_samples(self) -> dict[str, str]:
+        # 变量示例值，供预览使用
+        return {
+            "current": "5.9.21",
+            "latest": "5.9.22",
+            "sha": "2c54e39abcdef0123456789abcdef0123456789",
+            "sha7": "2c54e39",
+            "elapsed": "5.2",
+            "error": "网络连接超时",
+        }
+
+    @property
+    def variables_editable(self) -> bool:
+        # 变量由代码决定，不在 Views 中单独成页
+        return False
 
     #  指令
 

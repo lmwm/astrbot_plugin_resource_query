@@ -1,3 +1,13 @@
+## v5.9.22 (2026-10-31)
+
+### 功能
+
+- **消息模板左右对比**：update 的 5 个消息模板改为 `template` 字段类型，左侧编辑、右侧实时预览（变量用示例值替换）；下方变量标签点击插入到光标处
+- **变量示例值**：基类新增 `get_var_samples()`（写入 schema 的 `variable_samples`），update 为 `{current}` `{latest}` `{sha}` `{sha7}` `{elapsed}` `{error}` 提供示例值供预览
+- 「模板变量」页不再出现（`variables_editable=false`），变量通过模板页的标签与预览使用
+
+---
+
 ## v5.9.21 (2026-10-31)
 
 ### 修复

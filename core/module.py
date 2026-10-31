@@ -200,6 +200,10 @@ class ModuleBase(ABC):
         # 模板变量名到中文描述的映射（子类覆盖）
         return {}
 
+    def get_var_samples(self) -> dict[str, str]:
+        # 变量示例值，供 Views 的消息模板预览使用（子类覆盖）
+        return {}
+
     #  查询（supports_query 为 True 时实现）
 
     async def query(self, account: dict) -> QueryResult:
@@ -396,6 +400,7 @@ class ModuleBase(ABC):
             "account_fields": self.get_account_fields(),
             "account_groups": self.get_account_groups(),
             "variables": self.get_var_definitions(),
+            "variable_samples": self.get_var_samples(),
             "default_template": self.get_default_template()
             if self.supports_template
             else "",
