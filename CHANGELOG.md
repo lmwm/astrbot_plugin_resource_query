@@ -1,3 +1,15 @@
+## v5.9.19 (2026-10-31)
+
+### 功能
+
+- **配置结构合并**：`config.yaml` 从 `defaults` + `fields` 两段改为每项一个块（`value` + `label/type/hint`），默认值与字段定义写在一起；jm 等旧结构继续兼容
+- **用户配置同构**：Views 保存的 `config/<模块>/config.yaml` 也按块结构写（每项只有 `value`），与默认配置键一致；旧扁平格式与 `config.json` 自动兼容迁移
+- **强制更新开关**：新增 `force_update`（默认开），控制手动 `/query update` 是否忽略版本判断；自动更新始终按版本/提交判断
+- **自动更新判断**：优先比较 `metadata.yaml` 版本号，版本相同再比较提交号；本地已更新到的提交记录在 `plugin_data/<插件>/update_state.yaml`，更新成功后写入；版本与提交都相同则跳过
+- **模板变量页**：update 模块声明 `get_var_definitions()`，Views 出现「模板变量」页，列出 `{current}` `{latest}` `{sha}` `{sha7}` `{elapsed}` `{error}`
+
+---
+
 ## v5.9.18 (2026-10-31)
 
 ### 修复

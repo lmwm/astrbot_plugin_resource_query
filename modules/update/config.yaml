@@ -1,62 +1,65 @@
 # 插件更新模块 —— 默认配置
 #
-# 本文件随插件发布，只读；用户设置请写到 config/update/config.yaml（优先）。
-# 消息模板变量：
-#   {current} 当前版本   {latest} 远端版本
-#   {sha} 完整提交号     {sha7} 短提交号   {elapsed} 耗时（秒）
-#   {error} 错误信息
+# 本文件随插件发布，只读；用户设置在 config/update/config.yaml（结构相同，只写 value）。
+# 每个配置项：value 是默认值，label / type / hint 供 Views 渲染。
+# 消息模板变量可在 Views 的「模板变量」页查看。
 
-defaults:
-  # 网络
-  proxy: "https://gh-proxy.com/"
-  max_retries: 3
+proxy:
+  label: GitHub 代理
+  type: text
+  hint: 如 https://gh-proxy.com/，留空使用默认代理
+  value: "https://gh-proxy.com/"
 
-  # 定时更新
-  schedule_enabled: true
-  schedule_cron: "0 4 * * *"
+max_retries:
+  label: 请求重试次数
+  type: int
+  hint: 网络请求失败时的重试次数
+  value: 3
 
-  # 消息模板（聊天触发时发送）
-  message_checking: "正在检查更新（当前版本 v{current}）..."
-  message_found: "远端版本 v{latest}，正在重新安装..."
-  message_done: "√ 更新完成，新版本已下载（commit: {sha7}）"
-  message_skip: "已是最新版本 v{current}"
-  message_error: "× 更新失败: {error}"
+force_update:
+  label: 强制更新
+  type: bool
+  hint: 手动 /query update 时忽略版本与提交判断，总是重装；自动更新始终按版本/提交判断
+  value: true
 
-# Views 配置项定义（顺序即显示顺序，键名即配置键）
-fields:
-  proxy:
-    label: GitHub 代理
-    type: text
-    hint: 如 https://gh-proxy.com/，留空使用默认代理
-  max_retries:
-    label: 请求重试次数
-    type: int
-    hint: 网络请求失败时的重试次数
-  schedule_enabled:
-    label: 启用定时更新
-    type: bool
-    hint: 开启后按下面的表达式自动检查更新（有新版本才更新）
-  schedule_cron:
-    label: 定时表达式（cron）
-    type: text
-    hint: 五段式，例如 0 4 * * * 表示每天 04:00
-  message_checking:
-    label: 检查中提示
-    type: text
-    hint: 变量 {current}
-  message_found:
-    label: 发现新版本提示
-    type: text
-    hint: 变量 {latest}
-  message_done:
-    label: 更新完成消息
-    type: textarea
-    hint: 变量 {current} {latest} {sha} {sha7} {elapsed}
-  message_skip:
-    label: 已是最新提示
-    type: textarea
-    hint: 变量 {current}
-  message_error:
-    label: 失败消息
-    type: textarea
-    hint: 变量 {error}
+schedule_enabled:
+  label: 启用自动更新
+  type: bool
+  hint: 按下面的表达式自动检查，有新版本才更新
+  value: true
+
+schedule_cron:
+  label: 自动更新表达式（cron）
+  type: text
+  hint: 五段式，例如 0 4 * * * 表示每天 04:00
+  value: "0 4 * * *"
+
+message_checking:
+  label: 检查中提示
+  type: text
+  hint: 变量 {current}
+  value: "正在检查更新（当前版本 v{current}）..."
+
+message_found:
+  label: 发现新版本提示
+  type: text
+  hint: 变量 {latest}
+  value: "远端版本 v{latest}，正在重新安装..."
+
+message_done:
+  label: 更新完成消息
+  type: textarea
+  hint: 变量 {current} {latest} {sha} {sha7} {elapsed}
+  value: "√ 更新完成，新版本已下载（commit: {sha7}）"
+
+message_skip:
+  label: 已是最新提示
+  type: textarea
+  hint: 变量 {current} {latest}
+  value: "已是最新版本 v{current}"
+
+message_error:
+  label: 失败消息
+  type: textarea
+  hint: 变量 {error} {current}
+  value: "× 更新失败: {error}"

@@ -72,11 +72,52 @@ def get_current_version() -> str:
     return "0.0.0"
 
 
+def decide_update(
+    current_version: str,
+    current_commit: str,
+    latest_version: str,
+    remote_commit: str,
+    force: bool,
+) -> bool:
+    # 判断是否需要更新：强制 > 版本号 > 提交号
+    if force:
+        return True
+    if not latest_version:
+        return False
+    if latest_version != current_version:
+        return True
+    if remote_commit:
+        # 版本相同再看提交号；没有本地基线时先更新一次建立基线
+        return remote_commit != current_commit if current_commit else True
+    return False
+
+
 async def check_update(
-    proxy: str = "", max_retries: int = 3, force: bool = False
+    proxy: str = "",
+    max_retries: int = 3,
+    force: bool = False,
+    current_commit: str = "",
 ) -> dict:
-    # 检查远端是否有新版本
+    # 检查远端是否有新版本；版本相同且非强制时再比较提交号
     current_version = get_current_version()
+
+    def _fetch_sha(prefix: str) -> str:
+        def _do() -> str:
+            opener, _ = new_opener()
+            request = Request(
+                proxy_url(f"{_GITHUB_API}/commits/main", prefix),
+                headers={
+                    "User-Agent": _USER_AGENT,
+                    "Accept": "application/vnd.github.v3+json",
+                },
+            )
+            with opener.open(request, timeout=15) as response:
+                return json.loads(response.read())["sha"]
+
+        try:
+            return retry(_do, max_retries)
+        except (OSError, TimeoutError, json.JSONDecodeError, KeyError):
+            return ""
 
     def _fetch_one(prefix: str) -> dict:
         def _do() -> dict:
@@ -114,6 +155,9 @@ async def check_update(
         for prefix in _proxy_candidates(proxy):
             result = _fetch_one(prefix)
             if result["latest"] or not result["error"]:
+                # 版本一致且非强制时才需要提交号
+                if not force and result["latest"] == current_version:
+                    result["remote_commit"] = _fetch_sha(prefix)
                 return result
             last = result
 
@@ -125,15 +169,21 @@ async def check_update(
 
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, _fetch)
-    result["has_update"] = bool(
-        force or (result["latest"] and result["latest"] != current_version)
+    result.setdefault("remote_commit", "")
+    result["current_commit"] = current_commit
+    result["has_update"] = decide_update(
+        current_version,
+        current_commit,
+        str(result.get("latest") or ""),
+        str(result.get("remote_commit") or ""),
+        force,
     )
     result["force"] = force
     return result
 
 
-async def do_update(proxy: str = "", max_retries: int = 3) -> dict:
-    # 下载远端最新版本并覆盖插件文件
+async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dict:
+    # 下载远端最新版本并覆盖插件文件；sha 非空时跳过提交号请求
     # 返回 {"ok": bool, "sha": str, "message": str}
 
     def _download_with(prefix: str) -> dict:
@@ -149,12 +199,12 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> dict:
             with opener.open(request, timeout=15) as response:
                 return json.loads(response.read())["sha"]
 
-        sha = retry(_get_sha, max_retries)
+        commit = sha or retry(_get_sha, max_retries)
 
         def _download_zip() -> bytes:
             opener, _ = new_opener()
             zip_url = proxy_url(
-                f"https://github.com/{_REPO_OWNER}/{_REPO_NAME}/archive/{sha}.zip",
+                f"https://github.com/{_REPO_OWNER}/{_REPO_NAME}/archive/{commit}.zip",
                 prefix,
             )
             request = Request(zip_url, headers={"User-Agent": _USER_AGENT})
@@ -199,8 +249,8 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> dict:
         shutil.rmtree(tmp_dir, ignore_errors=True)
         return {
             "ok": True,
-            "sha": sha,
-            "message": f"√ 更新完成，新版本已下载（commit: {sha[:7]}）",
+            "sha": commit,
+            "message": f"√ 更新完成，新版本已下载（commit: {commit[:7]}）",
         }
 
     def _download_and_extract() -> dict:

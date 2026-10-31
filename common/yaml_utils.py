@@ -189,27 +189,39 @@ def get_config_value(config: dict, key_path: str, default=None):
     return value
 
 
+def _dump_scalar(key: str, value, indent: int) -> list[str]:
+    # 写一个键值对；dict 递归一层，多行字符串用 `|-` 块标量
+    pad = " " * indent
+
+    if isinstance(value, bool):
+        return [f"{pad}{key}: {str(value).lower()}"]
+    if isinstance(value, (int, float)):
+        return [f"{pad}{key}: {value}"]
+    if value is None:
+        return [f"{pad}{key}: null"]
+    if isinstance(value, dict):
+        lines = [f"{pad}{key}:"]
+        for sub_key, sub_value in value.items():
+            lines.extend(_dump_scalar(sub_key, sub_value, indent + 2))
+        return lines
+    if isinstance(value, str):
+        if "\n" in value:
+            lines = [f"{pad}{key}: |-"]
+            for part in value.split("\n"):
+                lines.append(f"{pad}  {part}" if part else "")
+            return lines
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return [f'{pad}{key}: "{escaped}"']
+
+    return [f'{pad}{key}: "{value}"']
+
+
 def dump_yaml(data: dict) -> str:
-    # 把扁平的配置字典写成 YAML：标量用引号，多行文本用 `|-` 块标量
+    # 把配置字典写成 YAML（支持一层嵌套，例如 {key: {"value": x}}）
     lines: list[str] = []
 
     for key, value in data.items():
-        if isinstance(value, bool):
-            lines.append(f"{key}: {str(value).lower()}")
-        elif isinstance(value, (int, float)):
-            lines.append(f"{key}: {value}")
-        elif value is None:
-            lines.append(f"{key}: null")
-        elif isinstance(value, str):
-            if "\n" in value:
-                lines.append(f"{key}: |-")
-                for part in value.split("\n"):
-                    lines.append(f"  {part}" if part else "")
-            else:
-                escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-                lines.append(f'{key}: "{escaped}"')
-        else:
-            lines.append(f'{key}: "{value}"')
+        lines.extend(_dump_scalar(key, value, 0))
 
     return "\n".join(lines) + "\n"
 

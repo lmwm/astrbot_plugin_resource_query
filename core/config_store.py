@@ -2,7 +2,9 @@
 #
 # 默认配置：modules/<模块>/config.yaml（只读，随插件发布）
 # 用户配置：plugin_data/<插件>/config/<模块>/config.yaml（Views 保存，优先）
-# 旧版本的 config.json 在首次读取时自动迁移为 config.yaml，成功后删除旧文件。
+#
+# 用户配置按默认配置的键写块结构：每个键下只有 value，结构与默认配置一致。
+# 旧格式（扁平键值或 config.json）在读取时自动兼容并迁移。
 
 from __future__ import annotations
 
@@ -14,7 +16,6 @@ from ..common.yaml_utils import parse_yaml, save_yaml_file
 
 logger = logging.getLogger(__name__)
 
-# 用户配置文件名与旧版文件名
 MODULE_CONFIG_FILE = "config.yaml"
 LEGACY_CONFIG_FILE = "config.json"
 
@@ -35,7 +36,9 @@ class ConfigStore:
         return config
 
     def save(self, config: dict) -> bool:
-        return save_yaml_file(self._path, config)
+        # 按默认配置的键写块结构，只保存值
+        payload = {key: {"value": value} for key, value in config.items()}
+        return save_yaml_file(self._path, payload)
 
     def _load_saved(self) -> dict:
         if self._path.exists():
@@ -43,14 +46,14 @@ class ConfigStore:
                 data = parse_yaml(self._path.read_text(encoding="utf-8"))
             except OSError:
                 return {}
-            return data if isinstance(data, dict) else {}
+            return self._unwrap(data)
 
         # 旧版 JSON 迁移：写入 YAML 成功后删除旧文件
         legacy = load_json_file(self._legacy_path)
         if not legacy:
             return {}
 
-        if save_yaml_file(self._path, legacy):
+        if self.save(legacy):
             try:
                 self._legacy_path.unlink()
             except OSError:
@@ -60,3 +63,14 @@ class ConfigStore:
             )
 
         return legacy
+
+    @staticmethod
+    def _unwrap(data: dict) -> dict:
+        # 兼容两种写法：{key: {value: x}} 与 {key: x}
+        result: dict = {}
+        for key, value in data.items():
+            if isinstance(value, dict) and "value" in value:
+                result[key] = value["value"]
+            else:
+                result[key] = value
+        return result

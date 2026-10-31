@@ -1,8 +1,8 @@
 # 插件更新模块
 #
 # 两种触发共用同一执行体：
-#   - 聊天：`/query update`，总是重装同步，结果回消息
-#   - 定时：AstrBot cron 回调，只有远端版本不同才更新，只写日志
+#   - 聊天：`/query update`，按 force_update 配置决定是否强制重装
+#   - 自动：AstrBot cron 回调，版本号不同或提交号不同才更新，只写日志
 #
 # 日志目录：plugin_data/<插件>/logs/update/，只保留最近 10 个文件。
 
@@ -14,6 +14,7 @@ import time
 
 from astrbot.api.event import MessageChain
 
+from ...common.yaml_utils import parse_yaml, save_yaml_file
 from ...core.module import ModuleBase
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
@@ -22,6 +23,9 @@ from .utils import get_config_fields as _load_config_fields
 from .utils import get_default_config as _load_default_config
 
 logger = logging.getLogger(__name__)
+
+# 本地更新状态文件名（记录已更新到的提交）
+STATE_FILE = "update_state.yaml"
 
 
 class UpdateModule(ModuleBase):
@@ -82,6 +86,17 @@ class UpdateModule(ModuleBase):
     def get_config_fields(self) -> list[dict]:
         return _load_config_fields()
 
+    def get_var_definitions(self) -> dict[str, str]:
+        # 消息模板变量（Views 的「模板变量」页展示）
+        return {
+            "current": "当前版本",
+            "latest": "远端版本",
+            "sha": "完整提交号",
+            "sha7": "短提交号",
+            "elapsed": "耗时（秒）",
+            "error": "错误信息",
+        }
+
     #  指令
 
     def get_commands(self) -> list[dict]:
@@ -95,7 +110,9 @@ class UpdateModule(ModuleBase):
         async def notify(text: str) -> None:
             await event.send(MessageChain().message(text))
 
-        outcome = await self._execute("chat", force=True, notify=notify)
+        config = self.load_module_config()
+        force = bool(config.get("force_update", True))
+        outcome = await self._execute("chat", force=force, notify=notify)
         yield event.plain_result(outcome["message"])
 
     #  执行体
@@ -115,6 +132,7 @@ class UpdateModule(ModuleBase):
             proxy = str(config.get("proxy") or "").strip()
             retries = self._to_int(config.get("max_retries"), 3)
             current = get_current_version()
+            current_commit = str(self._load_state().get("commit") or "")
 
             journal = UpdateJournal(self.get_data_path())
             journal.start(trigger, current)
@@ -130,7 +148,9 @@ class UpdateModule(ModuleBase):
             try:
                 await say("message_checking", {"current": current})
 
-                check = await check_update(proxy, retries, force=force)
+                check = await check_update(
+                    proxy, retries, force=force, current_commit=current_commit
+                )
                 if check.get("error"):
                     error = str(check["error"])
                     journal.append(f"result=error error={error}")
@@ -144,8 +164,12 @@ class UpdateModule(ModuleBase):
                     }
 
                 latest = str(check.get("latest") or "")
+                remote_commit = str(check.get("remote_commit") or "")
                 has_update = bool(check.get("has_update"))
-                journal.append(f"remote={latest} has_update={has_update}")
+                journal.append(
+                    f"remote={latest} remote_commit={remote_commit} "
+                    f"has_update={has_update}"
+                )
 
                 if not force and not has_update:
                     journal.append("result=skip（已是最新）")
@@ -160,7 +184,7 @@ class UpdateModule(ModuleBase):
 
                 await say("message_found", {"current": current, "latest": latest})
 
-                result = await do_update(proxy, retries)
+                result = await do_update(proxy, retries, sha=remote_commit)
                 sha = str(result.get("sha") or "")
                 journal.append(f"update ok={bool(result.get('ok'))} sha={sha}")
 
@@ -175,6 +199,9 @@ class UpdateModule(ModuleBase):
                             {"error": message, "current": current},
                         ),
                     }
+
+                # 记录本次更新到的提交，供下次自动更新比较
+                self._save_state(sha, latest)
 
                 # 重载会卸载当前插件，先把更新结果落盘
                 journal.append("reload=发起中")
@@ -220,6 +247,24 @@ class UpdateModule(ModuleBase):
             return int(value)
         except (TypeError, ValueError):
             return default
+
+    #  更新状态（记录本地已更新到的提交）
+
+    def _state_path(self):
+        return self.get_data_path() / STATE_FILE
+
+    def _load_state(self) -> dict:
+        path = self._state_path()
+        if not path.exists():
+            return {}
+        try:
+            data = parse_yaml(path.read_text(encoding="utf-8"))
+        except OSError:
+            return {}
+        return data if isinstance(data, dict) else {}
+
+    def _save_state(self, commit: str, version: str) -> None:
+        save_yaml_file(self._state_path(), {"commit": commit, "version": version})
 
     #  Views 接口
 
