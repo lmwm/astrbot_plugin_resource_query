@@ -120,6 +120,14 @@ class ModuleBase(ABC):
             return self._registry.get_module(module_name)
         return None
 
+    async def on_load(self) -> None:
+        # 插件加载完成后的异步初始化（子类按需覆盖）
+        pass
+
+    async def on_unload(self) -> None:
+        # 插件卸载前的清理（子类按需覆盖）
+        pass
+
     #  路径
 
     def get_data_path(self) -> Path:

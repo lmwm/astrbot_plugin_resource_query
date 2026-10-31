@@ -71,6 +71,16 @@ class ResourceQueryPlugin(Star):
                     api.get("desc", ""),
                 )
 
+    async def initialize(self) -> None:
+        # AstrBot 加载插件后调用：让各模块做异步初始化（如注册定时任务）
+        for module in self._registry.get_all_modules():
+            await module.on_load()
+
+    async def terminate(self) -> None:
+        # 插件卸载/重载前调用：让各模块清理注册
+        for module in self._registry.get_all_modules():
+            await module.on_unload()
+
     @filter.command("query")
     async def query_cmd(self, event: AstrMessageEvent):
         # /query — 显示帮助，或分发 /query <模块名>

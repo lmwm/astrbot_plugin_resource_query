@@ -9,6 +9,10 @@ defaults:
   proxy: "https://gh-proxy.com/"
   # 网络请求失败时的重试次数
   max_retries: 3
+  # 是否启用定时更新
+  schedule_enabled: true
+  # 定时表达式（五段式 cron）；默认每天 04:00
+  schedule_cron: "0 4 * * *"
 
 # Views 配置项定义（顺序即显示顺序，键名即配置键）
 fields:
@@ -20,3 +24,11 @@ fields:
     label: 请求重试次数
     type: int
     hint: 网络请求失败时的重试次数
+  schedule_enabled:
+    label: 启用定时更新
+    type: bool
+    hint: 开启后按下面的表达式自动检查更新（有新版本才更新）
+  schedule_cron:
+    label: 定时表达式（cron）
+    type: text
+    hint: 五段式，例如 0 4 * * * 表示每天 04:00

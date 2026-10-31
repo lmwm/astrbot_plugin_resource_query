@@ -1,3 +1,14 @@
+## v5.9.14 (2026-10-31)
+
+### 功能
+
+- **定时更新**：新增 `schedule_enabled`（默认开启）与 `schedule_cron`（默认 `0 4 * * *`）配置；插件加载时通过 AstrBot 的 `cron_manager` 注册 basic job，重载/卸载时清理同名任务
+- **定时更新行为**：只在远端版本不同时才下载重装；与手动 `/query update`（总是重装同步）共用同一执行体，靠 `force` 参数区分
+- **运行日志**：每次执行写 `plugin_data/<插件>/logs/update/<时间戳>_<触发方式>.log`（触发方式为 `chat` 或 `schedule`），只保留最近 10 个
+- 基类新增 `on_load` / `on_unload` 异步钩子，入口的 `initialize` / `terminate` 统一调用，供模块注册与清理外部资源
+
+---
+
 ## v5.9.13 (2026-10-30)
 
 ### 重构
