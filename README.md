@@ -45,7 +45,7 @@ main.py                     插件入口：只做「注册 + 分发」
         ├── wasu/           华数查询
         ├── jm/             JM 下载（module / service / paths / cache / pdf）
         └── update/         插件更新
-  └── common/               通用工具层：路径、文件读写、YAML 解析、模块配置读取
+  └── common/               通用工具层：路径、文件读写、YAML 解析与写入
   └── views/template-editor/  管理界面（schema 驱动，单文件入口，脚本内联）
   └── .astrbot-plugin/i18n/   视图元数据（标题 / 描述）
 ```
@@ -96,18 +96,18 @@ main.py                     插件入口：只做「注册 + 分发」
 ```
 plugin_data/astrbot_plugin_resource_query/config/
 ├── mimo/
-│   ├── config.json        # 模块设置（默认设备标识 / User-Agent）
-│   ├── var_config.json    # 模板变量配置
+│   ├── config.yaml        # 模块设置（字段定义 + 值 + 变量）
 │   └── mimo_<名称>.json   # 账号
 ├── wasu/
-│   ├── config.json        # 模块设置（接口地址）
-│   ├── var_config.json
+│   ├── config.yaml
 │   └── <名称>.json        # 账号
 ├── jm/
-│   └── config.json        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
+│   └── config.yaml        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
 └── update/
-    └── config.json        # GitHub 代理、重试次数
+    └── config.yaml        # 代理、重试、强制更新、自动更新、消息模板
 ```
+
+首次加载会把插件目录里的默认 `config.yaml` 复制到这里；之后所有设置与变量都以这份用户配置为准。
 
 页面内每个模块按能力显示对应区块：
 
@@ -217,13 +217,12 @@ astrbot_plugin_resource_query/
 │   └── result.py            # 查询结果基类
 ├── common/                  # 通用工具层
 │   ├── utils.py             # 路径与文件读写
-│   ├── yaml_utils.py        # 简易 YAML 解析
-│   └── module_config.py     # 从 config.yaml 读默认值与字段定义
+│   └── yaml_utils.py        # 简易 YAML 解析与写入
 ├── modules/                 # 功能模块层
 │   ├── mimo/                # module / manager / account / query / result / utils / config.yaml
 │   ├── wasu/                # module / result / constants / utils / config.yaml
 │   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.yaml
-│   └── update/              # module / updater / utils / config.yaml
+│   └── update/              # module / updater / schedule / journal / config.yaml
 ├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
 │   └── index.html
 ├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）
