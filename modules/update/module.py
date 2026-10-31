@@ -118,12 +118,13 @@ class UpdateModule(ModuleBase):
             journal = UpdateJournal(self.get_data_path())
             journal.start(trigger, current)
 
-            async def say(key: str, variables: dict) -> str:
-                # 按配置里的消息模板渲染；定时触发时 notify 为空，只返回文本
+            async def say(key: str, variables: dict) -> None:
+                # 过程提示：聊天触发时直接发送；定时触发不通知
+                if notify is None:
+                    return
                 text = self._render(config.get(key, ""), variables)
-                if notify is not None and text:
+                if text:
                     await notify(text)
-                return text
 
             try:
                 await say("message_checking", {"current": current})
@@ -135,8 +136,9 @@ class UpdateModule(ModuleBase):
                     journal.prune()
                     return {
                         "ok": False,
-                        "message": await say(
-                            "message_error", {"error": error, "current": current}
+                        "message": self._render(
+                            config.get("message_error", ""),
+                            {"error": error, "current": current},
                         ),
                     }
 
@@ -149,8 +151,9 @@ class UpdateModule(ModuleBase):
                     journal.prune()
                     return {
                         "ok": True,
-                        "message": await say(
-                            "message_skip", {"current": current, "latest": latest}
+                        "message": self._render(
+                            config.get("message_skip", ""),
+                            {"current": current, "latest": latest},
                         ),
                     }
 
@@ -166,8 +169,9 @@ class UpdateModule(ModuleBase):
                     journal.prune()
                     return {
                         "ok": False,
-                        "message": await say(
-                            "message_error", {"error": message, "current": current}
+                        "message": self._render(
+                            config.get("message_error", ""),
+                            {"error": message, "current": current},
                         ),
                     }
 
@@ -183,8 +187,8 @@ class UpdateModule(ModuleBase):
 
                 return {
                     "ok": True,
-                    "message": await say(
-                        "message_done",
+                    "message": self._render(
+                        config.get("message_done", ""),
                         {
                             "current": current,
                             "latest": latest,
