@@ -86,21 +86,19 @@ class UpdateModule(ModuleBase):
     def get_config_fields(self) -> list[dict]:
         return _load_config_fields()
 
-    def get_var_definitions(self) -> dict[str, str]:
-        # 消息模板变量（Views 的「模板变量」页展示）
-        return {
-            "current": "当前版本",
-            "latest": "远端版本",
-            "sha": "完整提交号",
-            "sha7": "短提交号",
-            "elapsed": "耗时（秒）",
-            "error": "错误信息",
-        }
-
-    @property
-    def variables_editable(self) -> bool:
-        # 变量由代码决定，不在 Views 中编辑
-        return False
+    def get_config_groups(self) -> list[dict]:
+        # 消息模板单独一页；网络/自动更新等其余配置留在「模块设置」
+        return [
+            {
+                "key": "messages",
+                "label": "消息模板",
+                "hint": (
+                    "可用变量：{current} 当前版本；{latest} 远端版本；"
+                    "{sha}/{sha7} 完整/短提交号；{elapsed} 耗时（秒）；"
+                    "{error} 错误信息"
+                ),
+            }
+        ]
 
     #  指令
 

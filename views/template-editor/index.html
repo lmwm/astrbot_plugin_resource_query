@@ -243,7 +243,17 @@
   /** 模块可用的页面标签 */
   function moduleTabs(mod) {
     const tabs = [];
-    if ((mod.config_fields || []).length) tabs.push({ key: 'settings', label: '模块设置' });
+    const fields = mod.config_fields || [];
+    const groups = mod.config_groups || [];
+    const groupedKeys = new Set(groups.map((g) => g.key));
+
+    const hasUngrouped = fields.some((field) => {
+      const keys = groupsOfField(field);
+      return keys.length === 0 || keys.every((k) => !groupedKeys.has(k));
+    });
+
+    if (hasUngrouped) tabs.push({ key: 'settings', label: '模块设置' });
+    groups.forEach((g) => tabs.push({ key: 'config:' + g.key, label: g.label || g.key }));
     if (mod.supports_accounts) tabs.push({ key: 'accounts', label: '账号管理' });
     if (Object.keys(mod.variables || {}).length) tabs.push({ key: 'variables', label: '模板变量' });
     return tabs;
@@ -343,6 +353,21 @@
         '</div>';
     }
 
+    if (tabKey.startsWith('config:')) {
+      const groupKey = tabKey.slice('config:'.length);
+      const group = (mod.config_groups || []).find((g) => g.key === groupKey) || {};
+      return '<div class="card">' +
+        '<div class="card-header">' +
+          '<span class="card-title">' + esc(group.label || groupKey) + '</span>' +
+          '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存</button>' +
+        '</div>' +
+        '<div class="card-body">' +
+          (group.hint ? '<div class="hint" style="margin-bottom:12px;white-space:pre-wrap">' + esc(group.hint) + '</div>' : '') +
+          buildConfigFieldsHtml(mod, groupKey) +
+        '</div>' +
+        '</div>';
+    }
+
     return '<div class="card">' +
       '<div class="card-header">' +
         '<span class="card-title">模块设置</span>' +
@@ -369,10 +394,17 @@
     });
   }
 
-  function buildConfigFieldsHtml(mod) {
+  function buildConfigFieldsHtml(mod, groupKey) {
     const config = mod.config || {};
+    const groupedKeys = new Set((mod.config_groups || []).map((g) => g.key));
 
-    return (mod.config_fields || []).map((field) => {
+    const fields = (mod.config_fields || []).filter((field) => {
+      const keys = groupsOfField(field);
+      if (groupKey) return keys.includes(groupKey);
+      return keys.length === 0 || keys.every((k) => !groupedKeys.has(k));
+    });
+
+    return fields.map((field) => {
       const raw = config[field.key];
       const value = raw === undefined ? (field.default === undefined ? '' : field.default) : raw;
       const id = 'cfg-' + mod.name + '-' + field.key;

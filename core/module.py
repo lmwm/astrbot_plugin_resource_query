@@ -154,6 +154,10 @@ class ModuleBase(ABC):
         # 模块配置的字段定义（子类覆盖）
         return []
 
+    def get_config_groups(self) -> list[dict]:
+        # 配置字段的分组：Views 里每组单独一页（子类按需覆盖）
+        return []
+
     def load_module_config(self) -> dict:
         # 读取模块配置（默认值与已保存值合并）
         return self._config_store.load(self.get_default_config())
@@ -388,6 +392,7 @@ class ModuleBase(ABC):
             "supports_test": self.supports_test,
             "variables_editable": self.variables_editable,
             "config_fields": self.get_config_fields(),
+            "config_groups": self.get_config_groups(),
             "account_fields": self.get_account_fields(),
             "account_groups": self.get_account_groups(),
             "variables": self.get_var_definitions(),
