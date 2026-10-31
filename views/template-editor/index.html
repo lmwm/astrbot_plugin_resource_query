@@ -255,8 +255,11 @@
     if (hasUngrouped) tabs.push({ key: 'settings', label: '模块设置' });
     groups.forEach((g) => tabs.push({ key: 'config:' + g.key, label: g.label || g.key }));
     if (mod.supports_accounts) tabs.push({ key: 'accounts', label: '账号管理' });
-    if (mod.variables_editable !== false && Object.keys(mod.variables || {}).length) {
-      tabs.push({ key: 'variables', label: '模板变量' });
+    if (Object.keys(mod.variables || {}).length) {
+      tabs.push({
+        key: 'variables',
+        label: mod.variables_editable === false ? '变量说明' : '模板变量',
+      });
     }
     return tabs;
   }
@@ -289,7 +292,7 @@
       container.appendChild(page);
 
       if (mod.supports_accounts) renderAccountList(mod);
-      if (mod.variables_editable !== false && Object.keys(mod.variables || {}).length) {
+      if (Object.keys(mod.variables || {}).length) {
         renderVarTable(mod);
       }
 
@@ -350,13 +353,13 @@
       const editable = mod.variables_editable !== false;
       return '<div class="card">' +
         '<div class="card-header">' +
-          '<span class="card-title">模板变量</span>' +
+          '<span class="card-title">' + (editable ? '模板变量' : '变量说明') + '</span>' +
           (editable ? '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' : '') +
         '</div>' +
         '<div class="card-body"><div class="table-scroll"><table class="var-table">' +
           (editable
             ? '<thead><tr><th>变量名</th><th>说明</th><th>示例值</th><th>显示</th><th></th></tr></thead>'
-            : '<thead><tr><th>变量名</th><th>说明</th></tr></thead>') +
+            : '<thead><tr><th>变量名</th><th>说明</th><th>示例值</th></tr></thead>') +
           '<tbody id="vars-' + esc(mod.name) + '"></tbody>' +
         '</table></div></div>' +
         '</div>';
@@ -448,11 +451,11 @@
       '<div class="template-layout">' +
         '<div class="template-editor">' +
           '<div class="template-label">模板编辑</div>' +
-          '<textarea class="form-textarea" id="' + esc(id) + '" spellcheck="false">' + esc(value) + '</textarea>' +
+          '<textarea class="form-textarea config-textarea" id="' + esc(id) + '" spellcheck="false">' + esc(value) + '</textarea>' +
         '</div>' +
         '<div class="template-preview-box">' +
           '<div class="template-label">预览效果</div>' +
-          '<div class="template-preview" id="' + esc(previewId) + '"></div>' +
+          '<div class="template-preview config-preview" id="' + esc(previewId) + '"></div>' +
         '</div>' +
       '</div>' +
       '<div class="variable-tags" id="tags-' + esc(mod.name) + '-' + esc(field.key) + '"></div>' +
@@ -468,8 +471,8 @@
     box.innerHTML = Object.keys(variables).map((name) =>
       '<button class="variable-tag" data-action="insert-config-var" ' +
         'data-module="' + esc(mod.name) + '" data-field="' + esc(fieldKey) + '" ' +
-        'data-name="' + esc(name) + '" title="' + esc(variables[name]) + '">' +
-        esc('{' + name + '}') + '</button>'
+        'data-name="' + esc(name) + '" title="' + esc('{' + name + '}') + '">' +
+        esc(variables[name] || name) + '</button>'
     ).join('');
   }
 
@@ -542,14 +545,16 @@
     const editable = mod.variables_editable !== false;
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="' + (editable ? 5 : 2) + '" class="empty">暂无变量</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + (editable ? 5 : 3) + '" class="empty">暂无变量</td></tr>';
       return;
     }
 
     if (!editable) {
+      const samples = mod.variable_samples || {};
       tbody.innerHTML = list.map((item) =>
         '<tr><td><code>' + esc('{' + (item.name || '') + '}') + '</code></td>' +
-        '<td>' + esc(item.desc || '') + '</td></tr>'
+        '<td>' + esc(item.desc || '') + '</td>' +
+        '<td>' + esc(samples[item.name] === undefined ? '' : samples[item.name]) + '</td></tr>'
       ).join('');
       return;
     }
@@ -1449,6 +1454,7 @@
       .form-textarea { min-height: 160px; font-size: 12px; }
       .template-preview { min-height: 160px; font-size: 12px; }
     }
+  .config-textarea, .config-preview { min-height: 88px; }
   </style>
 </head>
 <body>

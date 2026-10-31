@@ -159,10 +159,20 @@ class UpdateModule(ModuleBase):
             current = get_current_version()
             current_commit = str(self._load_state().get("commit") or "")
 
+            # 模板变量始终提供完整键，尚未产生值的阶段为空字符串
+            variables = {
+                "current": current,
+                "latest": "",
+                "sha": "",
+                "sha7": "",
+                "elapsed": "",
+                "error": "",
+            }
+
             journal = UpdateJournal(self.get_data_path())
             journal.start(trigger, current)
 
-            async def say(key: str, variables: dict) -> None:
+            async def say(key: str) -> None:
                 # 过程提示：聊天触发时直接发送；定时触发不通知
                 if notify is None:
                     return
@@ -171,30 +181,33 @@ class UpdateModule(ModuleBase):
                     await notify(text)
 
             try:
-                await say("message_checking", {"current": current})
-
                 check = await check_update(
                     proxy, retries, force=force, current_commit=current_commit
                 )
                 if check.get("error"):
                     error = str(check["error"])
+                    variables["error"] = error
                     journal.append(f"result=error error={error}")
                     journal.prune()
                     return {
                         "ok": False,
                         "message": self._render(
-                            config.get("message_error", ""),
-                            {"error": error, "current": current},
+                            config.get("message_error", ""), variables
                         ),
                     }
 
                 latest = str(check.get("latest") or "")
                 remote_commit = str(check.get("remote_commit") or "")
                 has_update = bool(check.get("has_update"))
+                variables["latest"] = latest
+                variables["sha"] = remote_commit
+                variables["sha7"] = remote_commit[:7]
                 journal.append(
                     f"remote={latest} remote_commit={remote_commit} "
                     f"has_update={has_update}"
                 )
+
+                await say("message_checking")
 
                 if not force and not has_update:
                     journal.append("result=skip（已是最新）")
@@ -202,26 +215,27 @@ class UpdateModule(ModuleBase):
                     return {
                         "ok": True,
                         "message": self._render(
-                            config.get("message_skip", ""),
-                            {"current": current, "latest": latest},
+                            config.get("message_skip", ""), variables
                         ),
                     }
 
-                await say("message_found", {"current": current, "latest": latest})
+                await say("message_found")
 
                 result = await do_update(proxy, retries, sha=remote_commit)
                 sha = str(result.get("sha") or "")
+                variables["sha"] = sha
+                variables["sha7"] = sha[:7]
                 journal.append(f"update ok={bool(result.get('ok'))} sha={sha}")
 
                 if not result.get("ok"):
                     message = str(result.get("message") or "更新失败")
+                    variables["error"] = message
                     journal.append(f"result=error message={message}")
                     journal.prune()
                     return {
                         "ok": False,
                         "message": self._render(
-                            config.get("message_error", ""),
-                            {"error": message, "current": current},
+                            config.get("message_error", ""), variables
                         ),
                     }
 
@@ -234,22 +248,14 @@ class UpdateModule(ModuleBase):
 
                 reload_text = await reload_plugin(self._context)
                 elapsed = f"{time.monotonic() - started:.1f}"
+                variables["elapsed"] = elapsed
                 journal.append(f"reload={reload_text}")
                 journal.append(f"elapsed={elapsed}s")
                 journal.prune()
 
                 return {
                     "ok": True,
-                    "message": self._render(
-                        config.get("message_done", ""),
-                        {
-                            "current": current,
-                            "latest": latest,
-                            "sha": sha,
-                            "sha7": sha[:7],
-                            "elapsed": elapsed,
-                        },
-                    ),
+                    "message": self._render(config.get("message_done", ""), variables),
                 }
             except Exception as e:  # noqa: BLE001
                 journal.append(f"result=exception {type(e).__name__}: {e}")
@@ -259,11 +265,16 @@ class UpdateModule(ModuleBase):
 
     @staticmethod
     def _render(template, variables: dict) -> str:
-        # 模板变量缺失时保留原文，不让渲染失败影响更新流程
+        # 缺失的变量保留 {name} 占位符，其余照常替换
         text = str(template or "")
+
+        class _SafeDict(dict):
+            def __missing__(self, key):
+                return "{" + key + "}"
+
         try:
-            return text.format(**variables)
-        except (KeyError, IndexError, ValueError):
+            return text.format_map(_SafeDict(variables))
+        except (ValueError, IndexError):
             return text
 
     @staticmethod

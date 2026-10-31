@@ -156,7 +156,8 @@ async def check_update(
             result = _fetch_one(prefix)
             if result["latest"] or not result["error"]:
                 # 版本一致且非强制时才需要提交号
-                if not force and result["latest"] == current_version:
+                if result["latest"]:
+                    # 取远端提交号，供消息变量与后续下载复用
                     result["remote_commit"] = _fetch_sha(prefix)
                 return result
             last = result
