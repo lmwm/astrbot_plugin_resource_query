@@ -1,3 +1,14 @@
+## v5.9.15 (2026-10-31)
+
+### 功能
+
+- **用户配置改为 YAML**：Views 保存的模块配置由 `config/<模块>/config.json` 改为 `config/<模块>/config.yaml`（用户配置）；`modules/<模块>/config.yaml` 为默认配置；旧 JSON 在首次读取时自动迁移为 YAML 并删除
+- **消息模板**：更新的检查中、发现新版本、完成、已是最新、失败五条消息均可配置（`message_*`），支持 `{current}` `{latest}` `{sha}` `{sha7}` `{elapsed}` `{error}` 变量
+- **配置页支持多行输入**：Views 新增 `textarea` 字段类型，消息模板用多行编辑
+- `do_update` 返回结构化结果 `{ok, sha, message}`，消息渲染不再依赖字符串里的对勾判断
+
+---
+
 ## v5.9.14 (2026-10-31)
 
 ### 功能

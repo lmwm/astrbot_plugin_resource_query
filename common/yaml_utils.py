@@ -46,9 +46,12 @@ def _convert_value(value: str):
 
 
 def _unquote(value: str) -> str:
-    # 去掉成对的单引号或双引号
+    # 去掉成对的单引号或双引号；双引号内按 YAML 约定还原反斜杠转义
     if len(value) >= 2 and value[0] == value[-1] and value[0] in "\"'":
-        return value[1:-1]
+        inner = value[1:-1]
+        if value[0] == '"':
+            return inner.replace('\\"', '"').replace("\\\\", "\\")
+        return inner
     return value
 
 
@@ -135,11 +138,13 @@ def parse_yaml(text: str) -> dict:
         # 块标量
         if raw_value and _BLOCK_SCALAR_RE.match(raw_value):
             block_text, i = _read_block_scalar(lines, i + 1, indent)
-            parent[key] = (
-                _fold_block_scalar(block_text)
-                if raw_value.startswith(">")
-                else block_text
-            )
+            if raw_value.startswith(">"):
+                parent[key] = _fold_block_scalar(block_text)
+            elif raw_value.endswith("-"):
+                # `|-` 去掉末尾换行，避免读回时多出一个空行
+                parent[key] = block_text.rstrip("\n")
+            else:
+                parent[key] = block_text
             continue
 
         if raw_value:
@@ -182,3 +187,39 @@ def get_config_value(config: dict, key_path: str, default=None):
         else:
             return default
     return value
+
+
+def dump_yaml(data: dict) -> str:
+    # 把扁平的配置字典写成 YAML：标量用引号，多行文本用 `|-` 块标量
+    lines: list[str] = []
+
+    for key, value in data.items():
+        if isinstance(value, bool):
+            lines.append(f"{key}: {str(value).lower()}")
+        elif isinstance(value, (int, float)):
+            lines.append(f"{key}: {value}")
+        elif value is None:
+            lines.append(f"{key}: null")
+        elif isinstance(value, str):
+            if "\n" in value:
+                lines.append(f"{key}: |-")
+                for part in value.split("\n"):
+                    lines.append(f"  {part}" if part else "")
+            else:
+                escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+                lines.append(f'{key}: "{escaped}"')
+        else:
+            lines.append(f'{key}: "{value}"')
+
+    return "\n".join(lines) + "\n"
+
+
+def save_yaml_file(path, data: dict) -> bool:
+    # 把配置字典写成 YAML 文件
+    try:
+        path = Path(path)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(dump_yaml(data), encoding="utf-8")
+        return True
+    except OSError:
+        return False

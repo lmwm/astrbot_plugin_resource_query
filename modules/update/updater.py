@@ -132,10 +132,11 @@ async def check_update(
     return result
 
 
-async def do_update(proxy: str = "", max_retries: int = 3) -> str:
+async def do_update(proxy: str = "", max_retries: int = 3) -> dict:
     # 下载远端最新版本并覆盖插件文件
+    # 返回 {"ok": bool, "sha": str, "message": str}
 
-    def _download_with(prefix: str) -> str:
+    def _download_with(prefix: str) -> dict:
         def _get_sha() -> str:
             opener, _ = new_opener()
             request = Request(
@@ -196,9 +197,13 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
                 shutil.copy2(item, destination)
 
         shutil.rmtree(tmp_dir, ignore_errors=True)
-        return f"√ 更新完成，新版本已下载（commit: {sha[:7]}）"
+        return {
+            "ok": True,
+            "sha": sha,
+            "message": f"√ 更新完成，新版本已下载（commit: {sha[:7]}）",
+        }
 
-    def _download_and_extract() -> str:
+    def _download_and_extract() -> dict:
         last_error = "没有可用的下载地址"
 
         for prefix in _proxy_candidates(proxy):
@@ -214,7 +219,7 @@ async def do_update(proxy: str = "", max_retries: int = 3) -> str:
                 last_error = str(e)
                 continue
 
-        return f"× 更新失败: {last_error}"
+        return {"ok": False, "sha": "", "message": f"× 更新失败: {last_error}"}
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _download_and_extract)

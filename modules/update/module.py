@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from ...core.module import ModuleBase
 from .journal import UpdateJournal
@@ -106,6 +107,7 @@ class UpdateModule(ModuleBase):
     async def _execute(self, trigger: str, force: bool, notify=None) -> dict:
         # 同一把锁避免定时任务与手动更新并发重装
         async with self._lock:
+            started = time.monotonic()
             config = self.load_module_config()
             proxy = str(config.get("proxy") or "").strip()
             retries = self._to_int(config.get("max_retries"), 3)
@@ -114,17 +116,26 @@ class UpdateModule(ModuleBase):
             journal = UpdateJournal(self.get_data_path())
             journal.start(trigger, current)
 
+            async def say(key: str, variables: dict) -> str:
+                # 按配置里的消息模板渲染；定时触发时 notify 为空，只返回文本
+                text = self._render(config.get(key, ""), variables)
+                if notify is not None and text:
+                    await notify(text)
+                return text
+
             try:
-                if notify:
-                    await notify(f"正在检查更新（当前版本 v{current}）...")
+                await say("message_checking", {"current": current})
 
                 check = await check_update(proxy, retries, force=force)
                 if check.get("error"):
-                    journal.append(f"result=error error={check['error']}")
+                    error = str(check["error"])
+                    journal.append(f"result=error error={error}")
                     journal.prune()
                     return {
                         "ok": False,
-                        "message": f"× 检查更新失败: {check['error']}",
+                        "message": await say(
+                            "message_error", {"error": error, "current": current}
+                        ),
                     }
 
                 latest = str(check.get("latest") or "")
@@ -134,30 +145,67 @@ class UpdateModule(ModuleBase):
                 if not force and not has_update:
                     journal.append("result=skip（已是最新）")
                     journal.prune()
-                    return {"ok": True, "message": f"已是最新版本 v{current}"}
+                    return {
+                        "ok": True,
+                        "message": await say(
+                            "message_skip", {"current": current, "latest": latest}
+                        ),
+                    }
 
-                if notify:
-                    await notify(f"远端版本 v{latest}，正在重新安装...")
+                await say("message_found", {"current": current, "latest": latest})
 
                 result = await do_update(proxy, retries)
-                journal.append(f"update={result}")
-                if "√" not in result:
+                sha = str(result.get("sha") or "")
+                journal.append(f"update ok={bool(result.get('ok'))} sha={sha}")
+
+                if not result.get("ok"):
+                    message = str(result.get("message") or "更新失败")
+                    journal.append(f"result=error message={message}")
                     journal.prune()
-                    return {"ok": False, "message": result}
+                    return {
+                        "ok": False,
+                        "message": await say(
+                            "message_error", {"error": message, "current": current}
+                        ),
+                    }
 
                 # 重载会卸载当前插件，先把更新结果落盘
                 journal.append("reload=发起中")
                 journal.prune()
 
                 reload_text = await reload_plugin(self._context)
+                elapsed = f"{time.monotonic() - started:.1f}"
                 journal.append(f"reload={reload_text}")
+                journal.append(f"elapsed={elapsed}s")
                 journal.prune()
-                return {"ok": True, "message": f"{result}\n{reload_text}"}
+
+                return {
+                    "ok": True,
+                    "message": await say(
+                        "message_done",
+                        {
+                            "current": current,
+                            "latest": latest,
+                            "sha": sha,
+                            "sha7": sha[:7],
+                            "elapsed": elapsed,
+                        },
+                    ),
+                }
             except Exception as e:  # noqa: BLE001
                 journal.append(f"result=exception {type(e).__name__}: {e}")
                 journal.prune()
                 logger.error(f"[update] 更新异常: {type(e).__name__}: {e}")
                 return {"ok": False, "message": f"× 更新异常: {e}"}
+
+    @staticmethod
+    def _render(template, variables: dict) -> str:
+        # 模板变量缺失时保留原文，不让渲染失败影响更新流程
+        text = str(template or "")
+        try:
+            return text.format(**variables)
+        except (KeyError, IndexError, ValueError):
+            return text
 
     @staticmethod
     def _to_int(value, default: int) -> int:

@@ -572,6 +572,11 @@
         (value ? ' checked' : '') + '>' + esc(field.label) + '</label>';
     }
 
+    if (field.type === 'textarea') {
+      return '<textarea class="form-textarea config-textarea" id="' + esc(id) + '" rows="3">' +
+        esc(value) + '</textarea>';
+    }
+
     const isPassword = field.type === 'password';
     const type = isPassword ? 'password' : (field.type === 'int' ? 'number' : 'text');
     const extra = isPassword ? ' autocomplete="new-password"' : '';
@@ -818,6 +823,8 @@
         payload[field.key] = el.checked;
       } else if (field.type === 'int') {
         payload[field.key] = toInt(el.value, field.default === undefined ? 0 : field.default);
+      } else if (field.type === 'textarea') {
+        payload[field.key] = el.value;
       } else {
         payload[field.key] = el.value.trim();
       }
@@ -1244,6 +1251,7 @@
     .template-label { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
     .form-textarea { width: 100%; min-height: 220px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'SF Mono', Monaco, monospace; outline: none; resize: vertical; line-height: 1.6; white-space: pre; overflow-x: auto; box-sizing: border-box; }
     .form-textarea:focus { border-color: var(--primary); }
+    .config-textarea { min-height: 88px; font-family: inherit; white-space: pre-wrap; }
     .template-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; white-space: pre; min-height: 220px; line-height: 1.6; overflow: auto; box-sizing: border-box; }
 
     /* 变量标签 */
