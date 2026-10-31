@@ -256,10 +256,7 @@
     groups.forEach((g) => tabs.push({ key: 'config:' + g.key, label: g.label || g.key }));
     if (mod.supports_accounts) tabs.push({ key: 'accounts', label: '账号管理' });
     if (Object.keys(mod.variables || {}).length) {
-      tabs.push({
-        key: 'variables',
-        label: mod.variables_editable === false ? '变量说明' : '模板变量',
-      });
+      tabs.push({ key: 'variables', label: '变量配置' });
     }
     return tabs;
   }
@@ -298,7 +295,7 @@
 
       (mod.config_fields || []).filter((field) => field.type === 'template').forEach((field) => {
         updateConfigTemplatePreview(mod.name, field.key);
-        renderConfigVarTags(mod, field.key);
+        renderConfigVarTags(mod, field);
       });
     });
   }
@@ -353,7 +350,7 @@
       const editable = mod.variables_editable !== false;
       return '<div class="card">' +
         '<div class="card-header">' +
-          '<span class="card-title">' + (editable ? '模板变量' : '变量说明') + '</span>' +
+          '<span class="card-title">变量配置</span>' +
           (editable ? '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' : '') +
         '</div>' +
         '<div class="card-body"><div class="table-scroll"><table class="var-table">' +
@@ -463,16 +460,23 @@
       '</div>';
   }
 
-  function renderConfigVarTags(mod, fieldKey) {
+  function renderConfigVarTags(mod, field) {
+    const fieldKey = field.key;
     const box = $('tags-' + mod.name + '-' + fieldKey);
     if (!box) return;
 
-    const variables = mod.variables || {};
-    box.innerHTML = Object.keys(variables).map((name) =>
+    const allowed = field.variables;
+    const loaded = variablesOf(mod.name);
+    const list = loaded.length
+      ? loaded
+      : Object.entries(mod.variables || {}).map(([name, desc]) => ({ name, desc, default: '' }));
+    const items = list.filter((item) => !allowed || allowed.includes(item.name));
+
+    box.innerHTML = items.map((item) =>
       '<button class="variable-tag" data-action="insert-config-var" ' +
         'data-module="' + esc(mod.name) + '" data-field="' + esc(fieldKey) + '" ' +
-        'data-name="' + esc(name) + '" title="' + esc('{' + name + '}') + '">' +
-        esc(variables[name] || name) + '</button>'
+        'data-name="' + esc(item.name) + '" title="' + esc('{' + item.name + '}') + '">' +
+        esc(item.desc || item.name) + '</button>'
     ).join('');
   }
 
@@ -482,11 +486,17 @@
     const preview = $('preview-' + moduleName + '-' + fieldKey);
     if (!mod || !textarea || !preview) return;
 
+    const loaded = variablesOf(moduleName);
     const samples = mod.variable_samples || {};
+    const sampleOf = (name) => {
+      const item = loaded.find((v) => v.name === name);
+      if (item && item.default !== undefined && item.default !== '') return item.default;
+      return samples[name] === undefined ? '' : samples[name];
+    };
+
     let text = textarea.value;
     Object.keys(mod.variables || {}).forEach((name) => {
-      const sample = samples[name] === undefined ? '' : samples[name];
-      text = text.split('{' + name + '}').join(sample);
+      text = text.split('{' + name + '}').join(sampleOf(name));
     });
 
     preview.textContent = text || '（请输入模板）';
@@ -995,6 +1005,10 @@
       await loadVars();
       renderVarTable(mod);
       renderTemplateTags(moduleName);
+      (mod.config_fields || []).filter((f) => f.type === 'template').forEach((f) => {
+        renderConfigVarTags(mod, f);
+        updateConfigTemplatePreview(mod.name, f.key);
+      });
       toast('变量配置已保存');
     } catch (e) {
       toast('保存失败：' + e.message, 'error');

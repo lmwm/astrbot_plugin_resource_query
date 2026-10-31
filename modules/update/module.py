@@ -27,6 +27,44 @@ logger = logging.getLogger(__name__)
 # 本地更新状态文件名（记录已更新到的提交）
 STATE_FILE = "update_state.yaml"
 
+# 每条消息可用的模板变量（前端变量标签据此过滤）
+_MESSAGE_VARIABLES = {
+    "message_checking": [
+        "current",
+        "latest",
+        "current_sha",
+        "current_sha7",
+        "sha",
+        "sha7",
+    ],
+    "message_found": [
+        "current",
+        "latest",
+        "current_sha",
+        "current_sha7",
+        "sha",
+        "sha7",
+    ],
+    "message_done": [
+        "current",
+        "latest",
+        "current_sha",
+        "current_sha7",
+        "sha",
+        "sha7",
+        "elapsed",
+    ],
+    "message_skip": [
+        "current",
+        "latest",
+        "current_sha",
+        "current_sha7",
+        "sha",
+        "sha7",
+    ],
+    "message_error": ["current", "error"],
+}
+
 
 class UpdateModule(ModuleBase):
     # 插件更新模块
@@ -84,7 +122,13 @@ class UpdateModule(ModuleBase):
         return _load_default_config()
 
     def get_config_fields(self) -> list[dict]:
-        return _load_config_fields()
+        # 为每个消息模板字段标注可用变量
+        fields = _load_config_fields()
+        for field in fields:
+            allowed = _MESSAGE_VARIABLES.get(field.get("key"))
+            if allowed:
+                field["variables"] = list(allowed)
+        return fields
 
     def get_config_groups(self) -> list[dict]:
         # 消息模板单独一页；网络/自动更新等其余配置留在「模块设置」
@@ -100,8 +144,10 @@ class UpdateModule(ModuleBase):
         return {
             "current": "当前版本",
             "latest": "远端版本",
-            "sha": "完整提交号",
-            "sha7": "短提交号",
+            "current_sha": "当前版本提交号",
+            "current_sha7": "当前版本短提交号",
+            "sha": "远端提交号",
+            "sha7": "远端短提交号",
             "elapsed": "耗时（秒）",
             "error": "错误信息",
         }
@@ -109,18 +155,15 @@ class UpdateModule(ModuleBase):
     def get_var_samples(self) -> dict[str, str]:
         # 变量示例值，供预览使用
         return {
-            "current": "5.9.21",
-            "latest": "5.9.22",
+            "current": "5.9.23",
+            "latest": "5.9.24",
+            "current_sha": "1101942f2ee9b12772ae7e6372794b1d09d8d57",
+            "current_sha7": "1101942",
             "sha": "2c54e39abcdef0123456789abcdef0123456789",
             "sha7": "2c54e39",
             "elapsed": "5.2",
             "error": "网络连接超时",
         }
-
-    @property
-    def variables_editable(self) -> bool:
-        # 变量由代码决定，不在 Views 中单独成页
-        return False
 
     #  指令
 
@@ -163,6 +206,8 @@ class UpdateModule(ModuleBase):
             variables = {
                 "current": current,
                 "latest": "",
+                "current_sha": current_commit,
+                "current_sha7": current_commit[:7],
                 "sha": "",
                 "sha7": "",
                 "elapsed": "",
