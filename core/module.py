@@ -104,6 +104,11 @@ class ModuleBase(ABC):
         # 账号称谓，用于指令文案（子类可覆盖为「MiMo 账号」等）
         return f"{self.module_title}账号"
 
+    @property
+    def variables_editable(self) -> bool:
+        # 模板变量是否允许在 Views 中编辑；代码内固定的变量返回 False
+        return True
+
     #  注册中心
 
     def set_context(self, context: Any) -> None:
@@ -381,6 +386,7 @@ class ModuleBase(ABC):
             "supports_query": self.supports_query,
             "supports_login": self.supports_login,
             "supports_test": self.supports_test,
+            "variables_editable": self.variables_editable,
             "config_fields": self.get_config_fields(),
             "account_fields": self.get_account_fields(),
             "account_groups": self.get_account_groups(),

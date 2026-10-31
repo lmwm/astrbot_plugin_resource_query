@@ -97,6 +97,11 @@ class UpdateModule(ModuleBase):
             "error": "错误信息",
         }
 
+    @property
+    def variables_editable(self) -> bool:
+        # 变量由代码决定，不在 Views 中编辑
+        return False
+
     #  指令
 
     def get_commands(self) -> list[dict]:

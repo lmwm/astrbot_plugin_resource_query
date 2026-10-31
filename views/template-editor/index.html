@@ -243,9 +243,9 @@
   /** 模块可用的页面标签 */
   function moduleTabs(mod) {
     const tabs = [];
+    if ((mod.config_fields || []).length) tabs.push({ key: 'settings', label: '模块设置' });
     if (mod.supports_accounts) tabs.push({ key: 'accounts', label: '账号管理' });
     if (Object.keys(mod.variables || {}).length) tabs.push({ key: 'variables', label: '模板变量' });
-    if ((mod.config_fields || []).length) tabs.push({ key: 'settings', label: '模块设置' });
     return tabs;
   }
 
@@ -328,13 +328,16 @@
     }
 
     if (tabKey === 'variables') {
+      const editable = mod.variables_editable !== false;
       return '<div class="card">' +
         '<div class="card-header">' +
           '<span class="card-title">模板变量</span>' +
-          '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' +
+          (editable ? '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' : '') +
         '</div>' +
         '<div class="card-body"><div class="table-scroll"><table class="var-table">' +
-          '<thead><tr><th>变量名</th><th>说明</th><th>示例值</th><th>显示</th><th></th></tr></thead>' +
+          (editable
+            ? '<thead><tr><th>变量名</th><th>说明</th><th>示例值</th><th>显示</th><th></th></tr></thead>'
+            : '<thead><tr><th>变量名</th><th>说明</th></tr></thead>') +
           '<tbody id="vars-' + esc(mod.name) + '"></tbody>' +
         '</table></div></div>' +
         '</div>';
@@ -426,9 +429,18 @@
     if (!tbody) return;
 
     const list = variablesOf(mod.name);
+    const editable = mod.variables_editable !== false;
 
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="empty">暂无变量</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + (editable ? 5 : 2) + '" class="empty">暂无变量</td></tr>';
+      return;
+    }
+
+    if (!editable) {
+      tbody.innerHTML = list.map((item) =>
+        '<tr><td><code>' + esc('{' + (item.name || '') + '}') + '</code></td>' +
+        '<td>' + esc(item.desc || '') + '</td></tr>'
+      ).join('');
       return;
     }
 
