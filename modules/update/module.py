@@ -19,8 +19,6 @@ from ...core.module import ModuleBase
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
 from .updater import check_update, do_update, get_current_version, reload_plugin
-from .utils import get_config_fields as _load_config_fields
-from .utils import get_default_config as _load_default_config
 
 logger = logging.getLogger(__name__)
 
@@ -118,12 +116,9 @@ class UpdateModule(ModuleBase):
 
     #  模块配置
 
-    def get_default_config(self) -> dict:
-        return _load_default_config()
-
     def get_config_fields(self) -> list[dict]:
         # 为每个消息模板字段标注可用变量
-        fields = _load_config_fields()
+        fields = super().get_config_fields()
         for field in fields:
             allowed = _MESSAGE_VARIABLES.get(field.get("key"))
             if allowed:
@@ -355,8 +350,8 @@ class UpdateModule(ModuleBase):
         return config
 
     def accept_config_payload(self, payload: dict, config: dict) -> dict:
-        # 只接受 config.yaml 声明的键，避免把 current_version 等只读字段写回
-        known = _load_default_config()
+        # 只接受用户配置中存在的键，避免把 current_version 等只读字段写回
+        known = {field["key"] for field in self.get_config_fields()}
         return {k: v for k, v in payload.items() if k in known}
 
     async def api_save_config(self):

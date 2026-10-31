@@ -1255,7 +1255,7 @@
         await testAccount();
         break;
 
-      case 'reset-template':
+      case 'reset-account-template':
         if (state.editing) {
           $('account-template').value = defaultTemplate(state.editing.module.name);
           updateTemplatePreview(state.editing.module.name);
@@ -1604,7 +1604,7 @@
         <div id="account-pane-template" style="display:none">
           <div class="template-header">
             <label class="form-label" style="margin-bottom:0">消息模板</label>
-            <button class="btn btn-ghost btn-sm" data-action="reset-template">↺ 恢复默认</button>
+            <button class="btn btn-ghost btn-sm" data-action="reset-account-template">↺ 恢复默认</button>
           </div>
           <div class="template-layout">
             <div class="template-editor">

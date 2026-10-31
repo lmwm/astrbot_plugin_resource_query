@@ -1,17 +1,10 @@
-# JMComic 模块工具与默认配置
+# JMComic 模块工具
 #
-# 默认值与 Views 配置项定义统一来自 `modules/jm/config.yaml`（只读），
-# 修改该文件即可调整默认行为，且不会覆盖用户已保存的配置。
+# 配置默认值与字段定义在 modules/jm/config.yaml，由 ConfigStore 读取。
 
 from __future__ import annotations
 
 import re
-from pathlib import Path
-
-from ...common.module_config import load_defaults, load_fields
-
-_MODULE_DIR = Path(__file__).parent
-_CONFIG_FILE = _MODULE_DIR / "config.yaml"
 
 # 中文字符匹配（用于判断简短名是否适合作为展示名）
 CN_CHAR_PATTERN = re.compile(r"[\u4e00-\u9fff]")
@@ -27,16 +20,6 @@ def pick_display_name(oname: str, fallback: str) -> str:
         return preferred
 
     return str(fallback or "").strip()
-
-
-def get_default_config() -> dict:
-    # 模块默认配置（来自 config.yaml）
-    return load_defaults(_CONFIG_FILE)
-
-
-def get_config_fields() -> list[dict]:
-    # Views 配置项定义（来自 config.yaml，键顺序即显示顺序）
-    return load_fields(_CONFIG_FILE)
 
 
 def normalize_album_id(raw: str) -> int | None:

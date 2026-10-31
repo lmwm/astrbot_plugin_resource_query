@@ -16,7 +16,6 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ...core.module import ModuleBase
 from .service import JMService
-from .utils import get_config_fields as _load_config_fields
 from .utils import normalize_album_id, pick_display_name
 
 logger = logging.getLogger(__name__)
@@ -60,14 +59,6 @@ class JMModule(ModuleBase):
         return "JMComic 漫画下载（仅私聊）"
 
     #  模块配置
-
-    def get_default_config(self) -> dict:
-        from .utils import get_default_config
-
-        return get_default_config()
-
-    def get_config_fields(self) -> list[dict]:
-        return _load_config_fields()
 
     def load_module_config(self) -> dict:
         config = super().load_module_config()

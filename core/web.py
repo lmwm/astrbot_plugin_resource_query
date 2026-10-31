@@ -5,11 +5,7 @@
 
 from __future__ import annotations
 
-from ..common.utils import load_json_file, save_json_file
 from .registry import ModuleRegistry
-
-# 模板变量配置文件（与模块配置目录同级）
-_VAR_CONFIG_FILE = "var_config.json"
 
 
 class GlobalWebApi:
@@ -105,33 +101,9 @@ class GlobalWebApi:
         result: dict[str, dict] = {}
 
         for module in self._registry.get_all_modules():
-            declared = module.get_var_definitions()
-            if not declared:
-                continue
-
-            saved = load_json_file(module.get_config_path() / _VAR_CONFIG_FILE) or {}
-            saved_map = {
-                item["name"]: item
-                for item in (saved.get("variables") or [])
-                if isinstance(item, dict) and item.get("name")
-            }
-
-            variables = [
-                {
-                    "name": name,
-                    "desc": saved_map.get(name, {}).get("desc") or desc,
-                    "default": saved_map.get(name, {}).get("default", ""),
-                    "show": saved_map.get(name, {}).get("show", True),
-                }
-                for name, desc in declared.items()
-            ]
-
-            # 用户在 Views 中额外添加的变量也一并保留
-            variables.extend(
-                item for name, item in saved_map.items() if name not in declared
-            )
-
-            result[module.module_name] = {"variables": variables}
+            variables = module.get_template_variables()
+            if variables:
+                result[module.module_name] = {"variables": variables}
 
         return json_response(result)
 
@@ -149,8 +121,7 @@ class GlobalWebApi:
         if not isinstance(variables, list):
             return error_response("variables 必须是数组")
 
-        path = module.get_config_path() / _VAR_CONFIG_FILE
-        if not save_json_file(path, {"variables": variables}):
+        if not module.save_template_variables(variables):
             return error_response("保存失败")
 
         return json_response({"status": "ok"})

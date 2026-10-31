@@ -38,7 +38,10 @@ class ModuleBase(ABC):
         self._plugin_name = plugin_name
         self._registry: ModuleRegistry | None = None
         self._context: Any = None
-        self._config_store = ConfigStore(self.get_config_path())
+        self._config_store = ConfigStore(
+            self.get_config_path(),
+            Path(self._plugin_dir) / "modules" / self.module_name / "config.yaml",
+        )
         self._account_store = AccountStore(
             self.get_config_path(), self.account_file_prefix
         )
@@ -147,23 +150,23 @@ class ModuleBase(ABC):
     #  模块配置（Views 管理）
 
     def get_default_config(self) -> dict:
-        # 模块默认配置（子类覆盖）
-        return {}
+        # 模块配置值（来自用户配置；不存在时已复制默认）
+        return self._config_store.values()
 
     def get_config_fields(self) -> list[dict]:
-        # 模块配置的字段定义（子类覆盖）
-        return []
+        # 模块配置的字段定义（来自用户配置）
+        return self._config_store.fields()
 
     def get_config_groups(self) -> list[dict]:
         # 配置字段的分组：Views 里每组单独一页（子类按需覆盖）
         return []
 
     def load_module_config(self) -> dict:
-        # 读取模块配置（默认值与已保存值合并）
-        return self._config_store.load(self.get_default_config())
+        # 读取模块配置值
+        return self._config_store.values()
 
     def save_module_config(self, config: dict) -> bool:
-        return self._config_store.save(config)
+        return self._config_store.save_values(config)
 
     #  账号管理（supports_accounts 为 True 时实现）
 
@@ -203,6 +206,51 @@ class ModuleBase(ABC):
     def get_var_samples(self) -> dict[str, str]:
         # 变量示例值，供 Views 的消息模板预览使用（子类覆盖）
         return {}
+
+    def get_template_variables(self) -> list[dict]:
+        # 变量定义 + 用户配置（变量名 / 说明 / 示例 / 显示）
+        saved = self._config_store.variables()
+        samples = self.get_var_samples()
+        result: list[dict] = []
+
+        for name, desc in self.get_var_definitions().items():
+            item = saved.get(name)
+            item = item if isinstance(item, dict) else {}
+            result.append(
+                {
+                    "name": name,
+                    "desc": str(item.get("desc") or desc),
+                    "default": str(item.get("default", samples.get(name, ""))),
+                    "show": bool(item.get("show", True)),
+                }
+            )
+
+        for name, item in saved.items():
+            if name in self.get_var_definitions() or not isinstance(item, dict):
+                continue
+            result.append(
+                {
+                    "name": str(name),
+                    "desc": str(item.get("desc") or ""),
+                    "default": str(item.get("default") or ""),
+                    "show": bool(item.get("show", True)),
+                }
+            )
+
+        return result
+
+    def save_template_variables(self, variables: list[dict]) -> bool:
+        # 变量保存到用户配置的 variables 段
+        payload = {
+            str(item.get("name")): {
+                "desc": str(item.get("desc") or ""),
+                "default": str(item.get("default") or ""),
+                "show": bool(item.get("show", True)),
+            }
+            for item in variables
+            if isinstance(item, dict) and item.get("name")
+        }
+        return self._config_store.save_variables(payload)
 
     #  查询（supports_query 为 True 时实现）
 
@@ -364,14 +412,11 @@ class ModuleBase(ABC):
         return json_response({"status": "ok"})
 
     async def api_reset_config(self):
-        # 把模块配置恢复为 config.yaml 中的默认值
-        from astrbot.api.web import error_response, json_response
+        # 用默认配置覆盖用户配置
+        from astrbot.api.web import json_response
 
-        config = self.get_default_config()
-        if not self.save_module_config(config):
-            return error_response("恢复默认失败")
-
-        return json_response({"status": "ok", "config": self.config_payload(config)})
+        values = self._config_store.reset()
+        return json_response({"status": "ok", "config": self.config_payload(values)})
 
     def get_web_apis(self) -> list[dict]:
         # 默认提供配置读写与恢复默认；子类用 super().get_web_apis() + [...] 追加自有接口
