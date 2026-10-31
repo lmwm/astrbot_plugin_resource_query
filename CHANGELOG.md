@@ -1,3 +1,17 @@
+## v5.9.26 (2026-10-31)
+
+### 修复
+
+- **单条消息模板恢复默认无效**：`onClick` 里有两个同名 `case 'reset-template'`（账号模板的旧分支在前），消息模板按钮实际走进了旧分支；账号模板按钮改为 `reset-account-template`
+
+### 重构
+
+- **用户配置成为唯一来源**：`ConfigStore` 首次把 `modules/<模块>/config.yaml` 复制到 `plugin_data/.../config/<模块>/config.yaml`，之后字段定义、默认值、变量都从用户配置读取；Views 的 schema 也动态来自用户配置
+- **配置迁移**：旧版本用户配置（只有值、缺字段定义）在读取时补全 label/type/hint；旧 `config.json` 与 `var_config.json` 自动迁移
+- **变量并入用户配置**：变量保存在 `config/<模块>/config.yaml` 的 `variables` 段，不再使用 `var_config.json`
+
+---
+
 ## v5.9.25 (2026-10-31)
 
 ### 功能
