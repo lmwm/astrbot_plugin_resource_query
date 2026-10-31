@@ -1,3 +1,11 @@
+## v5.9.16 (2026-10-31)
+
+### 修复
+
+- **聊天进度消息发送失败**：`event.message_result()` 在 WebChat 事件上不存在（`'WebChatMessageEvent' object has no attribute 'message_result'`），改用 `MessageChain().message(text)` 经 `event.send` 发送
+
+---
+
 ## v5.9.15 (2026-10-31)
 
 ### 功能

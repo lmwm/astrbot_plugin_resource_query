@@ -12,6 +12,8 @@ import asyncio
 import logging
 import time
 
+from astrbot.api.event import MessageChain
+
 from ...core.module import ModuleBase
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
@@ -90,7 +92,7 @@ class UpdateModule(ModuleBase):
             return
 
         async def notify(text: str) -> None:
-            await event.send(event.message_result().message(text))
+            await event.send(MessageChain().message(text))
 
         outcome = await self._execute("chat", force=True, notify=notify)
         yield event.plain_result(outcome["message"])
