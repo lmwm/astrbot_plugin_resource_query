@@ -351,7 +351,10 @@
       return '<div class="card">' +
         '<div class="card-header">' +
           '<span class="card-title">变量配置</span>' +
-          (editable ? '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' : '') +
+          '<div class="header-actions">' +
+            (editable ? '<button class="btn btn-secondary btn-sm" data-action="add-var" data-module="' + esc(mod.name) + '">＋ 添加变量</button>' : '') +
+            (editable ? '<button class="btn btn-primary btn-sm" data-action="save-vars" data-module="' + esc(mod.name) + '">保存变量</button>' : '') +
+          '</div>' +
         '</div>' +
         '<div class="card-body"><div class="table-scroll"><table class="var-table">' +
           (editable
@@ -368,7 +371,10 @@
       return '<div class="card">' +
         '<div class="card-header">' +
           '<span class="card-title">' + esc(group.label || groupKey) + '</span>' +
-          '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存</button>' +
+          '<div class="header-actions">' +
+            '<button class="btn btn-secondary btn-sm" data-action="reset-templates" data-module="' + esc(mod.name) + '">全部恢复默认</button>' +
+            '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存</button>' +
+          '</div>' +
         '</div>' +
         '<div class="card-body">' +
           (group.hint ? '<div class="hint" style="margin-bottom:12px;white-space:pre-wrap">' + esc(group.hint) + '</div>' : '') +
@@ -380,7 +386,10 @@
     return '<div class="card">' +
       '<div class="card-header">' +
         '<span class="card-title">模块设置</span>' +
-        '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存设置</button>' +
+        '<div class="header-actions">' +
+          '<button class="btn btn-secondary btn-sm" data-action="reset-config" data-module="' + esc(mod.name) + '">恢复默认</button>' +
+          '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存设置</button>' +
+        '</div>' +
       '</div>' +
       '<div class="card-body">' + buildConfigFieldsHtml(mod) + '</div>' +
       '</div>';
@@ -443,8 +452,16 @@
     const id = 'cfg-' + mod.name + '-' + field.key;
     const previewId = 'preview-' + mod.name + '-' + field.key;
 
+    const reset = field.default !== undefined
+      ? '<button class="btn btn-ghost btn-sm field-reset" data-action="reset-template" ' +
+        'data-module="' + esc(mod.name) + '" data-field="' + esc(field.key) + '">↺ 恢复默认</button>'
+      : '';
+
     return '<div class="form-group">' +
-      '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
+      '<div class="form-label-row">' +
+        '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
+        reset +
+      '</div>' +
       '<div class="template-layout">' +
         '<div class="template-editor">' +
           '<div class="template-label">模板编辑</div>' +
@@ -514,6 +531,65 @@
     textarea.selectionStart = textarea.selectionEnd = start + token.length;
     textarea.focus();
     updateConfigTemplatePreview(moduleName, fieldKey);
+  }
+
+  /** 单条消息模板恢复为默认（只填入编辑框，保存后生效） */
+  function resetTemplateField(moduleName, fieldKey) {
+    const mod = moduleByName(moduleName);
+    const field = mod && (mod.config_fields || []).find((f) => f.key === fieldKey);
+    if (!field || field.default === undefined) return;
+
+    const textarea = $('cfg-' + moduleName + '-' + fieldKey);
+    if (!textarea) return;
+
+    textarea.value = field.default;
+    updateConfigTemplatePreview(moduleName, fieldKey);
+    toast('已填入默认模板，保存后生效');
+  }
+
+  /** 一组消息模板全部恢复为默认 */
+  function resetTemplateGroup(moduleName) {
+    const mod = moduleByName(moduleName);
+    if (!mod) return;
+
+    const fields = (mod.config_fields || []).filter((f) => f.type === 'template');
+    fields.forEach((field) => {
+      const textarea = $('cfg-' + mod.name + '-' + field.key);
+      if (textarea && field.default !== undefined) {
+        textarea.value = field.default;
+        updateConfigTemplatePreview(mod.name, field.key);
+      }
+    });
+
+    toast('已填入默认模板，保存后生效');
+  }
+
+  /** 模块设置恢复默认（调用后端 reset 接口） */
+  async function resetModuleConfig(moduleName) {
+    const mod = moduleByName(moduleName);
+    if (!mod) return;
+
+    try {
+      await api.post(mod.name + '/config/reset', {});
+      await reloadAll();
+      toast('已恢复默认设置');
+    } catch (e) {
+      toast('恢复失败：' + e.message, 'error');
+    }
+  }
+
+  /** 新增一行空变量 */
+  function addVariable(moduleName) {
+    const mod = moduleByName(moduleName);
+    if (!mod) return;
+
+    const list = variablesOf(moduleName).slice();
+    list.push({ name: '', desc: '', default: '', show: true });
+    state.vars[moduleName] = { variables: list };
+    renderVarTable(mod);
+
+    const inputs = document.querySelectorAll('#vars-' + moduleName + ' [data-var="name"]');
+    if (inputs.length) inputs[inputs.length - 1].focus();
   }
 
   function renderAccountList(mod) {
@@ -1194,6 +1270,22 @@
         insertConfigVariable(moduleName, target.dataset.field, target.dataset.name);
         break;
 
+      case 'reset-template':
+        resetTemplateField(moduleName, target.dataset.field);
+        break;
+
+      case 'reset-templates':
+        resetTemplateGroup(moduleName);
+        break;
+
+      case 'reset-config':
+        await resetModuleConfig(moduleName);
+        break;
+
+      case 'add-var':
+        addVariable(moduleName);
+        break;
+
       case 'save-config':
         await saveModuleConfig(moduleName);
         break;
@@ -1469,6 +1561,7 @@
       .template-preview { min-height: 160px; font-size: 12px; }
     }
   .config-textarea, .config-preview { min-height: 88px; }
+    .header-actions { display: flex; gap: 8px; flex-wrap: wrap; }
   </style>
 </head>
 <body>

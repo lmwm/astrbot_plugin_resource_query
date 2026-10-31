@@ -28,12 +28,29 @@ class ConfigStore:
         self._legacy_path = Path(config_path) / LEGACY_CONFIG_FILE
 
     def load(self, defaults: dict) -> dict:
-        # 默认值打底，再用用户配置覆盖
-        config = dict(defaults)
-        saved = self._load_saved()
-        if saved:
-            config.update(saved)
-        return config
+        # 用户配置存在时只读它；不存在时把默认配置复制过来
+        if self._path.exists():
+            saved = self._load_saved()
+            return saved if saved else dict(defaults)
+
+        # 旧版 JSON 迁移：补全默认值后写入 YAML，成功再删旧文件
+        legacy = load_json_file(self._legacy_path)
+        if legacy:
+            merged = {**defaults, **legacy}
+            if self.save(merged):
+                try:
+                    self._legacy_path.unlink()
+                except OSError:
+                    pass
+                logger.info(
+                    f"[config] 已将 {self._legacy_path.name} 迁移为 {self._path.name}"
+                )
+            return merged
+
+        # 没有默认值时不创建空配置（例如只读账号的模块）
+        if defaults:
+            self.save(defaults)
+        return dict(defaults)
 
     def save(self, config: dict) -> bool:
         # 按默认配置的键写块结构，只保存值
@@ -41,28 +58,11 @@ class ConfigStore:
         return save_yaml_file(self._path, payload)
 
     def _load_saved(self) -> dict:
-        if self._path.exists():
-            try:
-                data = parse_yaml(self._path.read_text(encoding="utf-8"))
-            except OSError:
-                return {}
-            return self._unwrap(data)
-
-        # 旧版 JSON 迁移：写入 YAML 成功后删除旧文件
-        legacy = load_json_file(self._legacy_path)
-        if not legacy:
+        try:
+            data = parse_yaml(self._path.read_text(encoding="utf-8"))
+        except OSError:
             return {}
-
-        if self.save(legacy):
-            try:
-                self._legacy_path.unlink()
-            except OSError:
-                pass
-            logger.info(
-                f"[config] 已将 {self._legacy_path.name} 迁移为 {self._path.name}"
-            )
-
-        return legacy
+        return self._unwrap(data) if isinstance(data, dict) else {}
 
     @staticmethod
     def _unwrap(data: dict) -> dict:

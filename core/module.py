@@ -363,8 +363,18 @@ class ModuleBase(ABC):
 
         return json_response({"status": "ok"})
 
+    async def api_reset_config(self):
+        # 把模块配置恢复为 config.yaml 中的默认值
+        from astrbot.api.web import error_response, json_response
+
+        config = self.get_default_config()
+        if not self.save_module_config(config):
+            return error_response("恢复默认失败")
+
+        return json_response({"status": "ok", "config": self.config_payload(config)})
+
     def get_web_apis(self) -> list[dict]:
-        # 默认提供配置读写接口；子类用 super().get_web_apis() + [...] 追加自有接口
+        # 默认提供配置读写与恢复默认；子类用 super().get_web_apis() + [...] 追加自有接口
         return [
             {
                 "path": "config",
@@ -377,6 +387,12 @@ class ModuleBase(ABC):
                 "handler": self.api_save_config,
                 "methods": ["POST"],
                 "desc": "保存模块配置",
+            },
+            {
+                "path": "config/reset",
+                "handler": self.api_reset_config,
+                "methods": ["POST"],
+                "desc": "恢复模块默认配置",
             },
         ]
 

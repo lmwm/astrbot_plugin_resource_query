@@ -364,3 +364,9 @@ class UpdateModule(ModuleBase):
         response = await super().api_save_config()
         await self._sync_schedule()
         return response
+
+    async def api_reset_config(self):
+        # 恢复默认后同样重排定时任务
+        response = await super().api_reset_config()
+        await self._sync_schedule()
+        return response
