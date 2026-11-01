@@ -1,3 +1,10 @@
+## v6.1.3 (2026-11-01)
+
+### 修复
+
+- **重载结果改为状态写日志**：`reload_plugin` 返回 `{"ok", "error"}`，不再拼接「√ 插件已自动重载，新版本已生效」「请手动在 WebUI 重载插件」等用户文案；更新日志只写 `reload=ok` / `reload=failed error=...`
+- **日志去掉与模板重复的中文**：`result=skip（已是最新）` → `result=skip`，`reload=发起中` → `reload=start`
+
 ## v6.1.2 (2026-11-01)
 
 ### 修复

@@ -171,7 +171,7 @@ class UpdateModule(ModuleBase):
                 await say("message_checking")
 
                 if not force and not has_update:
-                    journal.append("result=skip（已是最新）")
+                    journal.append("result=skip")
                     journal.prune()
                     return {
                         "ok": True,
@@ -201,13 +201,17 @@ class UpdateModule(ModuleBase):
                     }
 
                 # 重载会卸载当前插件，先把更新结果落盘
-                journal.append("reload=发起中")
+                journal.append("reload=start")
                 journal.prune()
 
-                reload_text = await reload_plugin(self._context)
+                reload = await reload_plugin(self._context)
                 elapsed = f"{time.monotonic() - started:.1f}"
                 variables["elapsed"] = elapsed
-                journal.append(f"reload={reload_text}")
+                journal.append(
+                    "reload=ok"
+                    if reload.get("ok")
+                    else f"reload=failed error={reload.get('error') or ''}"
+                )
                 journal.append(f"elapsed={elapsed}s")
                 journal.prune()
 

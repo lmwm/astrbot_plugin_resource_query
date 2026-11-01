@@ -281,13 +281,14 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
     return await loop.run_in_executor(None, _download_and_extract)
 
 
-async def reload_plugin(context) -> str:
+async def reload_plugin(context) -> dict:
     # 调用 Dashboard API 重载插件，使新版本生效
     #
     #     优先使用 AstrBot 4.29+ 的 REST 路由 `/api/v1/plugins/{name}/reload`，
     #     失败时回退到旧路由 `/api/plugin/reload`（旧版 AstrBot 仍在使用）。
+    #     返回 {"ok": bool, "error": str}，只给调用方写日志用，不生成用户文案。
 
-    def _do_reload() -> str:
+    def _do_reload() -> dict:
         try:
             dashboard = (context.get_config() or {}).get("dashboard", {})
             host = dashboard.get("host", "127.0.0.1")
@@ -299,7 +300,10 @@ async def reload_plugin(context) -> str:
             jwt_secret = dashboard.get("jwt_secret")
 
             if not username or not jwt_secret:
-                return "! Dashboard 未配置账号密钥，请手动在 WebUI 重载插件"
+                return {
+                    "ok": False,
+                    "error": "dashboard credentials not configured",
+                }
 
             payload = {
                 "username": username,
@@ -333,18 +337,21 @@ async def reload_plugin(context) -> str:
                     with opener.open(request, timeout=15) as response:
                         result = json.loads(response.read())
                 except (OSError, TimeoutError, json.JSONDecodeError) as e:
-                    last_error = str(e)
+                    last_error = f"{type(e).__name__}: {e}"
                     continue
 
                 if result.get("status") == "ok":
-                    return "√ 插件已自动重载，新版本已生效"
+                    return {"ok": True, "error": ""}
 
-                last_error = f"重载返回: {result.get('message', result)}"
+                last_error = (
+                    f"status={result.get('status')} "
+                    f"detail={result.get('message', result)}"
+                )
 
-            return f"! 自动重载失败: {last_error}，请手动在 WebUI 重载插件"
+            return {"ok": False, "error": last_error}
 
         except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
-            return f"! 自动重载失败: {e}，请手动在 WebUI 重载插件"
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _do_reload)
