@@ -167,7 +167,7 @@ async def check_update(
         return last or {
             "latest": "",
             "current": current_version,
-            "error": "没有可用的下载地址",
+            "error": "",
         }
 
     loop = asyncio.get_running_loop()
@@ -184,7 +184,7 @@ async def check_update(
 
 async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dict:
     # 下载远端源码归档 zip 并整目录替换插件目录；sha 非空时跳过提交号请求
-    # 返回 {"ok": bool, "sha": str, "message": str}
+    # 返回 {"ok": bool, "sha": str, "error": str}，error 只放失败原因，消息文案由调用方渲染
 
     def _get_sha(prefix: str) -> str:
         opener, _ = new_opener()
@@ -253,13 +253,13 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
         return {
             "ok": True,
             "sha": commit,
-            "message": f"√ 更新完成，新版本已下载（commit: {commit[:7]}）",
+            "error": "",
         }
 
     def _download_and_extract() -> dict:
         # 下载源码归档并整目录替换；换代理/直连依次重试
         commit = _resolve_commit()
-        last_error = "没有可用的下载地址"
+        last_error = ""
 
         for prefix in _proxy_candidates(proxy):
             try:
@@ -275,7 +275,7 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
                 last_error = str(e)
                 continue
 
-        return {"ok": False, "sha": "", "message": f"× 更新失败: {last_error}"}
+        return {"ok": False, "sha": "", "error": last_error}
 
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(None, _download_and_extract)

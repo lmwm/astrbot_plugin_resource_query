@@ -77,7 +77,7 @@ class UpdateModule(ModuleBase):
 
         config = self.load_module_config()
         await self._schedule.sync(
-            enabled=bool(config.get("schedule_enabled", True)),
+            enabled=bool(config.get("schedule_enabled")),
             cron_expression=str(config.get("schedule_cron") or "").strip(),
         )
 
@@ -96,7 +96,7 @@ class UpdateModule(ModuleBase):
 
         config = self.load_module_config()
         force = any(str(arg).lower() == "-f" for arg in args) or bool(
-            config.get("force_update", True)
+            config.get("force_update")
         )
         outcome = await self._execute("chat", force=force, notify=notify)
         yield event.plain_result(outcome["message"])
@@ -116,7 +116,10 @@ class UpdateModule(ModuleBase):
             started = time.monotonic()
             config = self.load_module_config()
             proxy = str(config.get("proxy") or "").strip()
-            retries = self._to_int(config.get("max_retries"), 3)
+            retries = self._to_int(
+                config.get("max_retries"),
+                int(self._config_store.default_values().get("max_retries") or 0),
+            )
             current = get_current_version()
 
             # 模板变量始终提供完整键，尚未产生值的阶段为空字符串
@@ -136,7 +139,7 @@ class UpdateModule(ModuleBase):
                 # 过程提示：聊天触发时直接发送；定时触发不通知
                 if notify is None:
                     return
-                text = self._render(config.get(key, ""), variables)
+                text = self._render(config.get(key), variables)
                 if text:
                     await notify(text)
 
@@ -150,7 +153,7 @@ class UpdateModule(ModuleBase):
                     return {
                         "ok": False,
                         "message": self._render(
-                            config.get("message_error", ""), variables
+                            config.get("message_error"), variables
                         ),
                     }
 
@@ -173,7 +176,7 @@ class UpdateModule(ModuleBase):
                     return {
                         "ok": True,
                         "message": self._render(
-                            config.get("message_skip", ""), variables
+                            config.get("message_skip"), variables
                         ),
                     }
 
@@ -186,14 +189,14 @@ class UpdateModule(ModuleBase):
                 journal.append(f"update ok={bool(result.get('ok'))} sha={sha}")
 
                 if not result.get("ok"):
-                    message = str(result.get("message") or "更新失败")
-                    variables["error"] = message
-                    journal.append(f"result=error message={message}")
+                    error = str(result.get("error") or "")
+                    variables["error"] = error
+                    journal.append(f"result=error error={error}")
                     journal.prune()
                     return {
                         "ok": False,
                         "message": self._render(
-                            config.get("message_error", ""), variables
+                            config.get("message_error"), variables
                         ),
                     }
 
@@ -210,13 +213,17 @@ class UpdateModule(ModuleBase):
 
                 return {
                     "ok": True,
-                    "message": self._render(config.get("message_done", ""), variables),
+                    "message": self._render(config.get("message_done"), variables),
                 }
             except Exception as e:  # noqa: BLE001
-                journal.append(f"result=exception {type(e).__name__}: {e}")
+                variables["error"] = f"{type(e).__name__}: {e}"
+                journal.append(f"result=exception {variables['error']}")
                 journal.prune()
-                logger.error(f"[update] 更新异常: {type(e).__name__}: {e}")
-                return {"ok": False, "message": f"× 更新异常: {e}"}
+                logger.error(f"[update] 更新异常: {variables['error']}")
+                return {
+                    "ok": False,
+                    "message": self._render(config.get("message_error"), variables),
+                }
 
     @staticmethod
     def _render(template, variables: dict) -> str:
