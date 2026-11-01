@@ -16,6 +16,19 @@ from .utils import get_data_path
 PLUGIN_NAME = Path(__file__).resolve().parents[1].name
 
 
+class _PluginForwardHandler(logging.Handler):
+    # 把记录交给 AstrBot 插件 logger，让它的过滤器补齐 plugin_tag 等字段
+    def __init__(self, target_name: str) -> None:
+        super().__init__()
+        self._target_name = target_name
+
+    def emit(self, record) -> None:
+        target = logging.getLogger(self._target_name)
+        clone = logging.makeLogRecord(record.__dict__)
+        clone.name = target.name
+        target.handle(clone)
+
+
 class _PluginFormatter(logging.Formatter):
     # 输出 AstrBot 风格行；logger 名称去掉 AstrBot 插件前缀
     def __init__(self, prefix: str) -> None:
@@ -43,9 +56,13 @@ def module_logger(module_name: str) -> logging.Logger:
 
 
 def setup_module_logger(module_name: str) -> logging.Logger:
-    # 给模块 logger 挂追加写的文件处理器；重复调用复用同一个
+    # 给模块 logger 挂文件处理器与转发处理器；重复调用复用同一个
+    #
+    #     子 logger 不向上传播（父 logger 的过滤器不会对传播记录生效），
+    #     而是显式转发一条克隆记录给 AstrBot 插件 logger 处理。
     logger = module_logger(module_name)
     logger.setLevel(logging.INFO)
+    logger.propagate = False
 
     path = get_data_path(PLUGIN_NAME) / "logs" / f"{module_name}.log"
     key = str(path)
@@ -60,6 +77,10 @@ def setup_module_logger(module_name: str) -> logging.Logger:
     handler.setFormatter(_PluginFormatter(f"astrbot.plugin.{PLUGIN_NAME}."))
     handler._plugin_log_path = key
     logger.addHandler(handler)
+
+    forward = _PluginForwardHandler(f"astrbot.plugin.{PLUGIN_NAME}")
+    forward.setLevel(logging.INFO)
+    logger.addHandler(forward)
 
     return logger
 
