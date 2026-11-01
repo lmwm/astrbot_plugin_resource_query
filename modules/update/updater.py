@@ -39,22 +39,9 @@ _PLUGIN_DIR = Path(__file__).resolve().parents[2]
 def _proxy_candidates(proxy: str) -> tuple[str, ...]:
     # 返回本次请求要依次尝试的代理前缀
     #
-    #     用户配置的代理排在最前；若它不可用，再回退到默认镜像与直连，
-    #     避免一个失效代理让整个更新流程不可用。
+    #     只用配置里的代理；留空或该代理失败时直连，不再内置额外镜像。
     proxy = proxy.strip().rstrip("/")
-
-    candidates = [proxy] if proxy else []
-    candidates.extend(["https://gh-proxy.com/", ""])
-
-    seen: set[str] = set()
-    result: list[str] = []
-    for item in candidates:
-        key = item.rstrip("/")
-        if key in seen:
-            continue
-        seen.add(key)
-        result.append(item)
-    return tuple(result)
+    return (proxy, "") if proxy else ("",)
 
 
 def get_current_version() -> str:

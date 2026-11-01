@@ -28,7 +28,7 @@ CONFIG_FIELDS = {
     "proxy": {
         "label": "GitHub 代理",
         "type": "text",
-        "hint": "如 https://gh-proxy.com/，留空使用默认代理",
+        "hint": "如 https://gh-proxy.com/；留空则直连（不使用代理）",
         "default": "https://gh-proxy.com/",
     },
     "max_retries": {
