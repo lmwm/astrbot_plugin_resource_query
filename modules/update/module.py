@@ -201,6 +201,11 @@ class UpdateModule(ModuleBase):
                         "message": result_message("message_error"),
                     }
 
+                # 文件已替换：重读插件目录版本，{current} 表示本地更新后的版本
+                current = get_current_version()
+                variables["current"] = current
+                logger.info(f"local version after update={current}")
+
                 # 重载会卸载当前插件，先记录再发起
                 logger.info("reload=start")
 
