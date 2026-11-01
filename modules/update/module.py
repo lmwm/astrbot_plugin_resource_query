@@ -1,10 +1,10 @@
 # 插件更新模块
 #
 # 两种触发共用同一执行体：
-#   - 聊天：`/query update`，按 force_update 配置决定是否强制重装
-#   - 自动：AstrBot cron 回调，版本号或提交号与插件目录不一致才更新，只写日志
+#   - 聊天：`/query update [-F]`，加 -F 或配置开启「强制更新」时忽略版本号
+#   - 自动：AstrBot cron 回调，只比较版本号，有新版本才更新，只写日志
 #
-# 当前版本读插件目录的 metadata.yaml，当前提交读插件目录的 .git（无仓库时为空）。
+# 当前版本读插件目录的 metadata.yaml；不保存、也不读取提交号状态。
 # 日志目录：plugin_data/<插件>/logs/update/，只保留最近 10 个文件。
 
 from __future__ import annotations
@@ -19,13 +19,7 @@ from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
-from .updater import (
-    check_update,
-    do_update,
-    get_current_commit,
-    get_current_version,
-    reload_plugin,
-)
+from .updater import check_update, do_update, get_current_version, reload_plugin
 
 logger = logging.getLogger(__name__)
 
@@ -90,10 +84,10 @@ class UpdateModule(ModuleBase):
     #  指令
 
     def get_commands(self) -> list[dict]:
-        return [{"name": "query update", "desc": "检查并更新插件"}]
+        return [{"name": "query update", "desc": "检查并更新插件：/query update [-F]"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        # 聊天触发：进度与结果都发回会话
+        # 聊天触发：进度与结果都发回会话；-F 表示忽略版本号强制更新
         if command != "update":
             return
 
@@ -101,14 +95,16 @@ class UpdateModule(ModuleBase):
             await event.send(MessageChain().message(text))
 
         config = self.load_module_config()
-        force = bool(config.get("force_update", True))
+        force = any(str(arg).lower() == "-f" for arg in args) or bool(
+            config.get("force_update", True)
+        )
         outcome = await self._execute("chat", force=force, notify=notify)
         yield event.plain_result(outcome["message"])
 
     #  执行体
 
     async def _run_scheduled(self) -> None:
-        # 定时触发：不通知聊天，结果只写日志
+        # 定时触发：只按版本号判断，不通知聊天，结果只写日志
         try:
             await self._execute("schedule", force=False)
         except Exception as e:  # noqa: BLE001
@@ -122,14 +118,11 @@ class UpdateModule(ModuleBase):
             proxy = str(config.get("proxy") or "").strip()
             retries = self._to_int(config.get("max_retries"), 3)
             current = get_current_version()
-            current_commit = get_current_commit()
 
             # 模板变量始终提供完整键，尚未产生值的阶段为空字符串
             variables = {
                 "current": current,
                 "latest": "",
-                "current_sha": current_commit,
-                "current_sha7": current_commit[:7],
                 "sha": "",
                 "sha7": "",
                 "elapsed": "",
@@ -148,9 +141,7 @@ class UpdateModule(ModuleBase):
                     await notify(text)
 
             try:
-                check = await check_update(
-                    proxy, retries, force=force, current_commit=current_commit
-                )
+                check = await check_update(proxy, retries, force=force)
                 if check.get("error"):
                     error = str(check["error"])
                     variables["error"] = error

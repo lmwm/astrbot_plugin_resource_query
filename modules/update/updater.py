@@ -1,12 +1,12 @@
 # 插件自动更新实现
 #
 # 包含三部分：
-#   - `check_update`：读取远端 metadata.yaml 并比较版本号/提交号
-#   - `do_update`：优先用 git 克隆指定提交，失败时回退 zip 下载
+#   - `check_update`：读取远端 metadata.yaml 并比较版本号
+#   - `do_update`：下载远端源码归档 zip 并整体替换插件目录
 #   - `reload_plugin`：调用 Dashboard API 让新版本生效
 #
-# 当前版本读插件目录的 metadata.yaml，当前提交读插件目录的 .git（git 安装时才有）。
-# 更新时整体替换插件目录（含 .git）；临时目录在 plugin_data/<插件>/tmp/update，
+# 当前版本读插件目录的 metadata.yaml；不保存、也不读取任何提交号状态。
+# 更新时清空插件目录后解压归档；临时目录在 plugin_data/<插件>/tmp/update，
 # 成功或失败都会清理。
 
 from __future__ import annotations
@@ -16,10 +16,8 @@ import datetime
 import io
 import json
 import os
-import re
 import shutil
 import stat
-import subprocess
 import zipfile
 from pathlib import Path
 from urllib.request import Request
@@ -32,14 +30,10 @@ from ...http_utils import new_opener, proxy_url, retry
 _REPO_OWNER = "lmwm"
 _REPO_NAME = "astrbot_plugin_resource_query"
 _GITHUB_API = f"https://api.github.com/repos/{_REPO_OWNER}/{_REPO_NAME}"
-_GIT_URL = f"https://github.com/{_REPO_OWNER}/{_REPO_NAME}.git"
 _USER_AGENT = "astrbot-plugin-resource-query-updater"
 
 # 插件根目录（modules/update/updater.py 的上两级）
 _PLUGIN_DIR = Path(__file__).resolve().parents[2]
-
-# 提交号格式（SHA-1 40 位 / SHA-256 64 位）
-_COMMIT_RE = re.compile(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?")
 
 
 def _proxy_candidates(proxy: str) -> tuple[str, ...]:
@@ -78,85 +72,6 @@ def get_current_version() -> str:
     return "0.0.0"
 
 
-def get_current_commit() -> str:
-    # 从插件目录的 .git 读取当前提交；插件不是 git 仓库时返回空字符串
-    git_dir = _PLUGIN_DIR / ".git"
-
-    try:
-        if git_dir.is_file():
-            # worktree 场景：.git 是内容为 "gitdir: <路径>" 的文本文件
-            content = git_dir.read_text(encoding="utf-8").strip()
-            if not content.startswith("gitdir:"):
-                return ""
-            git_dir = (_PLUGIN_DIR / content.split(":", 1)[1].strip()).resolve()
-
-        head = (git_dir / "HEAD").read_text(encoding="utf-8").strip()
-    except OSError:
-        return ""
-
-    # 分离头指针（detached HEAD）时 HEAD 直接是提交号
-    if not head.startswith("ref:"):
-        return head if _COMMIT_RE.fullmatch(head) else ""
-
-    ref = head.split(":", 1)[1].strip()
-    try:
-        commit = (git_dir / ref).read_text(encoding="utf-8").strip()
-        if _COMMIT_RE.fullmatch(commit):
-            return commit
-    except OSError:
-        pass
-
-    # 引用已被打包时从 packed-refs 查找
-    try:
-        packed = (git_dir / "packed-refs").read_text(encoding="utf-8")
-    except OSError:
-        return ""
-
-    for line in packed.splitlines():
-        parts = line.strip().split()
-        if len(parts) == 2 and parts[1] == ref and _COMMIT_RE.fullmatch(parts[0]):
-            return parts[0]
-
-    return ""
-
-
-def _git_available() -> bool:
-    # 本机是否有可用的 git 命令
-    return shutil.which("git") is not None
-
-
-def _clone_commit(url: str, commit: str, target: Path, timeout: int = 120) -> bool:
-    # 浅克隆指定提交到 target
-    #
-    #     先 init + remote，再 fetch 该提交，最后把本地 main 指到它；
-    #     这样 .git/HEAD 与源码一致，get_current_commit() 能读到准确值。
-    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
-
-    steps = (
-        ["git", "init", "-q", str(target)],
-        ["git", "-C", str(target), "remote", "add", "origin", url],
-        ["git", "-C", str(target), "fetch", "--depth", "1", "origin", commit],
-        ["git", "-C", str(target), "checkout", "-q", "-B", "main", "FETCH_HEAD"],
-    )
-
-    for step in steps:
-        try:
-            proc = subprocess.run(
-                step,
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                env=env,
-                check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            return False
-        if proc.returncode != 0:
-            return False
-
-    return True
-
-
 def _remove_tree(path: Path) -> None:
     # 删除目录；git 对象文件在 Windows 上是只读的，失败时去掉只读再删
     if not path.exists():
@@ -173,7 +88,7 @@ def _remove_tree(path: Path) -> None:
 
 
 def _replace_plugin_dir(source_dir: Path) -> None:
-    # 用 source_dir 的内容整体替换插件目录（包括 .git）
+    # 用 source_dir 的内容整体替换插件目录（旧的 .git 等残留一并删除）
     for item in _PLUGIN_DIR.iterdir():
         if item.is_dir():
             _remove_tree(item)
@@ -184,32 +99,21 @@ def _replace_plugin_dir(source_dir: Path) -> None:
         shutil.move(str(item), str(_PLUGIN_DIR / item.name))
 
 
-def decide_update(
-    current_version: str,
-    current_commit: str,
-    latest_version: str,
-    remote_commit: str,
-    force: bool,
-) -> bool:
-    # 判断是否需要更新：强制 > 版本号 > 提交号（只有本地能读到提交时才比较提交）
+def decide_update(current_version: str, latest_version: str, force: bool) -> bool:
+    # 判断是否需要更新：强制更新，或远端版本号与插件目录不同
     if force:
         return True
     if not latest_version:
         return False
-    if latest_version != current_version:
-        return True
-    if remote_commit and current_commit:
-        return remote_commit != current_commit
-    return False
+    return latest_version != current_version
 
 
 async def check_update(
     proxy: str = "",
     max_retries: int = 3,
     force: bool = False,
-    current_commit: str = "",
 ) -> dict:
-    # 检查远端是否有新版本；版本不同或提交不同（本地可读到时）才更新
+    # 检查远端是否有新版本；只比较版本号（force 时忽略版本）
     current_version = get_current_version()
 
     def _fetch_sha(prefix: str) -> str:
@@ -282,12 +186,9 @@ async def check_update(
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, _fetch)
     result.setdefault("remote_commit", "")
-    result["current_commit"] = current_commit
     result["has_update"] = decide_update(
         current_version,
-        current_commit,
         str(result.get("latest") or ""),
-        str(result.get("remote_commit") or ""),
         force,
     )
     result["force"] = force
@@ -295,7 +196,7 @@ async def check_update(
 
 
 async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dict:
-    # 优先用 git 克隆指定提交，失败时回退 zip 下载
+    # 下载远端源码归档 zip 并整目录替换插件目录；sha 非空时跳过提交号请求
     # 返回 {"ok": bool, "sha": str, "message": str}
 
     def _get_sha(prefix: str) -> str:
@@ -323,33 +224,8 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
                 return commit
         return ""
 
-    def _git_update(commit: str) -> bool:
-        # git 克隆该提交并整目录替换；保留 .git，使 HEAD 与源码一致
-        if not _git_available():
-            return False
-
-        tmp_dir = get_data_path(_REPO_NAME) / "tmp" / "update"
-        _remove_tree(tmp_dir)
-        tmp_dir.mkdir(parents=True, exist_ok=True)
-        repo_dir = tmp_dir / "repo"
-
-        try:
-            for prefix in _proxy_candidates(proxy):
-                url = f"{prefix}{_GIT_URL}" if prefix else _GIT_URL
-                _remove_tree(repo_dir)
-                if _clone_commit(url, commit, repo_dir):
-                    _replace_plugin_dir(repo_dir)
-                    return True
-            return False
-        finally:
-            _remove_tree(tmp_dir)
-            try:
-                tmp_dir.parent.rmdir()
-            except OSError:
-                pass
-
     def _download_with(prefix: str, commit: str) -> dict:
-        # zip 回退：整目录清空后重装（不保留 .git，避免 HEAD 与源码不一致）
+        # 下载源码归档 zip，解压后整目录替换插件目录
         if not commit:
             raise RuntimeError("无法获取远端提交号")
 
@@ -394,16 +270,8 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
         }
 
     def _download_and_extract() -> dict:
-        # 1. 优先 git 克隆：更新后仍能读提交号
+        # 下载源码归档并整目录替换；换代理/直连依次重试
         commit = _resolve_commit()
-        if commit and _git_update(commit):
-            return {
-                "ok": True,
-                "sha": commit,
-                "message": f"√ 更新完成（git，commit: {commit[:7]}）",
-            }
-
-        # 2. 回退 zip：整目录清空重装
         last_error = "没有可用的下载地址"
 
         for prefix in _proxy_candidates(proxy):
