@@ -1,21 +1,15 @@
-# 简易 YAML 配置解析（插件内部只读配置专用）
+# 简易 YAML 解析（仅供旧配置迁移）
 #
-# 各模块的默认值写在 `modules/<模块>/config.yaml`，结构固定
-# （两级键值 + 块标量），因此这里用手写解析器，保持零外部依赖。
+# 5.9.x 及更早版本把模块配置与更新状态写成 YAML；6.0 起改为 JSON。
+# 本文件只保留解析能力，供 ConfigStore 与 update 模块把旧文件转成 JSON 时使用，
+# 新代码不要再引用；等旧版本用户都完成升级后可以整体删除。
 #
-# 支持：
-#   - 两级缩进的键值对
-#   - 字符串（含引号）、bool、int、float、null 的类型推断
-#   - 块标量 `|` `|-` `|+` `>` `>-` `>+`
-#   - `#` 注释与空行
+# 支持旧文件用到的子集：两级以上缩进键值、字符串/布尔/数字/null 类型推断、
+# `|` / `>` 系列块标量、`#` 注释与空行。
 
 from __future__ import annotations
 
 import re
-from pathlib import Path
-
-# 按文件路径缓存解析结果，避免重复读盘
-_CACHE: dict[str, dict] = {}
 
 _BLOCK_SCALAR_RE = re.compile(r"^[|>][+-]?$")
 _KEY_RE = re.compile(r"^(\w+):\s*(.*)?$")
@@ -148,7 +142,11 @@ def parse_yaml(text: str) -> dict:
             continue
 
         if raw_value:
-            parent[key] = _convert_value(_unquote(raw_value))
+            # 带引号的值按字符串处理，避免 "177.40" 被转成 177.4
+            if raw_value[0] in "\"'":
+                parent[key] = _unquote(raw_value)
+            else:
+                parent[key] = _convert_value(raw_value)
             i += 1
             continue
 
@@ -159,79 +157,3 @@ def parse_yaml(text: str) -> dict:
         i += 1
 
     return root
-
-
-def load_yaml_config(path: Path) -> dict:
-    # 加载并缓存 YAML 配置文件
-    cache_key = str(path)
-    if cache_key in _CACHE:
-        return _CACHE[cache_key]
-
-    data: dict = {}
-    try:
-        if path.exists():
-            data = parse_yaml(path.read_text(encoding="utf-8"))
-    except OSError:
-        data = {}
-
-    _CACHE[cache_key] = data
-    return data
-
-
-def get_config_value(config: dict, key_path: str, default=None):
-    # 按点号路径读取配置值
-    value = config
-    for key in key_path.split("."):
-        if isinstance(value, dict) and key in value:
-            value = value[key]
-        else:
-            return default
-    return value
-
-
-def _dump_scalar(key: str, value, indent: int) -> list[str]:
-    # 写一个键值对；dict 递归一层，多行字符串用 `|-` 块标量
-    pad = " " * indent
-
-    if isinstance(value, bool):
-        return [f"{pad}{key}: {str(value).lower()}"]
-    if isinstance(value, (int, float)):
-        return [f"{pad}{key}: {value}"]
-    if value is None:
-        return [f"{pad}{key}: null"]
-    if isinstance(value, dict):
-        lines = [f"{pad}{key}:"]
-        for sub_key, sub_value in value.items():
-            lines.extend(_dump_scalar(sub_key, sub_value, indent + 2))
-        return lines
-    if isinstance(value, str):
-        if "\n" in value:
-            lines = [f"{pad}{key}: |-"]
-            for part in value.split("\n"):
-                lines.append(f"{pad}  {part}" if part else "")
-            return lines
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        return [f'{pad}{key}: "{escaped}"']
-
-    return [f'{pad}{key}: "{value}"']
-
-
-def dump_yaml(data: dict) -> str:
-    # 把配置字典写成 YAML（支持一层嵌套，例如 {key: {"value": x}}）
-    lines: list[str] = []
-
-    for key, value in data.items():
-        lines.extend(_dump_scalar(key, value, 0))
-
-    return "\n".join(lines) + "\n"
-
-
-def save_yaml_file(path, data: dict) -> bool:
-    # 把配置字典写成 YAML 文件
-    try:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(dump_yaml(data), encoding="utf-8")
-        return True
-    except OSError:
-        return False

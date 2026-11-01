@@ -1,3 +1,23 @@
+## v6.0.0 (2026-11-01)
+
+### 重构
+
+- **配置改为 Python 默认值 + JSON 用户配置**：
+  - 默认值、字段定义（label/type/hint）、默认模板与变量说明移入各模块的 `defaults.py`，删除 `modules/<模块>/config.yaml`
+  - 用户配置改为 `plugin_data/.../config/<模块>/config.json`，只保存值（扁平键值 + `variables` 段），缺少的项回退 Python 默认值
+  - 保存只写模块声明的字段，只读字段（如 `current_version`）不会落盘；恢复默认移除值键、保留变量配置
+- **旧配置自动迁移**：首次读取时把 `config.yaml`（块结构 / 扁平结构 / jm 的 `defaults`+`fields` 旧结构）与 `var_config.json` 转成 `config.json` 并删除原文件；`update_state.yaml` 迁移为 `update_state.json`
+- **JM 设置页恢复**：jm 的 12 项下载配置此前因默认配置结构不被识别而无法在 Views 中编辑，现已随 `defaults.py` 正常显示
+
+### 移除
+
+- `modules/{mimo,wasu,jm,update}/config.yaml`
+- `common/yaml_utils.py` 的写入与缓存能力，仅保留旧配置迁移所需的 `parse_yaml`
+
+### 其他
+
+- YAML 解析器改为按需导入，只在迁移旧文件时加载；带引号的值按字符串保留（如 `"177.40"` 不再变成 `177.4`）
+
 ## v5.9.26 (2026-10-31)
 
 ### 修复

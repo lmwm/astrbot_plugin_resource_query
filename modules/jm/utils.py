@@ -1,6 +1,6 @@
 # JMComic 模块工具
 #
-# 配置默认值与字段定义在 modules/jm/config.yaml，由 ConfigStore 读取。
+# 默认配置与字段定义在 defaults.py，由 ConfigStore 读取。
 
 from __future__ import annotations
 

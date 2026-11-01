@@ -4,8 +4,8 @@
 # 登录、凭据刷新等底层逻辑由内部 MimoManager 负责。
 #
 # 配置分层：
-#   - 模块级默认值（Views「模块设置」）→ config/mimo/config.json
-#   - 只读兜底默认值 → modules/mimo/config.yaml
+#   - 默认值（只读）→ defaults.py
+#   - 用户配置（Views 保存，只存值）→ config/mimo/config.json
 #   - 账号级覆盖 → config/mimo/<账号>.json
 
 from __future__ import annotations
@@ -13,10 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...core.module import ModuleBase
+from .defaults import DEFAULT_TEMPLATE, VARIABLES
 from .manager import MimoManager
 from .result import MimoResult
-from .utils import get_default_device_id, get_default_template, get_default_ua
-from .utils import get_var_definitions as _load_var_definitions
+from .utils import get_default_device_id, get_default_ua
 
 # 账号字段分组：三种凭据方式作为标签页，设备信息作为内联区块
 _ACCOUNT_GROUPS = [
@@ -88,6 +88,11 @@ _CREDENTIAL_KEYS = ("userId", "passToken", "serviceToken")
 
 class MimoModule(ModuleBase):
     # 小米 MiMo 用量查询模块
+
+    #  默认配置（来自 defaults.py）
+
+    variable_defaults = VARIABLES
+    default_template = DEFAULT_TEMPLATE
 
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
         # 初始化模块
@@ -171,14 +176,6 @@ class MimoModule(ModuleBase):
                 field["default"] = defaults[field["key"]]
 
         return fields
-
-    def get_var_definitions(self) -> dict[str, str]:
-        # 模板变量说明（来自 modules/mimo/config.yaml）
-        return _load_var_definitions()
-
-    def get_default_template(self) -> str:
-        # 默认消息模板
-        return get_default_template()
 
     #  账号管理
 

@@ -18,9 +18,9 @@ from urllib.request import Request
 from ...core.module import ModuleBase
 from ...http_utils import new_opener
 from .constants import DEFAULT_BASE_URL, DEFAULT_HEADERS
+from .defaults import DEFAULT_TEMPLATE, VARIABLES
 from .result import WasuResult
-from .utils import fmt_gb, fmt_yuan, get_default_template
-from .utils import get_var_definitions as _load_var_definitions
+from .utils import fmt_gb, fmt_yuan
 
 # 账号表单字段
 _ACCOUNT_FIELDS = [
@@ -42,6 +42,11 @@ class WasuApiError(Exception):
 
 class WasuModule(ModuleBase):
     # 华数广电查询模块
+
+    #  默认配置（来自 defaults.py）
+
+    variable_defaults = VARIABLES
+    default_template = DEFAULT_TEMPLATE
 
     #  元信息
 
@@ -96,14 +101,6 @@ class WasuModule(ModuleBase):
     def get_account_fields(self) -> list[dict]:
         # 账号表单字段定义
         return _ACCOUNT_FIELDS
-
-    def get_var_definitions(self) -> dict[str, str]:
-        # 模板变量说明（来自 modules/wasu/config.yaml）
-        return _load_var_definitions()
-
-    def get_default_template(self) -> str:
-        # 默认消息模板
-        return get_default_template()
 
     async def query(self, account: dict) -> WasuResult:
         # 查询单个华数账号

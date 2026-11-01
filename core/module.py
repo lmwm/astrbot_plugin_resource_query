@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from ..common import utils as common_utils
 from ..common.utils import get_platform_path
@@ -32,6 +32,11 @@ if TYPE_CHECKING:
 class ModuleBase(ABC):
     # 功能模块基类
 
+    # 默认配置（子类用 defaults.py 覆盖）：字段定义、变量说明、默认消息模板
+    config_fields: ClassVar[dict[str, dict]] = {}
+    variable_defaults: ClassVar[dict[str, str]] = {}
+    default_template: ClassVar[str] = ""
+
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
         # 初始化模块；配置目录与账号存储在构造时一次性定位
         self._plugin_dir = plugin_dir
@@ -39,8 +44,7 @@ class ModuleBase(ABC):
         self._registry: ModuleRegistry | None = None
         self._context: Any = None
         self._config_store = ConfigStore(
-            self.get_config_path(),
-            Path(self._plugin_dir) / "modules" / self.module_name / "config.yaml",
+            self.get_config_path(), self.config_fields, self.variable_defaults
         )
         self._account_store = AccountStore(
             self.get_config_path(), self.account_file_prefix
@@ -130,7 +134,7 @@ class ModuleBase(ABC):
 
     async def on_load(self) -> None:
         # 插件加载完成后的异步初始化（子类按需覆盖）
-        # 读取一次配置，顺带把旧的 config.json 迁移为 config.yaml
+        # 读取一次配置，顺带完成旧 YAML 配置与变量文件的迁移
         self.load_module_config()
 
     async def on_unload(self) -> None:
@@ -150,11 +154,11 @@ class ModuleBase(ABC):
     #  模块配置（Views 管理）
 
     def get_default_config(self) -> dict:
-        # 模块配置值（来自用户配置；不存在时已复制默认）
+        # 模块配置值（用户配置优先，缺项回退模块默认值）
         return self._config_store.values()
 
     def get_config_fields(self) -> list[dict]:
-        # 模块配置的字段定义（来自用户配置）
+        # 模块配置的字段定义（来自模块 defaults.py）
         return self._config_store.fields()
 
     def get_config_groups(self) -> list[dict]:
@@ -191,8 +195,8 @@ class ModuleBase(ABC):
     #  模板（supports_template 为 True 时实现）
 
     def get_default_template(self) -> str:
-        # 默认消息模板（子类覆盖）
-        return ""
+        # 默认消息模板（来自模块 defaults.py）
+        return self.default_template
 
     def get_account_template(self, acc: dict) -> str:
         # 获取账号使用的模板
@@ -200,8 +204,8 @@ class ModuleBase(ABC):
         return template or self.get_default_template()
 
     def get_var_definitions(self) -> dict[str, str]:
-        # 模板变量名到中文描述的映射（子类覆盖）
-        return {}
+        # 模板变量名到中文描述的映射（来自模块 defaults.py）
+        return dict(self.variable_defaults)
 
     def get_var_samples(self) -> dict[str, str]:
         # 变量示例值，供 Views 的消息模板预览使用（子类覆盖）

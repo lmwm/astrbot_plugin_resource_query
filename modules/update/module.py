@@ -14,8 +14,9 @@ import time
 
 from astrbot.api.event import MessageChain
 
-from ...common.yaml_utils import parse_yaml, save_yaml_file
+from ...common.utils import load_json_file, save_json_file
 from ...core.module import ModuleBase
+from .defaults import CONFIG_FIELDS, VARIABLES
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
 from .updater import check_update, do_update, get_current_version, reload_plugin
@@ -23,7 +24,8 @@ from .updater import check_update, do_update, get_current_version, reload_plugin
 logger = logging.getLogger(__name__)
 
 # 本地更新状态文件名（记录已更新到的提交）
-STATE_FILE = "update_state.yaml"
+STATE_FILE = "update_state.json"
+LEGACY_STATE_FILE = "update_state.yaml"
 
 # 每条消息可用的模板变量（前端变量标签据此过滤）
 _MESSAGE_VARIABLES = {
@@ -66,6 +68,11 @@ _MESSAGE_VARIABLES = {
 
 class UpdateModule(ModuleBase):
     # 插件更新模块
+
+    #  默认配置（来自 defaults.py）
+
+    config_fields = CONFIG_FIELDS
+    variable_defaults = VARIABLES
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
@@ -133,19 +140,6 @@ class UpdateModule(ModuleBase):
                 "label": "消息模板",
             }
         ]
-
-    def get_var_definitions(self) -> dict[str, str]:
-        # 消息模板可用变量（模板页的变量标签与预览使用）
-        return {
-            "current": "当前版本",
-            "latest": "远端版本",
-            "current_sha": "当前版本提交号",
-            "current_sha7": "当前版本短提交号",
-            "sha": "远端提交号",
-            "sha7": "远端短提交号",
-            "elapsed": "耗时（秒）",
-            "error": "错误信息",
-        }
 
     def get_var_samples(self) -> dict[str, str]:
         # 变量示例值，供预览使用
@@ -330,17 +324,36 @@ class UpdateModule(ModuleBase):
         return self.get_data_path() / STATE_FILE
 
     def _load_state(self) -> dict:
-        path = self._state_path()
-        if not path.exists():
+        # JSON 优先；旧 YAML 在首次读取时迁移
+        data = load_json_file(self._state_path())
+        if isinstance(data, dict):
+            return data
+
+        legacy = self.get_data_path() / LEGACY_STATE_FILE
+        if not legacy.exists():
             return {}
+
+        # 延迟导入：YAML 解析器只服务于旧文件迁移
+        from ...common.yaml_utils import parse_yaml
+
         try:
-            data = parse_yaml(path.read_text(encoding="utf-8"))
+            data = parse_yaml(legacy.read_text(encoding="utf-8"))
         except OSError:
             return {}
-        return data if isinstance(data, dict) else {}
+
+        if not isinstance(data, dict) or not data:
+            return {}
+
+        save_json_file(self._state_path(), data)
+        try:
+            legacy.unlink()
+        except OSError:
+            pass
+        logger.info(f"[update] 已将 {LEGACY_STATE_FILE} 迁移为 {STATE_FILE}")
+        return data
 
     def _save_state(self, commit: str, version: str) -> None:
-        save_yaml_file(self._state_path(), {"commit": commit, "version": version})
+        save_json_file(self._state_path(), {"commit": commit, "version": version})
 
     #  Views 接口
 

@@ -1,34 +1,8 @@
-# 华数广电模块工具与默认配置
+# 华数广电模块工具
 #
-# 默认值统一来自 `modules/wasu/config.yaml`（只读）。
+# 默认值统一来自 defaults.py，脚本内不写默认值。
 
 from __future__ import annotations
-
-from pathlib import Path
-
-from ...common.yaml_utils import get_config_value, load_yaml_config
-
-_MODULE_DIR = Path(__file__).parent
-_CONFIG_FILE = _MODULE_DIR / "config.yaml"
-
-
-def _config() -> dict:
-    # 加载模块 YAML 配置（结果带缓存）
-    return load_yaml_config(_CONFIG_FILE)
-
-
-def get_default_template() -> str:
-    # 获取默认消息模板
-    return str(get_config_value(_config(), "template.default", "") or "")
-
-
-def get_var_definitions() -> dict[str, str]:
-    # 获取模板变量说明（Views 变量面板展示用）
-    variables = get_config_value(_config(), "variables", None)
-    if not isinstance(variables, dict):
-        return {}
-
-    return {str(key): str(value) for key, value in variables.items()}
 
 
 def fmt_gb(value) -> str:

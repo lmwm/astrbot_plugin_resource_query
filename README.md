@@ -96,18 +96,18 @@ main.py                     插件入口：只做「注册 + 分发」
 ```
 plugin_data/astrbot_plugin_resource_query/config/
 ├── mimo/
-│   ├── config.yaml        # 模块设置（字段定义 + 值 + 变量）
+│   ├── config.json        # 模块设置（只存值）
 │   └── mimo_<名称>.json   # 账号
 ├── wasu/
-│   ├── config.yaml
+│   ├── config.json
 │   └── <名称>.json        # 账号
 ├── jm/
-│   └── config.yaml        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
+│   └── config.json        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
 └── update/
-    └── config.yaml        # 代理、重试、强制更新、自动更新、消息模板
+    └── config.json        # 代理、重试、强制更新、自动更新、消息模板
 ```
 
-首次加载会把插件目录里的默认 `config.yaml` 复制到这里；之后所有设置与变量都以这份用户配置为准。
+默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/defaults.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
 
 页面内每个模块按能力显示对应区块：
 
@@ -197,7 +197,8 @@ _MODULE_CLASSES = {
 完成后：模块的配置页、导航标签、配置持久化都会自动出现，**无需改动前端代码**。
 
 需要账号管理就覆盖 `supports_accounts = True` 并实现 `get_account_fields()`；
-需要消息模板则覆盖 `supports_template = True` 并实现 `get_default_template()` 与 `get_var_definitions()`。
+需要消息模板则覆盖 `supports_template = True`，并在模块的 `defaults.py` 提供默认模板与变量说明
+（或设置类属性 `default_template` / `variable_defaults`）。
 
 ## 项目结构
 
@@ -217,12 +218,12 @@ astrbot_plugin_resource_query/
 │   └── result.py            # 查询结果基类
 ├── common/                  # 通用工具层
 │   ├── utils.py             # 路径与文件读写
-│   └── yaml_utils.py        # 简易 YAML 解析与写入
+│   └── yaml_utils.py        # 旧 YAML 解析（仅供配置迁移）
 ├── modules/                 # 功能模块层
-│   ├── mimo/                # module / manager / account / query / result / utils / config.yaml
-│   ├── wasu/                # module / result / constants / utils / config.yaml
-│   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.yaml
-│   └── update/              # module / updater / schedule / journal / config.yaml
+│   ├── mimo/                # module / manager / account / query / result / utils / defaults.py
+│   ├── wasu/                # module / result / constants / utils / defaults.py
+│   ├── jm/                  # module / service / paths / cache / pdf / models / utils / defaults.py
+│   └── update/              # module / updater / schedule / journal / defaults.py
 ├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
 │   └── index.html
 ├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）

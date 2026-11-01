@@ -15,6 +15,7 @@ from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ...core.module import ModuleBase
+from .defaults import CONFIG_FIELDS
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
@@ -30,6 +31,10 @@ def _to_int(value, default: int) -> int:
 
 class JMModule(ModuleBase):
     # JMComic 漫画下载模块
+
+    #  默认配置（来自 defaults.py）
+
+    config_fields = CONFIG_FIELDS
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
