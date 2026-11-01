@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
 
-logger = logging.getLogger(__name__)
+from ...common.module_log import module_logger
+
+logger = module_logger("update")
 
 
 class UpdateSchedule:

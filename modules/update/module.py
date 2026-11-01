@@ -10,17 +10,16 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 from astrbot.api.event import MessageChain
 
-from ...common.module_log import log_separator
+from ...common.module_log import log_separator, module_logger
 from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .schedule import UpdateSchedule
 from .updater import check_update, do_update, get_current_version, reload_plugin
 
-logger = logging.getLogger(__name__)
+logger = module_logger("update")
 
 
 class UpdateModule(ModuleBase):
@@ -104,7 +103,7 @@ class UpdateModule(ModuleBase):
         try:
             await self._execute("schedule", force=False)
         except Exception as e:  # noqa: BLE001
-            logger.error(f"[update] 定时更新异常: {type(e).__name__}: {e}")
+            logger.error(f"定时更新任务异常：{type(e).__name__}: {e}")
 
     async def _execute(self, trigger: str, force: bool, notify=None) -> dict:
         # 同一把锁避免定时任务与手动更新并发重装
@@ -126,14 +125,23 @@ class UpdateModule(ModuleBase):
                 "error": "",
             }
 
+            trigger_name = "聊天指令" if trigger == "chat" else "定时任务"
+            result_names = {
+                "ok": "成功",
+                "skip": "跳过（版本未变化）",
+                "error": "失败",
+                "reload_failed": "失败（重载失败）",
+                "exception": "失败（异常）",
+            }
+
             def end(result: str, error: str = "") -> None:
                 # 本次运行的结束分割线
-                detail = f"{trigger} end result={result}"
+                detail = f"{trigger_name}结束：{result_names.get(result, result)}"
                 if error:
-                    detail += f" error={error}"
+                    detail += f"，原因：{error}"
                 log_separator(logger, detail)
 
-            log_separator(logger, f"{trigger} start current={current}")
+            log_separator(logger, f"{trigger_name}开始：当前版本 v{current}")
 
             async def say(key: str) -> None:
                 # 过程提示：聊天触发时直接发送；定时触发不通知
@@ -157,7 +165,7 @@ class UpdateModule(ModuleBase):
                 if check.get("error"):
                     error = str(check["error"])
                     variables["error"] = error
-                    logger.error(f"check failed: {error}")
+                    logger.error(f"检查更新失败：{error}")
                     end("error", error)
                     return {
                         "ok": False,
@@ -171,15 +179,16 @@ class UpdateModule(ModuleBase):
                 variables["sha"] = remote_commit
                 variables["sha7"] = remote_commit[:7]
                 logger.info(
-                    f"check remote={latest or '-'} "
-                    f"commit={remote_commit[:7] or '-'} has_update={has_update}"
+                    f"检查完成：本地 v{current} → 远端 v{latest or '未知'}，"
+                    f"远端提交 {remote_commit[:7] or '未知'}，"
+                    f"需要更新：{'是' if has_update else '否'}"
                 )
 
                 # 检测结果：当前版本与远端版本对比
                 await say("message_found")
 
                 if not force and not has_update:
-                    logger.info("result=skip")
+                    logger.info("版本号未变化，跳过更新")
                     end("skip")
                     return {"ok": True, "message": ""}
 
@@ -188,13 +197,13 @@ class UpdateModule(ModuleBase):
                 variables["sha"] = sha
                 variables["sha7"] = sha[:7]
                 logger.info(
-                    f"update ok={bool(result.get('ok'))} commit={sha[:7] or '-'}"
+                    f"源码归档已替换：提交 {sha[:7] or '未知'}，结果 {'成功' if result.get('ok') else '失败'}"
                 )
 
                 if not result.get("ok"):
                     error = str(result.get("error") or "")
                     variables["error"] = error
-                    logger.error(f"update failed: {error}")
+                    logger.error(f"更新插件文件失败：{error}")
                     end("error", error)
                     return {
                         "ok": False,
@@ -204,23 +213,23 @@ class UpdateModule(ModuleBase):
                 # 文件已替换：重读插件目录版本，{current} 表示本地更新后的版本
                 current = get_current_version()
                 variables["current"] = current
-                logger.info(f"local version after update={current}")
+                logger.info(f"本地版本已更新为 v{current}")
 
                 # 重载会卸载当前插件，先记录再发起
-                logger.info("reload=start")
+                logger.info("开始重载插件")
 
                 reload = await reload_plugin(self._context)
                 if not reload.get("ok"):
                     error = str(reload.get("error") or "")
                     variables["error"] = error
-                    logger.error(f"reload failed: {error}")
+                    logger.error(f"插件重载失败：{error}")
                     end("reload_failed", error)
                     return {
                         "ok": False,
                         "message": result_message("message_error"),
                     }
 
-                logger.info("reload=ok")
+                logger.info("插件重载成功")
                 end("ok")
                 return {
                     "ok": True,
@@ -228,7 +237,7 @@ class UpdateModule(ModuleBase):
                 }
             except Exception as e:  # noqa: BLE001
                 variables["error"] = f"{type(e).__name__}: {e}"
-                logger.error(f"update exception: {variables['error']}")
+                logger.error(f"更新过程出现异常：{variables['error']}")
                 end("exception", variables["error"])
                 return {
                     "ok": False,

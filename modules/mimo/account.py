@@ -8,17 +8,17 @@
 
 import base64
 import hashlib
-import logging
 import time
 from urllib.error import HTTPError
 from urllib.parse import quote, urlencode
 from urllib.request import Request
 
+from ...common.module_log import module_logger
 from ...http_utils import inject_cookie, new_opener, parse_resp
 from .exceptions import LoginError, OtpRequired, PassTokenExpired, StsError
 from .utils import get_default_ua
 
-logger = logging.getLogger(__name__)
+logger = module_logger("mimo")
 
 # User-Agent（来自模块默认配置，登录、OTP 验证、查询共用）
 _DEFAULT_UA = get_default_ua()

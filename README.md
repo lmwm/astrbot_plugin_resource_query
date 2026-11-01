@@ -115,7 +115,7 @@ plugin_data/astrbot_plugin_resource_query/
 
 默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/config.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
 
-日志格式复用 AstrBot：`[YYYY-MM-DD HH:MM:SS.mmm] [Plugin] [级别] [模块:行号]: 内容`；每行带时间戳，插件加载与每次更新运行之间用分割线隔开。
+日志会**同时写两份**：AstrBot 统一日志（`data/logs/astrbot.log` 与 WebUI 实时日志）和自建 `logs/<模块>.log`（追加写入，每次加载/运行前后留空行与分割线）。自建文件格式复用 AstrBot：`[YYYY-MM-DD HH:MM:SS.mmm] [Plugin] [级别] [模块:行号]: 内容`。
 
 页面内每个模块按能力显示对应区块：
 

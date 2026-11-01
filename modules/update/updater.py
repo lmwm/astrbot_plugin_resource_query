@@ -15,7 +15,6 @@ import asyncio
 import datetime
 import io
 import json
-import logging
 import os
 import shutil
 import stat
@@ -25,10 +24,11 @@ from urllib.request import Request
 
 import jwt
 
+from ...common.module_log import module_logger
 from ...common.utils import get_data_path
 from ...http_utils import new_opener, proxy_url, retry
 
-logger = logging.getLogger(__name__)
+logger = module_logger("update")
 
 _REPO_OWNER = "lmwm"
 _REPO_NAME = "astrbot_plugin_resource_query"
@@ -45,6 +45,11 @@ def _proxy_candidates(proxy: str) -> tuple[str, ...]:
     #     只用配置里的代理；留空或该代理失败时直连，不再内置额外镜像。
     proxy = proxy.strip().rstrip("/")
     return (proxy, "") if proxy else ("",)
+
+
+def _via(prefix: str) -> str:
+    # 代理描述：空前缀表示直连
+    return f"代理 {prefix}" if prefix else "直连"
 
 
 def get_current_version() -> str:
@@ -209,10 +214,10 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
             try:
                 commit = retry(lambda p=prefix: _get_sha(p), max_retries)
             except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
-                logger.warning(f"resolve commit failed (via={prefix or 'direct'}): {e}")
+                logger.warning(f"解析远端提交失败（{_via(prefix)}）：{e}")
                 continue
             if commit:
-                logger.info(f"resolve commit={commit[:7]} via={prefix or 'direct'}")
+                logger.info(f"解析远端提交成功：{commit[:7]}（{_via(prefix)}）")
                 return commit
         return ""
 
@@ -231,9 +236,9 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
             with opener.open(request, timeout=30) as response:
                 return response.read()
 
-        logger.info(f"download start commit={commit[:7]} via={prefix or 'direct'}")
+        logger.info(f"开始下载源码归档：提交 {commit[:7]}（{_via(prefix)}）")
         zip_data = retry(_download_zip, max_retries)
-        logger.info(f"download done bytes={len(zip_data)}")
+        logger.info(f"下载完成：{len(zip_data)} 字节")
 
         # 临时解压目录放在 plugin_data 内，避免与插件目录/系统临时目录跨盘移动
         tmp_dir = get_data_path(_REPO_NAME) / "tmp" / "update"
@@ -249,7 +254,7 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
                 raise RuntimeError("解压失败：未找到插件目录")
 
             _replace_plugin_dir(extracted[0])
-            logger.info("replace done")
+            logger.info("解压并替换插件目录完成")
         finally:
             # 成功或失败都清理临时目录；tmp 目录空了也一并删除
             _remove_tree(tmp_dir)
@@ -281,7 +286,7 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
                 RuntimeError,
             ) as e:
                 last_error = str(e)
-                logger.warning(f"download failed via={prefix or 'direct'}: {last_error}")
+                logger.warning(f"下载失败（{_via(prefix)}）：{last_error}")
                 continue
 
         return {"ok": False, "sha": "", "error": last_error}
@@ -333,7 +338,7 @@ async def reload_plugin(context) -> dict:
             last_error = ""
 
             for url, body in routes:
-                logger.info(f"reload try {url}")
+                logger.info(f"尝试重载插件：{url}")
                 request = Request(
                     url,
                     data=json.dumps(body).encode() if body else None,
@@ -348,7 +353,7 @@ async def reload_plugin(context) -> dict:
                         result = json.loads(response.read())
                 except (OSError, TimeoutError, json.JSONDecodeError) as e:
                     last_error = f"{type(e).__name__}: {e}"
-                    logger.warning(f"reload failed: {last_error}")
+                    logger.warning(f"重载请求失败：{last_error}")
                     continue
 
                 if result.get("status") == "ok":
@@ -358,7 +363,7 @@ async def reload_plugin(context) -> dict:
                     f"status={result.get('status')} "
                     f"detail={result.get('message', result)}"
                 )
-                logger.warning(f"reload failed: {last_error}")
+                logger.warning(f"重载失败：{last_error}")
 
             return {"ok": False, "error": last_error}
 

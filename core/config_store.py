@@ -11,12 +11,12 @@
 from __future__ import annotations
 
 import copy
-import logging
 from pathlib import Path
 
+from ..common.module_log import module_logger
 from ..common.utils import load_json_file, save_json_file
 
-logger = logging.getLogger(__name__)
+logger = module_logger("core")
 
 CONFIG_FILE = "config.json"
 LEGACY_YAML_FILE = "config.yaml"

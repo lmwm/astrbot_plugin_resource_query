@@ -11,6 +11,7 @@ from astrbot.api import AstrBotConfig, logger
 from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 
+from .common.module_log import log_separator, setup_module_logger
 from .core.commands import help_text, parse_args
 from .core.registry import ModuleRegistry
 from .core.web import GlobalWebApi
@@ -72,7 +73,8 @@ class ResourceQueryPlugin(Star):
                 )
 
     async def initialize(self) -> None:
-        # AstrBot 加载插件后调用：让各模块做异步初始化（如注册定时任务）
+        # AstrBot 加载插件后调用：准备核心日志，再让各模块做异步初始化
+        log_separator(setup_module_logger("core"), "插件启动")
         for module in self._registry.get_all_modules():
             await module.on_load()
 

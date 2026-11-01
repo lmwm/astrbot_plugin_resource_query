@@ -12,11 +12,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ...common.module_log import module_logger
 from ...core.module import ModuleBase
 from .config import ACCOUNT_FIELDS, ACCOUNT_GROUPS, DEFAULT_TEMPLATE, VARIABLES
 from .manager import MimoManager
 from .result import MimoResult
 from .utils import get_default_device_id, get_default_ua
+
+logger = module_logger("mimo")
 
 # 需要持久化的凭据字段
 _CREDENTIAL_KEYS = ("userId", "passToken", "serviceToken")
@@ -299,7 +302,6 @@ class MimoModule(ModuleBase):
 
     async def _api_test(self):
         # 测试查询（不落盘，仅验证凭据可用）
-        from astrbot.api import logger
         from astrbot.api.web import json_response, request
 
         payload = await request.json(default={})

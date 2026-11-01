@@ -7,15 +7,15 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from pathlib import Path
 
+from ...common.module_log import module_logger
 from .cache import AlbumCache
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
 from .pdf import make_pdf
 
-logger = logging.getLogger(__name__)
+logger = module_logger("jm")
 
 # 异常类名 → 用户可读提示；按类名匹配，避免依赖库内部模块
 _ERROR_MESSAGES = {

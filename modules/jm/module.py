@@ -8,18 +8,18 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 from pathlib import Path
 
 from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
+from ...common.module_log import module_logger
 from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
-logger = logging.getLogger(__name__)
+logger = module_logger("jm")
 
 
 def _to_int(value, default: int) -> int:
