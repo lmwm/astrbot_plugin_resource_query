@@ -4,7 +4,7 @@
 # 登录、凭据刷新等底层逻辑由内部 MimoManager 负责。
 #
 # 配置分层：
-#   - 默认值（只读）→ defaults.py
+#   - 默认值（只读）→ config.py
 #   - 用户配置（Views 保存，只存值）→ config/mimo/config.json
 #   - 账号级覆盖 → config/mimo/<账号>.json
 
@@ -13,74 +13,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from ...core.module import ModuleBase
-from .defaults import DEFAULT_TEMPLATE, VARIABLES
+from .config import ACCOUNT_FIELDS, ACCOUNT_GROUPS, DEFAULT_TEMPLATE, VARIABLES
 from .manager import MimoManager
 from .result import MimoResult
 from .utils import get_default_device_id, get_default_ua
-
-# 账号字段分组：三种凭据方式作为标签页，设备信息作为内联区块
-_ACCOUNT_GROUPS = [
-    {
-        "key": "password",
-        "label": "账号密码登录",
-        "mode": "tab",
-        "hint": "输入小米账号与密码，首次登录可能需要短信验证码",
-    },
-    {
-        "key": "passtoken",
-        "label": "PassToken",
-        "mode": "tab",
-        "hint": "已有 PassToken 时使用，插件会自动换取 ServiceToken",
-    },
-    {
-        "key": "servicetoken",
-        "label": "ServiceToken",
-        "mode": "tab",
-        "hint": "直接使用 ServiceToken 查询，无需再次登录",
-    },
-    {
-        "key": "device",
-        "label": "设备信息（可选）",
-        "mode": "inline",
-        "hint": "留空时保存会自动填充插件默认值，可点字段右侧的「↺」单独恢复默认",
-    },
-]
-
-# 账号表单字段；group 决定字段出现在哪个分组
-_ACCOUNT_FIELDS = [
-    {"key": "name", "label": "账号名称", "type": "text", "hint": "留空则显示小米账号"},
-    {
-        "key": "account",
-        "label": "小米账号",
-        "type": "text",
-        "group": "password",
-        "hint": "手机号或邮箱",
-    },
-    {"key": "password", "label": "密码", "type": "password", "group": "password"},
-    {
-        "key": "userId",
-        "label": "User ID",
-        "type": "text",
-        "group": ["passtoken", "servicetoken"],
-        "hint": "登录后自动填充",
-    },
-    {
-        "key": "passToken",
-        "label": "PassToken",
-        "type": "password",
-        "group": "passtoken",
-        "hint": "登录后自动填充",
-    },
-    {
-        "key": "serviceToken",
-        "label": "ServiceToken",
-        "type": "password",
-        "group": "servicetoken",
-        "hint": "登录后自动填充",
-    },
-    {"key": "device_id", "label": "设备标识", "type": "text", "group": "device"},
-    {"key": "ua", "label": "User-Agent", "type": "text", "group": "device"},
-]
 
 # 需要持久化的凭据字段
 _CREDENTIAL_KEYS = ("userId", "passToken", "serviceToken")
@@ -89,8 +25,10 @@ _CREDENTIAL_KEYS = ("userId", "passToken", "serviceToken")
 class MimoModule(ModuleBase):
     # 小米 MiMo 用量查询模块
 
-    #  默认配置（来自 defaults.py）
+    #  默认配置（来自 config.py）
 
+    account_fields = ACCOUNT_FIELDS
+    account_groups = ACCOUNT_GROUPS
     variable_defaults = VARIABLES
     default_template = DEFAULT_TEMPLATE
 
@@ -156,26 +94,6 @@ class MimoModule(ModuleBase):
     @property
     def account_label(self) -> str:
         return "MiMo 账号"
-
-    #  字段定义
-
-    def get_account_groups(self) -> list[dict]:
-        # 账号字段分组定义
-        return _ACCOUNT_GROUPS
-
-    def get_account_fields(self) -> list[dict]:
-        # 账号表单字段定义
-        fields = [dict(field) for field in _ACCOUNT_FIELDS]
-        defaults = {
-            "device_id": get_default_device_id(),
-            "ua": get_default_ua(),
-        }
-
-        for field in fields:
-            if field["key"] in defaults:
-                field["default"] = defaults[field["key"]]
-
-        return fields
 
     #  账号管理
 

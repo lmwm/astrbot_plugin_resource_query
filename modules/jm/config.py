@@ -1,4 +1,4 @@
-# JM 模块默认配置
+# JM 模块配置
 #
 # 字段顺序即 Views 的显示顺序；用户的改动保存在 plugin_data 的 config.json，
 # 这里只提供默认值与界面定义。

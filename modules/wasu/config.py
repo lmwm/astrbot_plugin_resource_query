@@ -1,9 +1,18 @@
-# 华数广电模块默认配置
+# 华数广电模块配置
 #
-# 默认消息模板与变量说明；用户的改动保存在 plugin_data 的 config.json。
+# 账号表单字段、默认消息模板与变量说明都集中在这里；用户的改动保存在 plugin_data 的 config.json。
 
 PLATFORM_NAME = "wasu"
 PLATFORM_DISPLAY_NAME = "华数广电"
+
+# 账号表单字段
+ACCOUNT_FIELDS = [
+    {"key": "name", "label": "账号名称", "type": "text", "hint": "留空则显示手机号"},
+    {"key": "phone", "label": "手机号", "type": "text"},
+    {"key": "user_key", "label": "User Key", "type": "text"},
+    {"key": "token", "label": "Token", "type": "password", "hint": "失效后需重新获取"},
+    {"key": "sign", "label": "Sign", "type": "password", "hint": "可选"},
+]
 
 # 默认消息模板
 _TEMPLATE_LINES = [

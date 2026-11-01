@@ -72,33 +72,21 @@ def get_current_version() -> str:
     return "0.0.0"
 
 
-def decide_update(
-    current_version: str,
-    current_commit: str,
-    latest_version: str,
-    remote_commit: str,
-    force: bool,
-) -> bool:
-    # 判断是否需要更新：强制 > 版本号 > 提交号
+def decide_update(current_version: str, latest_version: str, force: bool) -> bool:
+    # 判断是否需要更新：强制更新，或远端版本号与本地（插件目录 metadata.yaml）不同
     if force:
         return True
     if not latest_version:
         return False
-    if latest_version != current_version:
-        return True
-    if remote_commit:
-        # 版本相同再看提交号；没有本地基线时先更新一次建立基线
-        return remote_commit != current_commit if current_commit else True
-    return False
+    return latest_version != current_version
 
 
 async def check_update(
     proxy: str = "",
     max_retries: int = 3,
     force: bool = False,
-    current_commit: str = "",
 ) -> dict:
-    # 检查远端是否有新版本；版本相同且非强制时再比较提交号
+    # 检查远端是否有新版本；版本号与本地插件目录不同（或强制）时更新
     current_version = get_current_version()
 
     def _fetch_sha(prefix: str) -> str:
@@ -171,12 +159,9 @@ async def check_update(
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(None, _fetch)
     result.setdefault("remote_commit", "")
-    result["current_commit"] = current_commit
     result["has_update"] = decide_update(
         current_version,
-        current_commit,
         str(result.get("latest") or ""),
-        str(result.get("remote_commit") or ""),
         force,
     )
     result["force"] = force

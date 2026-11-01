@@ -17,19 +17,10 @@ from urllib.request import Request
 
 from ...core.module import ModuleBase
 from ...http_utils import new_opener
+from .config import ACCOUNT_FIELDS, DEFAULT_TEMPLATE, VARIABLES
 from .constants import DEFAULT_BASE_URL, DEFAULT_HEADERS
-from .defaults import DEFAULT_TEMPLATE, VARIABLES
 from .result import WasuResult
 from .utils import fmt_gb, fmt_yuan
-
-# 账号表单字段
-_ACCOUNT_FIELDS = [
-    {"key": "name", "label": "账号名称", "type": "text", "hint": "留空则显示手机号"},
-    {"key": "phone", "label": "手机号", "type": "text"},
-    {"key": "user_key", "label": "User Key", "type": "text"},
-    {"key": "token", "label": "Token", "type": "password", "hint": "失效后需重新获取"},
-    {"key": "sign", "label": "Sign", "type": "password", "hint": "可选"},
-]
 
 # 业务码：token 失效
 _CODE_TOKEN_INVALID = 14
@@ -43,8 +34,9 @@ class WasuApiError(Exception):
 class WasuModule(ModuleBase):
     # 华数广电查询模块
 
-    #  默认配置（来自 defaults.py）
+    #  默认配置（来自 config.py）
 
+    account_fields = ACCOUNT_FIELDS
     variable_defaults = VARIABLES
     default_template = DEFAULT_TEMPLATE
 
@@ -96,11 +88,7 @@ class WasuModule(ModuleBase):
     def account_label(self) -> str:
         return "华数账号"
 
-    #  字段定义
-
-    def get_account_fields(self) -> list[dict]:
-        # 账号表单字段定义
-        return _ACCOUNT_FIELDS
+    #  查询
 
     async def query(self, account: dict) -> WasuResult:
         # 查询单个华数账号

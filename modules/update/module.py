@@ -2,8 +2,9 @@
 #
 # 两种触发共用同一执行体：
 #   - 聊天：`/query update`，按 force_update 配置决定是否强制重装
-#   - 自动：AstrBot cron 回调，版本号不同或提交号不同才更新，只写日志
+#   - 自动：AstrBot cron 回调，版本号与插件目录不一致才更新，只写日志
 #
+# 当前版本直接读插件目录的 metadata.yaml；不保存本地更新状态文件。
 # 日志目录：plugin_data/<插件>/logs/update/，只保留最近 10 个文件。
 
 from __future__ import annotations
@@ -14,65 +15,24 @@ import time
 
 from astrbot.api.event import MessageChain
 
-from ...common.utils import load_json_file, save_json_file
 from ...core.module import ModuleBase
-from .defaults import CONFIG_FIELDS, VARIABLES
+from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
 from .updater import check_update, do_update, get_current_version, reload_plugin
 
 logger = logging.getLogger(__name__)
 
-# 本地更新状态文件名（记录已更新到的提交）
-STATE_FILE = "update_state.json"
-LEGACY_STATE_FILE = "update_state.yaml"
-
-# 每条消息可用的模板变量（前端变量标签据此过滤）
-_MESSAGE_VARIABLES = {
-    "message_checking": [
-        "current",
-        "latest",
-        "current_sha",
-        "current_sha7",
-        "sha",
-        "sha7",
-    ],
-    "message_found": [
-        "current",
-        "latest",
-        "current_sha",
-        "current_sha7",
-        "sha",
-        "sha7",
-    ],
-    "message_done": [
-        "current",
-        "latest",
-        "current_sha",
-        "current_sha7",
-        "sha",
-        "sha7",
-        "elapsed",
-    ],
-    "message_skip": [
-        "current",
-        "latest",
-        "current_sha",
-        "current_sha7",
-        "sha",
-        "sha7",
-    ],
-    "message_error": ["current", "error"],
-}
-
 
 class UpdateModule(ModuleBase):
     # 插件更新模块
 
-    #  默认配置（来自 defaults.py）
+    #  默认配置（来自 config.py）
 
     config_fields = CONFIG_FIELDS
+    config_groups = CONFIG_GROUPS
     variable_defaults = VARIABLES
+    var_samples = VAR_SAMPLES
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
@@ -121,39 +81,6 @@ class UpdateModule(ModuleBase):
             cron_expression=str(config.get("schedule_cron") or "").strip(),
         )
 
-    #  模块配置
-
-    def get_config_fields(self) -> list[dict]:
-        # 为每个消息模板字段标注可用变量
-        fields = super().get_config_fields()
-        for field in fields:
-            allowed = _MESSAGE_VARIABLES.get(field.get("key"))
-            if allowed:
-                field["variables"] = list(allowed)
-        return fields
-
-    def get_config_groups(self) -> list[dict]:
-        # 消息模板单独一页；网络/自动更新等其余配置留在「模块设置」
-        return [
-            {
-                "key": "messages",
-                "label": "消息模板",
-            }
-        ]
-
-    def get_var_samples(self) -> dict[str, str]:
-        # 变量示例值，供预览使用
-        return {
-            "current": "5.9.23",
-            "latest": "5.9.24",
-            "current_sha": "1101942f2ee9b12772ae7e6372794b1d09d8d57",
-            "current_sha7": "1101942",
-            "sha": "2c54e39abcdef0123456789abcdef0123456789",
-            "sha7": "2c54e39",
-            "elapsed": "5.2",
-            "error": "网络连接超时",
-        }
-
     #  指令
 
     def get_commands(self) -> list[dict]:
@@ -189,14 +116,11 @@ class UpdateModule(ModuleBase):
             proxy = str(config.get("proxy") or "").strip()
             retries = self._to_int(config.get("max_retries"), 3)
             current = get_current_version()
-            current_commit = str(self._load_state().get("commit") or "")
 
             # 模板变量始终提供完整键，尚未产生值的阶段为空字符串
             variables = {
                 "current": current,
                 "latest": "",
-                "current_sha": current_commit,
-                "current_sha7": current_commit[:7],
                 "sha": "",
                 "sha7": "",
                 "elapsed": "",
@@ -215,9 +139,7 @@ class UpdateModule(ModuleBase):
                     await notify(text)
 
             try:
-                check = await check_update(
-                    proxy, retries, force=force, current_commit=current_commit
-                )
+                check = await check_update(proxy, retries, force=force)
                 if check.get("error"):
                     error = str(check["error"])
                     variables["error"] = error
@@ -273,9 +195,6 @@ class UpdateModule(ModuleBase):
                         ),
                     }
 
-                # 记录本次更新到的提交，供下次自动更新比较
-                self._save_state(sha, latest)
-
                 # 重载会卸载当前插件，先把更新结果落盘
                 journal.append("reload=发起中")
                 journal.prune()
@@ -317,43 +236,6 @@ class UpdateModule(ModuleBase):
             return int(value)
         except (TypeError, ValueError):
             return default
-
-    #  更新状态（记录本地已更新到的提交）
-
-    def _state_path(self):
-        return self.get_data_path() / STATE_FILE
-
-    def _load_state(self) -> dict:
-        # JSON 优先；旧 YAML 在首次读取时迁移
-        data = load_json_file(self._state_path())
-        if isinstance(data, dict):
-            return data
-
-        legacy = self.get_data_path() / LEGACY_STATE_FILE
-        if not legacy.exists():
-            return {}
-
-        # 延迟导入：YAML 解析器只服务于旧文件迁移
-        from ...common.yaml_utils import parse_yaml
-
-        try:
-            data = parse_yaml(legacy.read_text(encoding="utf-8"))
-        except OSError:
-            return {}
-
-        if not isinstance(data, dict) or not data:
-            return {}
-
-        save_json_file(self._state_path(), data)
-        try:
-            legacy.unlink()
-        except OSError:
-            pass
-        logger.info(f"[update] 已将 {LEGACY_STATE_FILE} 迁移为 {STATE_FILE}")
-        return data
-
-    def _save_state(self, commit: str, version: str) -> None:
-        save_json_file(self._state_path(), {"commit": commit, "version": version})
 
     #  Views 接口
 

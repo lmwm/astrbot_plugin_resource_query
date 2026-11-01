@@ -1,10 +1,10 @@
 # MiMo 模块工具与默认配置
 #
-# 默认值统一来自 defaults.py，脚本内不写默认值。
+# 默认值统一来自 config.py，脚本内不写默认值。
 
 from __future__ import annotations
 
-from .defaults import DEFAULT_DEVICE_ID, DEFAULT_UA
+from .config import DEFAULT_DEVICE_ID, DEFAULT_UA
 
 
 def fmt_num(value) -> str:

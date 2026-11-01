@@ -1,6 +1,6 @@
 # 模块配置存储
 #
-# 默认配置：各模块的 defaults.py（随插件发布，只读）
+# 默认配置：各模块的 config.py（随插件发布，只读）
 # 用户配置：plugin_data/<插件>/config/<模块>/config.json（只存值）
 #
 # 加载：用户 JSON 中的值优先，缺少的项回退默认值；没有文件时全部用默认值。
@@ -175,7 +175,7 @@ class ConfigStore:
         return self._read_raw()
 
     def fields(self) -> list[dict]:
-        # 字段定义（label/type/hint/default），顺序来自模块 defaults.py
+        # 字段定义（label/type/hint/default），顺序来自模块 config.py
         result: list[dict] = []
         for key, meta in self._fields.items():
             field = {"key": key}

@@ -107,7 +107,7 @@ plugin_data/astrbot_plugin_resource_query/config/
     └── config.json        # 代理、重试、强制更新、自动更新、消息模板
 ```
 
-默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/defaults.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
+默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/config.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
 
 页面内每个模块按能力显示对应区块：
 
@@ -197,7 +197,7 @@ _MODULE_CLASSES = {
 完成后：模块的配置页、导航标签、配置持久化都会自动出现，**无需改动前端代码**。
 
 需要账号管理就覆盖 `supports_accounts = True` 并实现 `get_account_fields()`；
-需要消息模板则覆盖 `supports_template = True`，并在模块的 `defaults.py` 提供默认模板与变量说明
+需要消息模板则覆盖 `supports_template = True`，并在模块的 `config.py` 提供默认模板与变量说明
 （或设置类属性 `default_template` / `variable_defaults`）。
 
 ## 项目结构
@@ -220,10 +220,10 @@ astrbot_plugin_resource_query/
 │   ├── utils.py             # 路径与文件读写
 │   └── yaml_utils.py        # 旧 YAML 解析（仅供配置迁移）
 ├── modules/                 # 功能模块层
-│   ├── mimo/                # module / manager / account / query / result / utils / defaults.py
-│   ├── wasu/                # module / result / constants / utils / defaults.py
-│   ├── jm/                  # module / service / paths / cache / pdf / models / utils / defaults.py
-│   └── update/              # module / updater / schedule / journal / defaults.py
+│   ├── mimo/                # module / manager / account / query / result / utils / config.py
+│   ├── wasu/                # module / result / constants / utils / config.py
+│   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.py
+│   └── update/              # module / updater / schedule / journal / config.py
 ├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
 │   └── index.html
 ├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）

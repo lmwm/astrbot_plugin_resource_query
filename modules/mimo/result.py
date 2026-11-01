@@ -1,7 +1,7 @@
 # MiMo 查询结果
 #
 # 模板变量覆盖余额、Token 用量、费用与限额（TPM / RPM / 并发），
-# 与 defaults.py 中的默认模板保持一致。
+# 与 config.py 中的默认模板保持一致。
 
 from __future__ import annotations
 

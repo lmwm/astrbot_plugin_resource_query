@@ -1,3 +1,12 @@
+## v6.0.1 (2026-11-01)
+
+### 重构
+
+- **`defaults.py` 改名 `config.py`**：各模块的模块设置字段、分组、账号表单字段、默认模板、变量说明与示例统一放在 `modules/<模块>/config.py`；模块只保留类属性（`config_fields` / `config_groups` / `account_fields` / `account_groups` / `variable_defaults` / `var_samples` / `default_template`），不再逐个覆写方法
+  - update 的「每个模板可用变量」并入 `CONFIG_FIELDS` 的 `variables` 字段，删除模块里的 `get_config_fields` 覆写
+  - mimo / wasu 的账号字段与分组从 `module.py` 移入 `config.py`；mimo 设备字段默认值改为字段内直接声明
+- **移除更新状态文件**：不再读写 `update_state.yaml` / `update_state.json`；当前版本直接读插件目录的 `metadata.yaml`，自动更新只比较版本号（远端提交号仅用于下载与日志）。`{current_sha}` / `{current_sha7}` 变量与默认模板里的 commit 行一并移除
+
 ## v6.0.0 (2026-11-01)
 
 ### 重构

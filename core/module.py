@@ -32,9 +32,13 @@ if TYPE_CHECKING:
 class ModuleBase(ABC):
     # 功能模块基类
 
-    # 默认配置（子类用 defaults.py 覆盖）：字段定义、变量说明、默认消息模板
+    # 默认配置（子类用 config.py 覆盖）：字段定义、分组、变量说明、默认模板
     config_fields: ClassVar[dict[str, dict]] = {}
+    config_groups: ClassVar[list[dict]] = []
+    account_fields: ClassVar[list[dict]] = []
+    account_groups: ClassVar[list[dict]] = []
     variable_defaults: ClassVar[dict[str, str]] = {}
+    var_samples: ClassVar[dict[str, str]] = {}
     default_template: ClassVar[str] = ""
 
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
@@ -158,12 +162,12 @@ class ModuleBase(ABC):
         return self._config_store.values()
 
     def get_config_fields(self) -> list[dict]:
-        # 模块配置的字段定义（来自模块 defaults.py）
+        # 模块配置的字段定义（来自模块 config.py）
         return self._config_store.fields()
 
     def get_config_groups(self) -> list[dict]:
-        # 配置字段的分组：Views 里每组单独一页（子类按需覆盖）
-        return []
+        # 配置字段的分组：Views 里每组单独一页（来自 config.py）
+        return self.config_groups
 
     def load_module_config(self) -> dict:
         # 读取模块配置值
@@ -175,12 +179,12 @@ class ModuleBase(ABC):
     #  账号管理（supports_accounts 为 True 时实现）
 
     def get_account_fields(self) -> list[dict]:
-        # 账号表单的字段定义（子类覆盖）
-        return []
+        # 账号表单的字段定义（来自 config.py）
+        return self.account_fields
 
     def get_account_groups(self) -> list[dict]:
-        # 账号字段的分组定义（子类覆盖）
-        return []
+        # 账号字段的分组定义（来自 config.py）
+        return self.account_groups
 
     def get_accounts(self) -> list[dict]:
         # 读取本模块全部账号；每项带 `_filename` 供稳定删除
@@ -195,7 +199,7 @@ class ModuleBase(ABC):
     #  模板（supports_template 为 True 时实现）
 
     def get_default_template(self) -> str:
-        # 默认消息模板（来自模块 defaults.py）
+        # 默认消息模板（来自模块 config.py）
         return self.default_template
 
     def get_account_template(self, acc: dict) -> str:
@@ -204,12 +208,12 @@ class ModuleBase(ABC):
         return template or self.get_default_template()
 
     def get_var_definitions(self) -> dict[str, str]:
-        # 模板变量名到中文描述的映射（来自模块 defaults.py）
+        # 模板变量名到中文描述的映射（来自模块 config.py）
         return dict(self.variable_defaults)
 
     def get_var_samples(self) -> dict[str, str]:
-        # 变量示例值，供 Views 的消息模板预览使用（子类覆盖）
-        return {}
+        # 变量示例值，供 Views 的消息模板预览使用（来自 config.py）
+        return self.var_samples
 
     def get_template_variables(self) -> list[dict]:
         # 变量定义 + 用户配置（变量名 / 说明 / 示例 / 显示）
