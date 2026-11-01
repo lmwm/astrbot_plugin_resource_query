@@ -2,9 +2,9 @@
 #
 # 两种触发共用同一执行体：
 #   - 聊天：`/query update`，按 force_update 配置决定是否强制重装
-#   - 自动：AstrBot cron 回调，版本号与插件目录不一致才更新，只写日志
+#   - 自动：AstrBot cron 回调，版本号或提交号与插件目录不一致才更新，只写日志
 #
-# 当前版本直接读插件目录的 metadata.yaml；不保存本地更新状态文件。
+# 当前版本读插件目录的 metadata.yaml，当前提交读插件目录的 .git（无仓库时为空）。
 # 日志目录：plugin_data/<插件>/logs/update/，只保留最近 10 个文件。
 
 from __future__ import annotations
@@ -19,7 +19,13 @@ from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .journal import UpdateJournal
 from .schedule import UpdateSchedule
-from .updater import check_update, do_update, get_current_version, reload_plugin
+from .updater import (
+    check_update,
+    do_update,
+    get_current_commit,
+    get_current_version,
+    reload_plugin,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -116,11 +122,14 @@ class UpdateModule(ModuleBase):
             proxy = str(config.get("proxy") or "").strip()
             retries = self._to_int(config.get("max_retries"), 3)
             current = get_current_version()
+            current_commit = get_current_commit()
 
             # 模板变量始终提供完整键，尚未产生值的阶段为空字符串
             variables = {
                 "current": current,
                 "latest": "",
+                "current_sha": current_commit,
+                "current_sha7": current_commit[:7],
                 "sha": "",
                 "sha7": "",
                 "elapsed": "",
@@ -139,7 +148,9 @@ class UpdateModule(ModuleBase):
                     await notify(text)
 
             try:
-                check = await check_update(proxy, retries, force=force)
+                check = await check_update(
+                    proxy, retries, force=force, current_commit=current_commit
+                )
                 if check.get("error"):
                     error = str(check["error"])
                     variables["error"] = error

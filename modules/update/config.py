@@ -7,6 +7,7 @@
 _CHECKING_LINES = [
     "正在检查更新...",
     "  当前版本: v{current}",
+    "  commit: {current_sha7}",
 ]
 _FOUND_LINES = [
     "正在安装...",
@@ -15,6 +16,7 @@ _FOUND_LINES = [
 _DONE_LINES = [
     "更新完成",
     "  当前版本 v{current}",
+    "  commit: {sha7}",
 ]
 _ERROR_LINES = [
     "更新失败: ",
@@ -57,25 +59,33 @@ CONFIG_FIELDS = {
         "label": "检查中提示",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {current} {latest} {sha} {sha7}",
+        "hint": "变量 {current} {latest} {current_sha7} {sha7}",
         "default": "\n".join(_CHECKING_LINES),
-        "variables": ["current", "latest", "sha", "sha7"],
+        "variables": ["current", "latest", "current_sha", "current_sha7", "sha", "sha7"],
     },
     "message_found": {
         "label": "发现新版本提示",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {latest} {current} {sha} {sha7}",
+        "hint": "变量 {latest} {current} {sha7}",
         "default": "\n".join(_FOUND_LINES),
-        "variables": ["current", "latest", "sha", "sha7"],
+        "variables": ["current", "latest", "current_sha", "current_sha7", "sha", "sha7"],
     },
     "message_done": {
         "label": "更新完成消息",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {current} {latest} {sha} {sha7} {elapsed}",
+        "hint": "变量 {current} {latest} {current_sha7} {sha7} {elapsed}",
         "default": "\n".join(_DONE_LINES),
-        "variables": ["current", "latest", "sha", "sha7", "elapsed"],
+        "variables": [
+            "current",
+            "latest",
+            "current_sha",
+            "current_sha7",
+            "sha",
+            "sha7",
+            "elapsed",
+        ],
     },
     "message_skip": {
         "label": "已是最新提示",
@@ -83,7 +93,7 @@ CONFIG_FIELDS = {
         "group": "messages",
         "hint": "变量 {current} {latest}",
         "default": "当前已是最新版本 v{current}",
-        "variables": ["current", "latest"],
+        "variables": ["current", "latest", "current_sha", "current_sha7", "sha", "sha7"],
     },
     "message_error": {
         "label": "失败消息",
@@ -107,6 +117,8 @@ CONFIG_GROUPS = [
 VARIABLES = {
     "current": "当前版本",
     "latest": "远端版本",
+    "current_sha": "当前版本提交号",
+    "current_sha7": "当前版本短提交号",
     "sha": "远端提交号",
     "sha7": "远端短提交号",
     "elapsed": "耗时（秒）",
@@ -115,8 +127,10 @@ VARIABLES = {
 
 # 变量示例值，供模板预览使用
 VAR_SAMPLES = {
-    "current": "6.0.1",
-    "latest": "6.0.2",
+    "current": "6.0.2",
+    "latest": "6.0.3",
+    "current_sha": "1101942f2ee9b12772ae7e6372794b1d09d8d57",
+    "current_sha7": "1101942",
     "sha": "2c54e39abcdef0123456789abcdef0123456789",
     "sha7": "2c54e39",
     "elapsed": "5.2",
