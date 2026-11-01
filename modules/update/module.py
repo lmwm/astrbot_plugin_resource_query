@@ -215,6 +215,15 @@ class UpdateModule(ModuleBase):
                 journal.append(f"elapsed={elapsed}s")
                 journal.prune()
 
+                if not reload.get("ok"):
+                    variables["error"] = str(reload.get("error") or "")
+                    return {
+                        "ok": False,
+                        "message": self._render(
+                            config.get("message_reload_failed"), variables
+                        ),
+                    }
+
                 return {
                     "ok": True,
                     "message": self._render(config.get("message_done"), variables),

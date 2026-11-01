@@ -18,6 +18,11 @@ _DONE_LINES = [
     "  当前版本 v{current}",
     "  commit: {sha7}",
 ]
+_RELOAD_FAILED_LINES = [
+    "更新已下载，但自动重载失败",
+    "  原因: {error}",
+    "请在 WebUI 手动重载插件",
+]
 _ERROR_LINES = [
     "更新失败: ",
     "  {error}",
@@ -78,6 +83,14 @@ CONFIG_FIELDS = {
         "hint": "变量 {current} {latest} {sha7} {elapsed}",
         "default": "\n".join(_DONE_LINES),
         "variables": ["current", "latest", "sha", "sha7", "elapsed"],
+    },
+    "message_reload_failed": {
+        "label": "重载失败提示",
+        "type": "template",
+        "group": "messages",
+        "hint": "变量 {error} {current}",
+        "default": "\n".join(_RELOAD_FAILED_LINES),
+        "variables": ["current", "error"],
     },
     "message_skip": {
         "label": "已是最新提示",
