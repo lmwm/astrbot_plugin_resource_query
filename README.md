@@ -94,20 +94,28 @@ main.py                     插件入口：只做「注册 + 分发」
 每个模块的配置在各自的页面中管理，保存在插件数据目录，重装插件不会丢失：
 
 ```
-plugin_data/astrbot_plugin_resource_query/config/
-├── mimo/
-│   ├── config.json        # 模块设置（只存值）
-│   └── mimo_<名称>.json   # 账号
-├── wasu/
-│   ├── config.json
-│   └── <名称>.json        # 账号
-├── jm/
-│   └── config.json        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
-└── update/
-    └── config.json        # 代理、重试、强制更新、自动更新、消息模板
+plugin_data/astrbot_plugin_resource_query/
+├── config/
+│   ├── mimo/
+│   │   ├── config.json        # 模块设置（只存值）
+│   │   └── mimo_<名称>.json   # 账号
+│   ├── wasu/
+│   │   ├── config.json
+│   │   └── <名称>.json        # 账号
+│   ├── jm/
+│   │   └── config.json        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
+│   └── update/
+│       └── config.json        # 代理、重试、自动更新、消息模板
+└── logs/
+    ├── update.log             # 每个模块一份日志，追加写入
+    ├── mimo.log
+    ├── wasu.log
+    └── jm.log
 ```
 
 默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/config.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
+
+日志格式复用 AstrBot：`[YYYY-MM-DD HH:MM:SS.mmm] [Plugin] [级别] [模块:行号]: 内容`；每行带时间戳，插件加载与每次更新运行之间用分割线隔开。
 
 页面内每个模块按能力显示对应区块：
 
@@ -218,12 +226,13 @@ astrbot_plugin_resource_query/
 │   └── result.py            # 查询结果基类
 ├── common/                  # 通用工具层
 │   ├── utils.py             # 路径与文件读写
+│   ├── module_log.py        # 模块日志（每模块一份，追加写入）
 │   └── yaml_utils.py        # 旧 YAML 解析（仅供配置迁移）
 ├── modules/                 # 功能模块层
 │   ├── mimo/                # module / manager / account / query / result / utils / config.py
 │   ├── wasu/                # module / result / constants / utils / config.py
 │   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.py
-│   └── update/              # module / updater / schedule / journal / config.py
+│   └── update/              # module / updater / schedule / config.py
 ├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
 │   └── index.html
 ├── .astrbot-plugin/i18n/    # 视图元数据（zh-CN / en-US 的标题与描述）

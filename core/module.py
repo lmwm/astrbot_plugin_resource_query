@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from ..common import utils as common_utils
+from ..common.module_log import log_separator, setup_module_logger
 from ..common.utils import get_platform_path
 from .accounts import AccountStore
 from .config_store import ConfigStore
@@ -138,6 +139,8 @@ class ModuleBase(ABC):
 
     async def on_load(self) -> None:
         # 插件加载完成后的异步初始化（子类按需覆盖）
+        # 每模块一份追加日志；加载成功先写一条分割线
+        log_separator(setup_module_logger(self._plugin_name, self.module_name), "插件加载")
         # 读取一次配置，顺带完成旧 YAML 配置与变量文件的迁移
         self.load_module_config()
 

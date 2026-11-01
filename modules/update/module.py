@@ -5,19 +5,18 @@
 #   - 自动：AstrBot cron 回调，只比较版本号，有新版本才更新，不发送消息只写日志
 #
 # 当前版本读插件目录的 metadata.yaml；不保存、也不读取提交号状态。
-# 日志目录：plugin_data/<插件>/logs/update/，只保留最近 10 个文件。
+# 日志：plugin_data/<插件>/logs/update.log（追加，每行带时间戳，运行间有分割线）。
 
 from __future__ import annotations
 
 import asyncio
 import logging
-import time
 
 from astrbot.api.event import MessageChain
 
+from ...common.module_log import log_separator
 from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
-from .journal import UpdateJournal
 from .schedule import UpdateSchedule
 from .updater import check_update, do_update, get_current_version, reload_plugin
 
@@ -110,7 +109,6 @@ class UpdateModule(ModuleBase):
     async def _execute(self, trigger: str, force: bool, notify=None) -> dict:
         # 同一把锁避免定时任务与手动更新并发重装
         async with self._lock:
-            started = time.monotonic()
             config = self.load_module_config()
             proxy = str(config.get("proxy") or "").strip()
             retries = self._to_int(
@@ -125,12 +123,17 @@ class UpdateModule(ModuleBase):
                 "latest": "",
                 "sha": "",
                 "sha7": "",
-                "elapsed": "",
                 "error": "",
             }
 
-            journal = UpdateJournal(self.get_data_path())
-            journal.start(trigger, current)
+            def end(result: str, error: str = "") -> None:
+                # 本次运行的结束分割线
+                detail = f"{trigger} end result={result}"
+                if error:
+                    detail += f" error={error}"
+                log_separator(logger, detail)
+
+            log_separator(logger, f"{trigger} start current={current}")
 
             async def say(key: str) -> None:
                 # 过程提示：聊天触发时直接发送；定时触发不通知
@@ -154,8 +157,8 @@ class UpdateModule(ModuleBase):
                 if check.get("error"):
                     error = str(check["error"])
                     variables["error"] = error
-                    journal.append(f"result=error error={error}")
-                    journal.prune()
+                    logger.error(f"check failed: {error}")
+                    end("error", error)
                     return {
                         "ok": False,
                         "message": result_message("message_error"),
@@ -167,69 +170,64 @@ class UpdateModule(ModuleBase):
                 variables["latest"] = latest
                 variables["sha"] = remote_commit
                 variables["sha7"] = remote_commit[:7]
-                journal.append(
-                    f"remote={latest} remote_commit={remote_commit} "
-                    f"has_update={has_update}"
+                logger.info(
+                    f"check remote={latest or '-'} "
+                    f"commit={remote_commit[:7] or '-'} has_update={has_update}"
                 )
 
                 # 检测结果：当前版本与远端版本对比
                 await say("message_found")
 
                 if not force and not has_update:
-                    journal.append("result=skip")
-                    journal.prune()
+                    logger.info("result=skip")
+                    end("skip")
                     return {"ok": True, "message": ""}
 
                 result = await do_update(proxy, retries, sha=remote_commit)
                 sha = str(result.get("sha") or "")
                 variables["sha"] = sha
                 variables["sha7"] = sha[:7]
-                journal.append(f"update ok={bool(result.get('ok'))} sha={sha}")
+                logger.info(
+                    f"update ok={bool(result.get('ok'))} commit={sha[:7] or '-'}"
+                )
 
                 if not result.get("ok"):
                     error = str(result.get("error") or "")
                     variables["error"] = error
-                    journal.append(f"result=error error={error}")
-                    journal.prune()
+                    logger.error(f"update failed: {error}")
+                    end("error", error)
                     return {
                         "ok": False,
                         "message": result_message("message_error"),
                     }
 
-                # 重载会卸载当前插件，先把更新结果落盘
-                journal.append("reload=start")
-                journal.prune()
+                # 重载会卸载当前插件，先记录再发起
+                logger.info("reload=start")
 
                 reload = await reload_plugin(self._context)
-                elapsed = f"{time.monotonic() - started:.1f}"
-                variables["elapsed"] = elapsed
-                journal.append(
-                    "reload=ok"
-                    if reload.get("ok")
-                    else f"reload=failed error={reload.get('error') or ''}"
-                )
-                journal.append(f"elapsed={elapsed}s")
-                journal.prune()
-
                 if not reload.get("ok"):
-                    variables["error"] = str(reload.get("error") or "")
+                    error = str(reload.get("error") or "")
+                    variables["error"] = error
+                    logger.error(f"reload failed: {error}")
+                    end("reload_failed", error)
                     return {
                         "ok": False,
                         "message": result_message("message_error"),
                     }
 
+                logger.info("reload=ok")
+                end("ok")
                 return {
                     "ok": True,
                     "message": result_message("message_done"),
                 }
             except Exception as e:  # noqa: BLE001
                 variables["error"] = f"{type(e).__name__}: {e}"
-                journal.append(f"result=exception {variables['error']}")
-                journal.prune()
-                logger.error(f"[update] 更新异常: {variables['error']}")
+                logger.error(f"update exception: {variables['error']}")
+                end("exception", variables["error"])
                 return {
                     "ok": False,
-                    "message": self._render(config.get("message_error"), variables),
+                    "message": result_message("message_error"),
                 }
 
     @staticmethod

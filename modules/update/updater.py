@@ -15,6 +15,7 @@ import asyncio
 import datetime
 import io
 import json
+import logging
 import os
 import shutil
 import stat
@@ -26,6 +27,8 @@ import jwt
 
 from ...common.utils import get_data_path
 from ...http_utils import new_opener, proxy_url, retry
+
+logger = logging.getLogger(__name__)
 
 _REPO_OWNER = "lmwm"
 _REPO_NAME = "astrbot_plugin_resource_query"
@@ -205,9 +208,11 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
         for prefix in _proxy_candidates(proxy):
             try:
                 commit = retry(lambda p=prefix: _get_sha(p), max_retries)
-            except (OSError, TimeoutError, json.JSONDecodeError, KeyError):
+            except (OSError, TimeoutError, json.JSONDecodeError, KeyError) as e:
+                logger.warning(f"resolve commit failed (via={prefix or 'direct'}): {e}")
                 continue
             if commit:
+                logger.info(f"resolve commit={commit[:7]} via={prefix or 'direct'}")
                 return commit
         return ""
 
@@ -226,7 +231,9 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
             with opener.open(request, timeout=30) as response:
                 return response.read()
 
+        logger.info(f"download start commit={commit[:7]} via={prefix or 'direct'}")
         zip_data = retry(_download_zip, max_retries)
+        logger.info(f"download done bytes={len(zip_data)}")
 
         # 临时解压目录放在 plugin_data 内，避免与插件目录/系统临时目录跨盘移动
         tmp_dir = get_data_path(_REPO_NAME) / "tmp" / "update"
@@ -242,6 +249,7 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
                 raise RuntimeError("解压失败：未找到插件目录")
 
             _replace_plugin_dir(extracted[0])
+            logger.info("replace done")
         finally:
             # 成功或失败都清理临时目录；tmp 目录空了也一并删除
             _remove_tree(tmp_dir)
@@ -273,6 +281,7 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
                 RuntimeError,
             ) as e:
                 last_error = str(e)
+                logger.warning(f"download failed via={prefix or 'direct'}: {last_error}")
                 continue
 
         return {"ok": False, "sha": "", "error": last_error}
@@ -324,6 +333,7 @@ async def reload_plugin(context) -> dict:
             last_error = ""
 
             for url, body in routes:
+                logger.info(f"reload try {url}")
                 request = Request(
                     url,
                     data=json.dumps(body).encode() if body else None,
@@ -338,6 +348,7 @@ async def reload_plugin(context) -> dict:
                         result = json.loads(response.read())
                 except (OSError, TimeoutError, json.JSONDecodeError) as e:
                     last_error = f"{type(e).__name__}: {e}"
+                    logger.warning(f"reload failed: {last_error}")
                     continue
 
                 if result.get("status") == "ok":
@@ -347,6 +358,7 @@ async def reload_plugin(context) -> dict:
                     f"status={result.get('status')} "
                     f"detail={result.get('message', result)}"
                 )
+                logger.warning(f"reload failed: {last_error}")
 
             return {"ok": False, "error": last_error}
 

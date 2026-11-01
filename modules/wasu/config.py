@@ -32,7 +32,7 @@ DEFAULT_TEMPLATE = "\n".join(_TEMPLATE_LINES)
 # 模板变量说明（Views 变量面板展示用）
 VARIABLES = {
     "label": "账号名称",
-    "balance": "账户余额",
+    "balance": "余额",
     "month_fee": "当月话费",
     "arrears": "欠费",
     "total_used": "本月累计使用",

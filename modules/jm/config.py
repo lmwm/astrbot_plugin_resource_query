@@ -9,7 +9,7 @@ CONFIG_FIELDS = {
         "label": "下载后发送 PDF",
         "type": "bool",
         "hint": "关闭后不发送文件",
-        "default": True,
+        "default": False,
     },
     "jm_show_info": {
         "label": "发送漫画信息",
