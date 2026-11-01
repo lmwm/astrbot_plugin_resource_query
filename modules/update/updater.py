@@ -2,12 +2,12 @@
 #
 # 包含三部分：
 #   - `check_update`：读取远端 metadata.yaml 并比较版本号/提交号
-#   - `do_update`：下载远端压缩包并覆盖插件目录
+#   - `do_update`：优先用 git 克隆指定提交，失败时回退 zip 下载
 #   - `reload_plugin`：调用 Dashboard API 让新版本生效
 #
 # 当前版本读插件目录的 metadata.yaml，当前提交读插件目录的 .git（git 安装时才有）。
-# 注意：`do_update` 采用「先清空再覆盖」策略，只保留 `.git`，其余文件全部替换；
-# 临时解压目录放在 plugin_data/<插件>/tmp/update，成功或失败都会清理。
+# 更新时整体替换插件目录（含 .git）；临时目录在 plugin_data/<插件>/tmp/update，
+# 成功或失败都会清理。
 
 from __future__ import annotations
 
@@ -18,6 +18,8 @@ import json
 import os
 import re
 import shutil
+import stat
+import subprocess
 import zipfile
 from pathlib import Path
 from urllib.request import Request
@@ -30,13 +32,11 @@ from ...http_utils import new_opener, proxy_url, retry
 _REPO_OWNER = "lmwm"
 _REPO_NAME = "astrbot_plugin_resource_query"
 _GITHUB_API = f"https://api.github.com/repos/{_REPO_OWNER}/{_REPO_NAME}"
+_GIT_URL = f"https://github.com/{_REPO_OWNER}/{_REPO_NAME}.git"
 _USER_AGENT = "astrbot-plugin-resource-query-updater"
 
 # 插件根目录（modules/update/updater.py 的上两级）
 _PLUGIN_DIR = Path(__file__).resolve().parents[2]
-
-# 更新时保留的内容：只保留版本库，其余全部用新版本覆盖
-_EXCLUDE = {".git"}
 
 # 提交号格式（SHA-1 40 位 / SHA-256 64 位）
 _COMMIT_RE = re.compile(r"[0-9a-fA-F]{40}(?:[0-9a-fA-F]{24})?")
@@ -118,6 +118,70 @@ def get_current_commit() -> str:
             return parts[0]
 
     return ""
+
+
+def _git_available() -> bool:
+    # 本机是否有可用的 git 命令
+    return shutil.which("git") is not None
+
+
+def _clone_commit(url: str, commit: str, target: Path, timeout: int = 120) -> bool:
+    # 浅克隆指定提交到 target
+    #
+    #     先 init + remote，再 fetch 该提交，最后把本地 main 指到它；
+    #     这样 .git/HEAD 与源码一致，get_current_commit() 能读到准确值。
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+
+    steps = (
+        ["git", "init", "-q", str(target)],
+        ["git", "-C", str(target), "remote", "add", "origin", url],
+        ["git", "-C", str(target), "fetch", "--depth", "1", "origin", commit],
+        ["git", "-C", str(target), "checkout", "-q", "-B", "main", "FETCH_HEAD"],
+    )
+
+    for step in steps:
+        try:
+            proc = subprocess.run(
+                step,
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+                env=env,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            return False
+        if proc.returncode != 0:
+            return False
+
+    return True
+
+
+def _remove_tree(path: Path) -> None:
+    # 删除目录；git 对象文件在 Windows 上是只读的，失败时去掉只读再删
+    if not path.exists():
+        return
+
+    def _on_error(func, target, _exc_info):
+        try:
+            os.chmod(target, stat.S_IWRITE)
+            func(target)
+        except OSError:
+            pass
+
+    shutil.rmtree(path, onerror=_on_error)
+
+
+def _replace_plugin_dir(source_dir: Path) -> None:
+    # 用 source_dir 的内容整体替换插件目录（包括 .git）
+    for item in _PLUGIN_DIR.iterdir():
+        if item.is_dir():
+            _remove_tree(item)
+        else:
+            item.unlink()
+
+    for item in source_dir.iterdir():
+        shutil.move(str(item), str(_PLUGIN_DIR / item.name))
 
 
 def decide_update(
@@ -231,23 +295,63 @@ async def check_update(
 
 
 async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dict:
-    # 下载远端最新版本并覆盖插件文件；sha 非空时跳过提交号请求
+    # 优先用 git 克隆指定提交，失败时回退 zip 下载
     # 返回 {"ok": bool, "sha": str, "message": str}
 
-    def _download_with(prefix: str) -> dict:
-        def _get_sha() -> str:
-            opener, _ = new_opener()
-            request = Request(
-                proxy_url(f"{_GITHUB_API}/commits/main", prefix),
-                headers={
-                    "User-Agent": _USER_AGENT,
-                    "Accept": "application/vnd.github.v3+json",
-                },
-            )
-            with opener.open(request, timeout=15) as response:
-                return json.loads(response.read())["sha"]
+    def _get_sha(prefix: str) -> str:
+        opener, _ = new_opener()
+        request = Request(
+            proxy_url(f"{_GITHUB_API}/commits/main", prefix),
+            headers={
+                "User-Agent": _USER_AGENT,
+                "Accept": "application/vnd.github.v3+json",
+            },
+        )
+        with opener.open(request, timeout=15) as response:
+            return json.loads(response.read())["sha"]
 
-        commit = sha or retry(_get_sha, max_retries)
+    def _resolve_commit() -> str:
+        # sha 已提供时直接复用；否则按代理候选依次查询远端提交
+        if sha:
+            return sha
+        for prefix in _proxy_candidates(proxy):
+            try:
+                commit = retry(lambda p=prefix: _get_sha(p), max_retries)
+            except (OSError, TimeoutError, json.JSONDecodeError, KeyError):
+                continue
+            if commit:
+                return commit
+        return ""
+
+    def _git_update(commit: str) -> bool:
+        # git 克隆该提交并整目录替换；保留 .git，使 HEAD 与源码一致
+        if not _git_available():
+            return False
+
+        tmp_dir = get_data_path(_REPO_NAME) / "tmp" / "update"
+        _remove_tree(tmp_dir)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        repo_dir = tmp_dir / "repo"
+
+        try:
+            for prefix in _proxy_candidates(proxy):
+                url = f"{prefix}{_GIT_URL}" if prefix else _GIT_URL
+                _remove_tree(repo_dir)
+                if _clone_commit(url, commit, repo_dir):
+                    _replace_plugin_dir(repo_dir)
+                    return True
+            return False
+        finally:
+            _remove_tree(tmp_dir)
+            try:
+                tmp_dir.parent.rmdir()
+            except OSError:
+                pass
+
+    def _download_with(prefix: str, commit: str) -> dict:
+        # zip 回退：整目录清空后重装（不保留 .git，避免 HEAD 与源码不一致）
+        if not commit:
+            raise RuntimeError("无法获取远端提交号")
 
         def _download_zip() -> bytes:
             opener, _ = new_opener()
@@ -263,7 +367,7 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
 
         # 临时解压目录放在 plugin_data 内，避免与插件目录/系统临时目录跨盘移动
         tmp_dir = get_data_path(_REPO_NAME) / "tmp" / "update"
-        shutil.rmtree(tmp_dir, ignore_errors=True)
+        _remove_tree(tmp_dir)
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         try:
@@ -274,29 +378,10 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
             if not extracted:
                 raise RuntimeError("解压失败：未找到插件目录")
 
-            source_dir = extracted[0]
-
-            # 清空插件目录（只保留 .git，其余全部替换）
-            for item in _PLUGIN_DIR.iterdir():
-                if item.name in _EXCLUDE:
-                    continue
-                if item.is_file():
-                    item.unlink()
-                elif item.is_dir():
-                    shutil.rmtree(item, ignore_errors=True)
-
-            # 覆盖为新版本
-            for item in source_dir.iterdir():
-                if item.name in _EXCLUDE:
-                    continue
-                destination = _PLUGIN_DIR / item.name
-                if item.is_dir():
-                    shutil.copytree(item, destination)
-                else:
-                    shutil.copy2(item, destination)
+            _replace_plugin_dir(extracted[0])
         finally:
             # 成功或失败都清理临时目录；tmp 目录空了也一并删除
-            shutil.rmtree(tmp_dir, ignore_errors=True)
+            _remove_tree(tmp_dir)
             try:
                 tmp_dir.parent.rmdir()
             except OSError:
@@ -309,14 +394,25 @@ async def do_update(proxy: str = "", max_retries: int = 3, sha: str = "") -> dic
         }
 
     def _download_and_extract() -> dict:
+        # 1. 优先 git 克隆：更新后仍能读提交号
+        commit = _resolve_commit()
+        if commit and _git_update(commit):
+            return {
+                "ok": True,
+                "sha": commit,
+                "message": f"√ 更新完成（git，commit: {commit[:7]}）",
+            }
+
+        # 2. 回退 zip：整目录清空重装
         last_error = "没有可用的下载地址"
 
         for prefix in _proxy_candidates(proxy):
             try:
-                return _download_with(prefix)
+                return _download_with(prefix, commit)
             except (
                 OSError,
                 TimeoutError,
+                json.JSONDecodeError,
                 zipfile.BadZipFile,
                 shutil.Error,
                 RuntimeError,
