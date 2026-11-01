@@ -8,8 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-
-from .utils import get_data_path
+from pathlib import Path
 
 
 class _PluginFormatter(logging.Formatter):
@@ -33,12 +32,17 @@ class _PluginFormatter(logging.Formatter):
         return text
 
 
-def setup_module_logger(plugin_name: str, module_name: str) -> logging.Logger:
+def setup_module_logger(
+    data_dir: Path, package_name: str, module_name: str
+) -> logging.Logger:
     # 给模块命名空间挂追加写的文件处理器；重复调用复用同一个
-    logger = logging.getLogger(f"{plugin_name}.modules.{module_name}")
+    #
+    #     package_name 是运行时导入名（AstrBot 下形如 data.plugins.<插件名>），
+    #     不能直接用插件名，否则子 logger 不会落到这里。
+    logger = logging.getLogger(f"{package_name}.modules.{module_name}")
     logger.setLevel(logging.INFO)
 
-    path = get_data_path(plugin_name) / "logs" / f"{module_name}.log"
+    path = Path(data_dir) / "logs" / f"{module_name}.log"
     key = str(path)
 
     for handler in logger.handlers:
@@ -48,7 +52,7 @@ def setup_module_logger(plugin_name: str, module_name: str) -> logging.Logger:
     path.parent.mkdir(parents=True, exist_ok=True)
     handler = logging.FileHandler(path, mode="a", encoding="utf-8")
     handler.setLevel(logging.INFO)
-    handler.setFormatter(_PluginFormatter(f"{plugin_name}."))
+    handler.setFormatter(_PluginFormatter(f"{package_name}."))
     handler._plugin_log_path = key
     logger.addHandler(handler)
 
@@ -56,5 +60,5 @@ def setup_module_logger(plugin_name: str, module_name: str) -> logging.Logger:
 
 
 def log_separator(logger: logging.Logger, title: str) -> None:
-    # 写一条带时间戳的分割线，标记一次加载或运行的开始/结束
-    logger.info("=" * 24 + f" {title} " + "=" * 24)
+    # 写一条带时间戳的分割线；来源行号指向调用方
+    logger.info("=" * 24 + f" {title} " + "=" * 24, stacklevel=2)

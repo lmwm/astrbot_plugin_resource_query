@@ -139,8 +139,12 @@ class ModuleBase(ABC):
 
     async def on_load(self) -> None:
         # 插件加载完成后的异步初始化（子类按需覆盖）
-        # 每模块一份追加日志；加载成功先写一条分割线
-        log_separator(setup_module_logger(self._plugin_name, self.module_name), "插件加载")
+        # 每模块一份追加日志；包名取运行时的实际导入前缀（AstrBot 下为 data.plugins.<插件名>）
+        package_name = self.__class__.__module__.split(".modules.")[0]
+        logger = setup_module_logger(
+            self.get_data_path(), package_name, self.module_name
+        )
+        log_separator(logger, "插件加载")
         # 读取一次配置，顺带完成旧 YAML 配置与变量文件的迁移
         self.load_module_config()
 
