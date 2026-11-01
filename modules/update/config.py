@@ -7,21 +7,15 @@
 _CHECKING_LINES = [
     "正在检查更新...",
     "  当前版本: v{current}",
-    "  commit: {sha7}",
 ]
 _FOUND_LINES = [
-    "正在安装...",
-    "  最新版本 v{latest}",
-]
-_DONE_LINES = [
-    "更新完成",
-    "  当前版本 v{current}",
+    "当前版本: v{current} → 最新版本 v{latest}",
     "  commit: {sha7}",
 ]
-_RELOAD_FAILED_LINES = [
-    "更新已下载，但自动重载失败",
-    "  原因: {error}",
-    "请在 WebUI 手动重载插件",
+_DONE_LINES = [
+    "更新完成...",
+    "  当前版本 v{latest}",
+    "  commit: {sha7}",
 ]
 _ERROR_LINES = [
     "更新失败: ",
@@ -42,12 +36,6 @@ CONFIG_FIELDS = {
         "hint": "网络请求失败时的重试次数",
         "default": 3,
     },
-    "force_update": {
-        "label": "强制更新",
-        "type": "bool",
-        "hint": "开启后 /query update 不加 -F 也忽略版本号直接重装；定时更新始终按版本判断",
-        "default": True,
-    },
     "schedule_enabled": {
         "label": "启用自动更新",
         "type": "bool",
@@ -64,15 +52,15 @@ CONFIG_FIELDS = {
         "label": "检查中提示",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {current} {latest} {sha7}",
+        "hint": "变量 {current}",
         "default": "\n".join(_CHECKING_LINES),
-        "variables": ["current", "latest", "sha", "sha7"],
+        "variables": ["current"],
     },
     "message_found": {
-        "label": "发现新版本提示",
+        "label": "检测结果",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {latest} {current} {sha7}",
+        "hint": "变量 {current} {latest} {sha7}",
         "default": "\n".join(_FOUND_LINES),
         "variables": ["current", "latest", "sha", "sha7"],
     },
@@ -80,33 +68,17 @@ CONFIG_FIELDS = {
         "label": "更新完成消息",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {current} {latest} {sha7} {elapsed}",
+        "hint": "变量 {latest} {sha7} {elapsed}",
         "default": "\n".join(_DONE_LINES),
-        "variables": ["current", "latest", "sha", "sha7", "elapsed"],
-    },
-    "message_reload_failed": {
-        "label": "重载失败提示",
-        "type": "template",
-        "group": "messages",
-        "hint": "变量 {error} {current}",
-        "default": "\n".join(_RELOAD_FAILED_LINES),
-        "variables": ["current", "error"],
-    },
-    "message_skip": {
-        "label": "已是最新提示",
-        "type": "template",
-        "group": "messages",
-        "hint": "变量 {current} {latest}",
-        "default": "当前已是最新版本 v{current}",
-        "variables": ["current", "latest"],
+        "variables": ["latest", "sha", "sha7", "elapsed"],
     },
     "message_error": {
         "label": "失败消息",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {error} {current}",
+        "hint": "变量 {error} {current} {latest}",
         "default": "\n".join(_ERROR_LINES),
-        "variables": ["current", "error"],
+        "variables": ["current", "latest", "error"],
     },
 }
 

@@ -15,7 +15,7 @@
 | `/mimo` · `/mimo <序号或名称>` | 查询 MiMo 余额与用量 |
 | `/wasu` · `/wasu <名称>` | 查询华数流量、通话、余额 |
 | `/jm <漫画ID>` | 下载漫画并生成 PDF（**仅私聊**） |
-| `/query update [-F]` | 检查并更新插件自身（`-F` 忽略版本号强制更新） |
+| `/query update` | 检查并更新插件自身（总是强制重装） |
 
 > 出问题时先查 AstrBot 日志（`data/logs/`），或到本仓库提 Issue。
 
@@ -63,7 +63,7 @@ main.py                     插件入口：只做「注册 + 分发」
 |------|------|
 | `/query` | 显示帮助信息 |
 | `/query <模块名> [参数]` | 分发到指定模块，如 `/query mimo ls` |
-| `/query update [-F]` | 检查并更新插件（`-F` 强制） |
+| `/query update` | 检查并更新插件（总是强制重装） |
 | `/mimo` | 查询所有 MiMo 账号 |
 | `/mimo <序号或名称>` | 查询指定 MiMo 账号 |
 | `/mimo ls` / `/mimo del <名称>` | 列出 / 删除 MiMo 账号 |

@@ -1,8 +1,8 @@
 # 插件更新模块
 #
-# 两种触发共用同一执行体：
-#   - 聊天：`/query update [-F]`，加 -F 或配置开启「强制更新」时忽略版本号
-#   - 自动：AstrBot cron 回调，只比较版本号，有新版本才更新，只写日志
+# 两种触发方式：
+#   - 聊天 `/query update`：总是强制更新（不比较版本号），先发检查中、再发检测结果与结果
+#   - 自动：AstrBot cron 回调，只比较版本号，有新版本才更新，不发送消息只写日志
 #
 # 当前版本读插件目录的 metadata.yaml；不保存、也不读取提交号状态。
 # 日志目录：plugin_data/<插件>/logs/update/，只保留最近 10 个文件。
@@ -84,22 +84,19 @@ class UpdateModule(ModuleBase):
     #  指令
 
     def get_commands(self) -> list[dict]:
-        return [{"name": "query update", "desc": "检查并更新插件：/query update [-F]"}]
+        return [{"name": "query update", "desc": "检查并更新插件（总是重装）"}]
 
     async def handle_command(self, command: str, args: list[str], event):
-        # 聊天触发：进度与结果都发回会话；-F 表示忽略版本号强制更新
+        # 聊天触发：总是强制更新，不比较版本号
         if command != "update":
             return
 
         async def notify(text: str) -> None:
             await event.send(MessageChain().message(text))
 
-        config = self.load_module_config()
-        force = any(str(arg).lower() == "-f" for arg in args) or bool(
-            config.get("force_update")
-        )
-        outcome = await self._execute("chat", force=force, notify=notify)
-        yield event.plain_result(outcome["message"])
+        outcome = await self._execute("chat", force=True, notify=notify)
+        if outcome["message"]:
+            yield event.plain_result(outcome["message"])
 
     #  执行体
 
@@ -143,7 +140,16 @@ class UpdateModule(ModuleBase):
                 if text:
                     await notify(text)
 
+            def result_message(key: str) -> str:
+                # 结果消息只在聊天触发时生成；定时触发不发送
+                if notify is None:
+                    return ""
+                return self._render(config.get(key), variables)
+
             try:
+                # 先回应指令，再开始联网检查
+                await say("message_checking")
+
                 check = await check_update(proxy, retries, force=force)
                 if check.get("error"):
                     error = str(check["error"])
@@ -152,9 +158,7 @@ class UpdateModule(ModuleBase):
                     journal.prune()
                     return {
                         "ok": False,
-                        "message": self._render(
-                            config.get("message_error"), variables
-                        ),
+                        "message": result_message("message_error"),
                     }
 
                 latest = str(check.get("latest") or "")
@@ -168,19 +172,13 @@ class UpdateModule(ModuleBase):
                     f"has_update={has_update}"
                 )
 
-                await say("message_checking")
+                # 检测结果：当前版本与远端版本对比
+                await say("message_found")
 
                 if not force and not has_update:
                     journal.append("result=skip")
                     journal.prune()
-                    return {
-                        "ok": True,
-                        "message": self._render(
-                            config.get("message_skip"), variables
-                        ),
-                    }
-
-                await say("message_found")
+                    return {"ok": True, "message": ""}
 
                 result = await do_update(proxy, retries, sha=remote_commit)
                 sha = str(result.get("sha") or "")
@@ -195,9 +193,7 @@ class UpdateModule(ModuleBase):
                     journal.prune()
                     return {
                         "ok": False,
-                        "message": self._render(
-                            config.get("message_error"), variables
-                        ),
+                        "message": result_message("message_error"),
                     }
 
                 # 重载会卸载当前插件，先把更新结果落盘
@@ -219,14 +215,12 @@ class UpdateModule(ModuleBase):
                     variables["error"] = str(reload.get("error") or "")
                     return {
                         "ok": False,
-                        "message": self._render(
-                            config.get("message_reload_failed"), variables
-                        ),
+                        "message": result_message("message_error"),
                     }
 
                 return {
                     "ok": True,
-                    "message": self._render(config.get("message_done"), variables),
+                    "message": result_message("message_done"),
                 }
             except Exception as e:  # noqa: BLE001
                 variables["error"] = f"{type(e).__name__}: {e}"
