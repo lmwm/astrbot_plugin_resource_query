@@ -34,17 +34,26 @@ def module_logger(module_name: str) -> logging.Logger:
 
 
 def setup_module_logger(module_name: str) -> logging.Logger:
-    # 给模块 logger 挂转发处理器；重复调用复用同一个
+    # 给模块 logger 挂唯一的转发处理器
+    #
+    #     插件重载后旧处理器对象仍留在 logger 上，且类的身份已变化，
+    #     不能靠 isinstance 判断；这里清掉旧的文件/转发处理器再挂一个新的。
     logger = module_logger(module_name)
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
-    for handler in logger.handlers:
-        if isinstance(handler, _PluginForwardHandler):
-            return logger
+    for handler in list(logger.handlers):
+        is_old_forward = type(handler).__name__ == "_PluginForwardHandler"
+        if isinstance(handler, logging.FileHandler) or is_old_forward:
+            logger.removeHandler(handler)
+            try:
+                handler.close()
+            except OSError:
+                pass
 
     forward = _PluginForwardHandler(f"astrbot.plugin.{PLUGIN_NAME}")
     forward.setLevel(logging.INFO)
+    forward._plugin_forward = True
     logger.addHandler(forward)
 
     return logger
