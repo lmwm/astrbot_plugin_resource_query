@@ -36,6 +36,8 @@ class UpdateModule(ModuleBase):
         super().__init__(plugin_dir, plugin_name)
         self._lock = asyncio.Lock()
         self._schedule: UpdateSchedule | None = None
+        # 最近一次 /query update 的会话，供定时更新成功后发送消息
+        self._last_session = ""
 
     #  元信息
 
@@ -88,6 +90,8 @@ class UpdateModule(ModuleBase):
         # 聊天触发：总是强制更新，不比较版本号
         if command != "update":
             return
+
+        self._last_session = str(event.unified_msg_origin or "")
 
         async def notify(text: str) -> None:
             await event.send(MessageChain().message(text))
@@ -231,9 +235,13 @@ class UpdateModule(ModuleBase):
 
                 logger.info("插件重载成功")
                 end("ok")
+
+                done_text = self._render(config.get("message_done"), variables)
+                if trigger == "schedule":
+                    await self._send_scheduled_message(config, done_text)
                 return {
                     "ok": True,
-                    "message": result_message("message_done"),
+                    "message": done_text if notify is not None else "",
                 }
             except Exception as e:  # noqa: BLE001
                 variables["error"] = f"{type(e).__name__}: {e}"
@@ -243,6 +251,24 @@ class UpdateModule(ModuleBase):
                     "ok": False,
                     "message": result_message("message_error"),
                 }
+
+    async def _send_scheduled_message(self, config: dict, text: str) -> None:
+        # 定时更新成功后，把完成消息发送到配置或最近一次指令的会话
+        target = str(config.get("notify_session") or "").strip() or self._last_session
+        if not target:
+            logger.warning(
+                "定时更新成功，但没有通知会话（未配置且本次启动后没有 /query update）"
+            )
+            return
+        if self._context is None:
+            logger.warning("定时更新成功，但上下文不可用，无法发送消息")
+            return
+
+        try:
+            await self._context.send_message(target, MessageChain().message(text))
+            logger.info(f"定时更新成功，已发送完成消息到会话：{target}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"定时更新成功，但发送完成消息失败：{type(e).__name__}: {e}")
 
     @staticmethod
     def _render(template, variables: dict) -> str:

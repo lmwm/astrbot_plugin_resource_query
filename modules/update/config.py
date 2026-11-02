@@ -43,6 +43,12 @@ CONFIG_FIELDS = {
         "hint": "五段式，例如 0 4 * * * 表示每天 04:00",
         "default": "0 4 * * *",
     },
+    "notify_session": {
+        "label": "定时更新通知会话",
+        "type": "text",
+        "hint": "unified_msg_origin，例如 aiocqhttp:FriendMessage:123；留空则用最近一次 /query update 的会话，都没有则不发送",
+        "default": "",
+    },
     "message_checking": {
         "label": "检查中提示",
         "type": "template",
