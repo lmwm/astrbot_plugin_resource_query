@@ -1,12 +1,13 @@
 # 图片合成 PDF
 #
-# 站点原图多为 webp，直接交给 img2pdf 会被无损转码、体积膨胀数倍，
-# 因此默认在下载阶段就让 jmcomic 直接存成 JPEG（质量 75），生成 PDF 时
-# 直接嵌入、不再二次转码；其它质量值仍下载原图，再逐张转成目标质量的
-# JPEG。逐张写临时文件而不是把全部字节留在内存，避免大本子占用过多内存。
+# 下载阶段保留站点原图（多为 webp）作为存档，本模块只把非 JPEG 的图按目标
+# 质量转成 JPEG 再交给 img2pdf：webp 直接嵌入会被无损重编码、体积膨胀数倍，
+# 因此必须转码。已是 JPEG 的源图在默认画质（75）下直接嵌入、不再二次编码。
+# 逐张写临时文件而不是把全部字节留在内存，避免大本子占用过多内存。
 #
 # 转码用线程池并行（PIL 的编码在 C 层，线程可重叠），PDF 用 outputstream
 # 直接写盘；先写同目录临时文件，成功后再原子替换，失败时保留旧 PDF。
+# 原图目录始终不被改写。
 
 from __future__ import annotations
 
@@ -30,7 +31,7 @@ def make_pdf(
     pdf_name: str,
     images: list[Path],
     quality: int,
-    direct_jpeg: bool = False,
+    embed_jpeg: bool = False,
 ) -> Path:
     # 生成 PDF 并返回路径；没有可用图片时抛 RuntimeError
     # 依赖在调用时才导入：缺库时让下载返回可读错误，而不是插件加载失败
@@ -44,13 +45,13 @@ def make_pdf(
     tmp_dir = album_root / _TMP_DIR_NAME
 
     try:
-        # 默认质量下 jmcomic 已直接存 JPEG，这里无需再读再写
-        if direct_jpeg and all(p.suffix.lower() in _JPEG_SUFFIXES for p in images):
+        # 默认画质下 JPEG 源图直接嵌入，不重新编码
+        if embed_jpeg and all(p.suffix.lower() in _JPEG_SUFFIXES for p in images):
             pages = [str(p) for p in images]
         else:
             shutil.rmtree(tmp_dir, ignore_errors=True)
             tmp_dir.mkdir(parents=True, exist_ok=True)
-            pages = _convert_images(images, tmp_dir, quality, direct_jpeg, Image)
+            pages = _convert_images(images, tmp_dir, quality, embed_jpeg, Image)
 
         if not pages:
             raise RuntimeError("没有可用于生成 PDF 的图片")
@@ -69,7 +70,7 @@ def _convert_images(
     images: list[Path],
     tmp_dir: Path,
     quality: int,
-    direct_jpeg: bool,
+    embed_jpeg: bool,
     image_cls,
 ) -> list[str]:
     # 把非 JPEG（或需要重编码）的图片并行转成目标质量的 JPEG，按原顺序返回
@@ -91,7 +92,7 @@ def _convert_images(
     work = [
         (index, source)
         for index, source in enumerate(images)
-        if not (direct_jpeg and source.suffix.lower() in _JPEG_SUFFIXES)
+        if not (embed_jpeg and source.suffix.lower() in _JPEG_SUFFIXES)
     ]
 
     converted: dict[int, str] = {}
@@ -116,7 +117,7 @@ def _convert_images(
 
     pages: list[str] = []
     for index, source in enumerate(images):
-        if direct_jpeg and source.suffix.lower() in _JPEG_SUFFIXES:
+        if embed_jpeg and source.suffix.lower() in _JPEG_SUFFIXES:
             pages.append(str(source))
         elif index in converted:
             pages.append(converted[index])

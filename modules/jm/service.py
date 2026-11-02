@@ -9,7 +9,8 @@
 # - 图片目录按章节分子目录，避免多章节图片同名（都是 00001.jpg）互相覆盖；
 # - 用 DownloadResult.manifest.image_filepath_list 拿按章节/页码排好序的图片；
 # - check_exception=True 让库抛 PartialDownloadFailedException，不再自己拼错误；
-# - 质量 75 时让库在下载阶段直接存 JPEG，PDF 直接嵌入，省掉二次转码。
+# - 下载阶段保留站点原图（webp/jpg 原样落盘），作为存档；PDF 生成时才按画质
+#   转码到临时目录，不覆盖原图。
 
 from __future__ import annotations
 
@@ -96,8 +97,9 @@ class JMService:
     def _quality(self) -> int:
         return max(1, min(95, self._int("jm_jpeg_quality", 75)))
 
-    def _build_option(self, image_dir: Path, direct_jpeg: bool):
+    def _build_option(self, image_dir: Path):
         # 从最小配置构建 JmOption，其余项交给库的默认值合并
+        # 不设置 download.image.suffix：按站点原格式落盘（webp/jpg），保留原图存档
         import jmcomic
 
         raw = {
@@ -107,8 +109,6 @@ class JMService:
                 "cache": True,
                 "image": {
                     "decode": True,
-                    # 质量 75：下载时直接落 JPEG，PDF 不再读图重编码
-                    "suffix": ".jpg" if direct_jpeg else None,
                 },
                 "threading": {
                     "image": max(1, self._int("jm_image_threads", 10)),
@@ -164,9 +164,7 @@ class JMService:
 
     async def _fetch_album(self, album_id: str):
         # 仅取详情，不下载：用轻量异步客户端，避免构造完整下载器
-        option = self._build_option(
-            self.paths.album_root(album_id), self._quality() == 75
-        )
+        option = self._build_option(self.paths.album_root(album_id))
         client = option.new_jm_async_client()
         try:
             await client.setup()
@@ -265,9 +263,10 @@ class JMService:
         import jmcomic
 
         quality = self._quality()
-        direct_jpeg = quality == 75
+        # 默认画质对已是 JPEG 的源图直接嵌入；其它画质统一转码
+        embed_jpeg = quality == 75
         image_dir = self.paths.ensure_image_dir(album_id, info)
-        option = self._build_option(image_dir, direct_jpeg)
+        option = self._build_option(image_dir)
         downloader_cls = _make_progress_downloader(
             progress, info.page_count, quality
         )
@@ -303,7 +302,7 @@ class JMService:
             pdf_name,
             images,
             quality,
-            direct_jpeg,
+            embed_jpeg,
         )
 
         await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, image_dir)
