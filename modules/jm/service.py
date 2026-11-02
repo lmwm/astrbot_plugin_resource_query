@@ -355,15 +355,9 @@ def _make_progress_downloader(
         def __init__(self, option):
             super().__init__(option)
             self._done = 0
+            # 2.7.5 的 API 不返回总页数：总数未知时只报已下载张数，
+            # 不在章节开始时逐章累加，避免多章节尚未全部开始时误报 100%
             self._total = max(0, int(initial_total or 0))
-
-        async def before_photo(self, photo):
-            await super().before_photo(photo)
-            if self._total == 0:
-                try:
-                    self._total += len(photo)
-                except TypeError:
-                    pass
 
         async def after_image(self, image, img_save_path):
             await super().after_image(image, img_save_path)
