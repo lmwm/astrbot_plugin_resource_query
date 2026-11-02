@@ -6,20 +6,15 @@
 # 消息模板的默认内容（按行拼接，便于阅读）
 _CHECKING_LINES = [
     "正在检查更新...",
-    "  当前版本: v{current}",
 ]
 _FOUND_LINES = [
-    "版本: v{current} → v{latest}",
-    "commit: {sha7}",
+    "版本: v{current} → v{latest}\n  commit: {sha7}",
 ]
 _DONE_LINES = [
-    "更新完成...",
-    "  当前版本 v{current}",
-    "  commit: {sha7}",
+    "更新完成...\n  当前版本 v{current}",
 ]
 _ERROR_LINES = [
-    "更新失败: ",
-    "  {error}",
+    "更新失败: \n  {error}",
 ]
 
 # 配置字段（key -> label / type / hint / group / variables / default）
@@ -27,19 +22,19 @@ CONFIG_FIELDS = {
     "proxy": {
         "label": "GitHub 代理",
         "type": "text",
-        "hint": "如 https://gh-proxy.com/；留空则直连（不使用代理）",
+        "hint": "留空则不使用代理，默认 https://gh-proxy.com/",
         "default": "https://gh-proxy.com/",
     },
     "max_retries": {
-        "label": "请求重试次数",
+        "label": "重试次数",
         "type": "int",
         "hint": "网络请求失败时的重试次数",
         "default": 3,
     },
     "schedule_enabled": {
-        "label": "启用自动更新",
+        "label": "自动更新",
         "type": "bool",
-        "hint": "按下面的表达式自动检查，有新版本才更新",
+        "hint": "按下面的时间自动更新",
         "default": True,
     },
     "schedule_cron": {
