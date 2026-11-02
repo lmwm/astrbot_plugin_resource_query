@@ -8,7 +8,7 @@ _CHECKING_LINES = [
     "正在检查更新...",
 ]
 _FOUND_LINES = [
-    "版本: v{current} → v{latest}\n  commit: {sha7}",
+    "版本: v{current} → v{latest}\n  commit: {latest_sha7}",
 ]
 _DONE_LINES = [
     "更新完成...\n  当前版本 v{current}",
@@ -61,17 +61,17 @@ CONFIG_FIELDS = {
         "label": "检测结果",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {current} {latest} {sha7}",
+        "hint": "变量 {current} {latest} {latest_sha7}",
         "default": "\n".join(_FOUND_LINES),
-        "variables": ["current", "latest", "sha", "sha7"],
+        "variables": ["current", "latest", "latest_sha", "latest_sha7"],
     },
     "message_done": {
         "label": "更新完成消息",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {current} {sha7}",
+        "hint": "变量 {current} {latest_sha7}",
         "default": "\n".join(_DONE_LINES),
-        "variables": ["current", "sha", "sha7"],
+        "variables": ["current", "latest_sha", "latest_sha7"],
     },
     "message_error": {
         "label": "失败消息",
@@ -95,8 +95,8 @@ CONFIG_GROUPS = [
 VARIABLES = {
     "current": "当前版本",
     "latest": "远端版本",
-    "sha": "远端提交号",
-    "sha7": "远端短提交号",
+    "latest_sha": "远端提交号",
+    "latest_sha7": "远端短提交号",
     "error": "错误信息",
 }
 
@@ -104,7 +104,7 @@ VARIABLES = {
 VAR_SAMPLES = {
     "current": "6.1.0",
     "latest": "6.1.1",
-    "sha": "2c54e39abcdef0123456789abcdef0123456789",
-    "sha7": "2c54e39",
+    "latest_sha": "2c54e39abcdef0123456789abcdef0123456789",
+    "latest_sha7": "2c54e39",
     "error": "网络连接超时",
 }

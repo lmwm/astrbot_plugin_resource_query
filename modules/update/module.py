@@ -61,8 +61,9 @@ class UpdateModule(ModuleBase):
     #  生命周期
 
     async def on_load(self) -> None:
-        # 插件加载完成后注册定时更新
+        # 插件加载完成后迁移旧模板变量并注册定时更新
         await super().on_load()
+        self._migrate_template_variables()
         self._schedule = UpdateSchedule(
             self._context, self._plugin_name, self._run_scheduled
         )
@@ -83,6 +84,26 @@ class UpdateModule(ModuleBase):
         )
 
     #  指令
+
+    def _migrate_template_variables(self) -> None:
+        # 旧变量 {sha}/{sha7} 改名为 {latest_sha}/{latest_sha7}，迁移用户已保存的模板
+        config = self.load_module_config()
+        changed = False
+
+        for field in self.get_config_fields():
+            if field.get("type") != "template":
+                continue
+            key = field["key"]
+            text = str(config.get(key) or "")
+            migrated = text.replace("{sha7}", "{latest_sha7}").replace(
+                "{sha}", "{latest_sha}"
+            )
+            if migrated != text:
+                config[key] = migrated
+                changed = True
+
+        if changed and self.save_module_config(config):
+            logger.info("已将模板变量 {sha}/{sha7} 迁移为 {latest_sha}/{latest_sha7}")
 
     def get_commands(self) -> list[dict]:
         return [{"name": "query update", "desc": "检查并更新插件（总是重装）"}]
@@ -176,8 +197,8 @@ class UpdateModule(ModuleBase):
                 remote_commit = str(check.get("remote_commit") or "")
                 has_update = bool(check.get("has_update"))
                 variables["latest"] = latest
-                variables["sha"] = remote_commit
-                variables["sha7"] = remote_commit[:7]
+                variables["latest_sha"] = remote_commit
+                variables["latest_sha7"] = remote_commit[:7]
                 logger.info(
                     f"检查完成：本地 v{current} → 远端 v{latest or '未知'}，"
                     f"远端提交 {remote_commit[:7] or '未知'}，"
@@ -194,8 +215,8 @@ class UpdateModule(ModuleBase):
 
                 result = await do_update(proxy, retries, sha=remote_commit)
                 sha = str(result.get("sha") or "")
-                variables["sha"] = sha
-                variables["sha7"] = sha[:7]
+                variables["latest_sha"] = sha
+                variables["latest_sha7"] = sha[:7]
                 logger.info(
                     f"源码归档已替换：提交 {sha[:7] or '未知'}，结果 {'成功' if result.get('ok') else '失败'}"
                 )
