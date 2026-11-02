@@ -403,6 +403,10 @@ class ModuleBase(ABC):
         # 过滤待保存字段；默认全部接受
         return payload
 
+    def validate_config_payload(self, payload: dict) -> str | None:
+        # 校验待保存配置；返回错误文案，None 表示通过（子类按需覆盖）
+        return None
+
     async def api_get_config(self):
         from astrbot.api.web import json_response
 
@@ -414,6 +418,10 @@ class ModuleBase(ABC):
         payload = await request.json(default={})
         if not isinstance(payload, dict) or not payload:
             return error_response("缺少配置数据")
+
+        problem = self.validate_config_payload(payload)
+        if problem:
+            return error_response(problem)
 
         config = self.load_module_config()
         config.update(self.accept_config_payload(payload, config))

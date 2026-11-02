@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 
 from astrbot.api.event import MessageChain
 
@@ -121,7 +122,7 @@ class UpdateModule(ModuleBase):
             current = get_current_version()
 
             # 模板变量按阶段赋值；未赋值的占位符在渲染时原样保留
-            variables = {"current": current}
+            variables: dict[str, str] = {}
 
             trigger_name = "聊天指令" if trigger == "chat" else "定时任务"
             result_names = {
@@ -157,6 +158,7 @@ class UpdateModule(ModuleBase):
 
             try:
                 # 先回应指令，再开始联网检查
+                variables["current"] = current
                 await say("message_checking")
 
                 check = await check_update(proxy, retries, force=force)
@@ -296,6 +298,34 @@ class UpdateModule(ModuleBase):
         # 只接受用户配置中存在的键，避免把 current_version 等只读字段写回
         known = {field["key"] for field in self.get_config_fields()}
         return {k: v for k, v in payload.items() if k in known}
+
+    @staticmethod
+    def _used_variables(template) -> set[str]:
+        # 取出模板里使用的 {变量名}
+        return set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", str(template or "")))
+
+    def validate_config_payload(self, payload: dict) -> str | None:
+        # 按插件流程限制每个消息模板可用的变量
+        for field in self.get_config_fields():
+            if field.get("type") != "template":
+                continue
+            key = field["key"]
+            if key not in payload:
+                continue
+
+            allowed = list(field.get("variables") or [])
+            invalid = self._used_variables(payload[key]) - set(allowed)
+            if not invalid:
+                continue
+
+            used_text = " ".join(f"{{{name}}}" for name in sorted(invalid))
+            allowed_text = " ".join(f"{{{name}}}" for name in allowed) or "（无）"
+            return (
+                f"「{field.get('label', key)}」使用了不可用变量：{used_text}；"
+                f"可用变量：{allowed_text}"
+            )
+
+        return None
 
     async def api_save_config(self):
         # 保存后立即按新配置重排定时任务

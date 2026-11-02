@@ -77,9 +77,9 @@ CONFIG_FIELDS = {
         "label": "失败消息",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {error} {current} {latest}",
+        "hint": "变量 {error} {current}",
         "default": "\n".join(_ERROR_LINES),
-        "variables": ["current", "latest", "error"],
+        "variables": ["current", "error"],
     },
 }
 
