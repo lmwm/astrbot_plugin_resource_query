@@ -106,16 +106,11 @@ plugin_data/astrbot_plugin_resource_query/
 │   │   └── config.json        # 下载配置（并发 / 代理 / Cookie / 超时 / 重试等）
 │   └── update/
 │       └── config.json        # 代理、重试、自动更新、消息模板
-└── logs/
-    ├── update.log             # 每个模块一份日志，追加写入
-    ├── mimo.log
-    ├── wasu.log
-    └── jm.log
 ```
 
 默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/config.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
 
-日志会**同时写两份**：AstrBot 统一日志（`data/logs/astrbot.log` 与 WebUI 实时日志）和自建 `logs/<模块>.log`（追加写入，每次加载/运行前后留空行与分割线）。自建文件格式复用 AstrBot：`[YYYY-MM-DD HH:MM:SS.mmm] [Plugin] [级别] [模块:行号]: 内容`。
+日志统一写入 AstrBot：`data/logs/astrbot.log` 与 WebUI 实时日志，记录带 `[astrbot_plugin_resource_query]` 标记；插件不再创建自己的日志文件。
 
 页面内每个模块按能力显示对应区块：
 
@@ -226,7 +221,7 @@ astrbot_plugin_resource_query/
 │   └── result.py            # 查询结果基类
 ├── common/                  # 通用工具层
 │   ├── utils.py             # 路径与文件读写
-│   ├── module_log.py        # 模块日志（每模块一份，追加写入）
+│   ├── module_log.py        # 模块日志（统一写 AstrBot）
 │   └── yaml_utils.py        # 旧 YAML 解析（仅供配置迁移）
 ├── modules/                 # 功能模块层
 │   ├── mimo/                # module / manager / account / query / result / utils / config.py

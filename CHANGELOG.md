@@ -1,3 +1,10 @@
+## v6.6.0 (2026-11-02)
+
+### 重构
+
+- **只保留 AstrBot 统一日志**：移除自建 `plugin_data/<插件>/logs/<模块>.log` 与文件写入；模块日志只进入 `data/logs/astrbot.log` 与 WebUI 实时日志（带 `[astrbot_plugin_resource_query]` 标记）
+- 分割线不再插入前后空行，保持 AstrBot 日志格式整齐
+
 ## v6.5.1 (2026-11-01)
 
 ### 修复
