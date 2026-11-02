@@ -9,8 +9,6 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from PIL import Image
-
 from ...common.module_log import module_logger
 
 logger = module_logger("jm")
@@ -20,7 +18,9 @@ _TMP_DIR_NAME = "__pdf_tmp__"
 
 def make_pdf(album_root: Path, pdf_name: str, images: list[Path], quality: int) -> Path:
     # 生成 PDF 并返回路径；没有可用图片时抛 RuntimeError
+    # 依赖在调用时才导入：缺库时让下载返回可读错误，而不是插件加载失败
     from img2pdf import convert
+    from PIL import Image
 
     quality = max(1, min(95, int(quality)))
     tmp_dir = Path(album_root) / _TMP_DIR_NAME

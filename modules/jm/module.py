@@ -16,6 +16,7 @@ from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 from ...common.module_log import log_separator, module_logger
 from ...common.utils import parse_int, render_template
 from ...core.module import ModuleBase
+from . import deps
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
@@ -82,6 +83,18 @@ class JMModule(ModuleBase):
             self._service.bind_config(self.load_module_config())
         return saved
 
+    #  生命周期
+
+    async def on_load(self) -> None:
+        # 加载后检查运行依赖；缺失只记日志，不阻断其他模块与插件加载
+        await super().on_load()
+        missing = deps.missing()
+        if missing:
+            logger.error(
+                f"缺少运行依赖：{'、'.join(missing)}；"
+                f"未安装的模块：{'、'.join(deps.missing_modules())}，/jm 只提示安装不会下载"
+            )
+
     #  指令
 
     def get_commands(self) -> list[dict]:
@@ -102,6 +115,20 @@ class JMModule(ModuleBase):
         album_id = normalize_album_id(args[0])
         if album_id is None:
             yield event.plain_result(_INVALID_ID_TEXT)
+            return
+
+        # 依赖缺失时不进入下载流程，避免把 ModuleNotFoundError 抛给聊天
+        missing = deps.missing()
+        if missing:
+            logger.error(
+                f"拒绝下载 JM{album_id}：缺少运行依赖 "
+                f"{'、'.join(missing)}（模块 {'、'.join(deps.missing_modules())}）"
+            )
+            yield event.plain_result(
+                self._render_message(
+                    "message_missing_deps", {"deps": "、".join(missing)}
+                )
+            )
             return
 
         force = len(args) > 1 and args[1].lower() == "redownload"

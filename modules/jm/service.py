@@ -12,6 +12,7 @@ from pathlib import Path
 
 from ...common.module_log import module_logger
 from .cache import AlbumCache
+from .deps import missing as missing_dependencies
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
 from .pdf import make_pdf
@@ -175,13 +176,19 @@ class JMService:
         force: bool = False,
     ) -> DownloadResult:
         # 下载漫画并生成 PDF；本方法不抛异常，失败原因放在返回值里
+        missing = missing_dependencies()
+        if missing:
+            error = f"缺少依赖：{'、'.join(missing)}"
+            logger.error(f"JM{album_id} {error}（未安装：{'、'.join(missing)}）")
+            return DownloadResult(success=False, album_id=album_id, error=error)
+
         try:
             import img2pdf  # noqa: F401
             import jmcomic  # noqa: F401
         except ImportError as e:
-            logger.error(f"JM{album_id} 缺少依赖：{e}")
+            logger.error(f"JM{album_id} 依赖导入失败：{e}")
             return DownloadResult(
-                success=False, album_id=album_id, error=f"缺少依赖：{e}"
+                success=False, album_id=album_id, error=f"依赖导入失败：{e}"
             )
 
         if not force:

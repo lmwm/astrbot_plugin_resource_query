@@ -37,6 +37,11 @@ _SEND_FAILED_LINES = [
 _NO_PDF_LINES = [
     "! 下载完成但未生成 PDF 文件",
 ]
+_MISSING_DEPS_LINES = [
+    "× 缺少运行依赖：{deps}",
+    "请在 AstrBot 插件管理中重装 / 更新本插件以自动安装依赖；",
+    "仍失败时可在 AstrBot 的 Python 环境里手动安装",
+]
 
 # 配置字段（key -> label / type / hint / group / variables / default）
 CONFIG_FIELDS = {
@@ -207,6 +212,14 @@ CONFIG_FIELDS = {
         "default": "\n".join(_NO_PDF_LINES),
         "variables": ["id", "title"],
     },
+    "message_missing_deps": {
+        "label": "缺少运行依赖",
+        "type": "template",
+        "group": "messages",
+        "hint": "变量 {deps}；依赖装在 AstrBot 的 site-packages，重装插件会自动安装",
+        "default": "\n".join(_MISSING_DEPS_LINES),
+        "variables": ["deps"],
+    },
 }
 
 # 配置分组：每组在 Views 里单独一页
@@ -238,6 +251,7 @@ VARIABLES = {
     "done": "已下载张数",
     "total": "总张数",
     "error": "错误信息",
+    "deps": "缺失的依赖",
 }
 
 # 变量示例值，供模板预览使用
@@ -253,4 +267,5 @@ VAR_SAMPLES = {
     "done": "12",
     "total": "26",
     "error": "网络连接超时",
+    "deps": "jmcomic、Pillow",
 }
