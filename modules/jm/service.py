@@ -3,6 +3,7 @@
 # 负责配置构建、漫画信息获取、下载与 PDF 生成。
 # 下载交给 jmcomic 的异步下载器（2.7+），进度直接回到事件循环，
 # 不再需要线程池与跨线程调度。
+# 本层只产出数据（进度、结果、错误原因），发给用户的消息由模块按模板渲染。
 
 from __future__ import annotations
 
@@ -42,8 +43,13 @@ class JMService:
 
     #  配置与生命周期
 
+    @property
+    def config(self) -> dict:
+        # 当前模块配置；由模块在加载与保存后绑定，避免每次下载都读盘
+        return self._config
+
     def bind_config(self, config: dict) -> None:
-        # 绑定当前配置；由模块在加载与保存后调用，避免每次下载都读盘
+        # 绑定当前配置
         self._config = config or {}
 
     def ensure_ready(self) -> None:
@@ -55,7 +61,7 @@ class JMService:
         if self._legacy_dir is not None:
             moved = self.paths.migrate_legacy_root(self._legacy_dir)
             if moved:
-                logger.info(f"[jm] 已迁移 {moved} 个旧版漫画目录")
+                logger.info(f"已迁移 {moved} 个旧版漫画目录")
 
     #  配置构建
 
@@ -77,8 +83,8 @@ class JMService:
         download.setdefault("image", {})["decode"] = True
 
         threading = download.setdefault("threading", {})
-        threading["image"] = max(1, self._int("jm_image_threads", 16))
-        threading["photo"] = max(1, self._int("jm_photo_threads", 4))
+        threading["image"] = max(1, self._int("jm_image_threads", 10))
+        threading["photo"] = max(1, self._int("jm_photo_threads", 2))
 
         client = raw.setdefault("client", {})
         client["retry_times"] = max(1, self._int("jm_retry_times", 3))
@@ -114,6 +120,7 @@ class JMService:
     #  本地缓存
 
     def check_local(self, album_id: str) -> dict | None:
+        # 供模块在下载前判断走缓存还是下载（权威判定仍在 download 内）
         return self.cache.check_local(album_id)
 
     #  漫画信息
@@ -129,6 +136,7 @@ class JMService:
         except ImportError:
             return AlbumInfo(id=str(album_id), name="未知（jmcomic 未安装）")
         except Exception as e:
+            logger.warning(f"JM{album_id} 获取漫画详情失败：{self._describe_error(e)}")
             return AlbumInfo(id=str(album_id), name=self._describe_error(e))
 
         info = self._to_info(album_id, album)
@@ -166,21 +174,22 @@ class JMService:
         progress: ProgressCallback | None = None,
         force: bool = False,
     ) -> DownloadResult:
-        # 下载漫画并生成 PDF；本方法不抛异常，失败信息放在返回值里
+        # 下载漫画并生成 PDF；本方法不抛异常，失败原因放在返回值里
         try:
             import img2pdf  # noqa: F401
             import jmcomic  # noqa: F401
         except ImportError as e:
+            logger.error(f"JM{album_id} 缺少依赖：{e}")
             return DownloadResult(
-                success=False, message=f"缺少依赖: {e}", album_id=album_id
+                success=False, album_id=album_id, error=f"缺少依赖：{e}"
             )
 
         if not force:
             cached = self.cache.check_local(album_id)
             if cached and cached.get("has_pdf"):
+                logger.info(f"JM{album_id} 命中本地缓存：{cached.get('pdf_name')}")
                 return DownloadResult(
                     success=True,
-                    message="使用本地缓存",
                     album_id=album_id,
                     pdf_path=cached.get("pdf_path"),
                     pdf_name=cached.get("pdf_name"),
@@ -193,17 +202,20 @@ class JMService:
         try:
             pdf_path, image_count = await self._run_download(album_id, info, progress)
         except Exception as e:
+            error = self._describe_error(e)
+            logger.error(f"JM{album_id} 下载失败：{error}")
             return DownloadResult(
-                success=False,
-                message=self._describe_error(e),
-                album_id=album_id,
-                album_info=info,
+                success=False, album_id=album_id, album_info=info, error=error
             )
 
         file_size_mb = pdf_path.stat().st_size / (1024 * 1024)
+        logger.info(
+            f"JM{album_id} 下载完成：{image_count} 张图片，"
+            f"PDF {round(file_size_mb, 2)} MB"
+        )
+
         return DownloadResult(
             success=True,
-            message="下载完成",
             album_id=album_id,
             album_name=info.name,
             album_info=info,
@@ -265,7 +277,7 @@ class JMService:
         message = _ERROR_MESSAGES.get(type(error).__name__)
         if message:
             return message
-        return f"下载失败: {type(error).__name__}: {error}"
+        return f"{type(error).__name__}: {error}"
 
 
 def _collect_images(downloader) -> list[Path]:
@@ -284,7 +296,7 @@ def _make_progress_downloader(
     callback: ProgressCallback | None,
     initial_total: int = 0,
 ):
-    # 生成带进度的异步下载器类；回调在事件循环内直接 await
+    # 生成带进度的异步下载器类；回调只报数量，文案由模块渲染
     import jmcomic
 
     class _ProgressDownloader(jmcomic.JmAsyncDownloader):
@@ -315,14 +327,12 @@ def _make_progress_downloader(
                 if percent <= self._last_percent:
                     return
                 self._last_percent = percent
-                text = f"下载中 {percent}%"
             else:
                 # 总页数未知时按数量播报，每 10 张一次
                 if self._reported and self._done % 10 != 0:
                     return
                 self._reported = True
-                text = f"已下载 {self._done} 张"
 
-            await callback(self._done, self._total, text)
+            await callback(self._done, self._total)
 
     return _ProgressDownloader

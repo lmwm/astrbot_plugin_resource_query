@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
-# 进度回调：callback(已下载数, 总数（0 表示未知）, 进度文本)
-ProgressCallback = Callable[[int, int, str], Awaitable[None]]
+# 进度回调：callback(已下载数, 总数（0 表示未知）)
+ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 
 @dataclass
@@ -42,10 +42,9 @@ class AlbumInfo:
 
 @dataclass
 class DownloadResult:
-    # 下载结果
+    # 下载结果；成功时带 PDF 路径与大小，失败时 error 为可读原因
 
     success: bool
-    message: str
     album_id: str = ""
     album_name: str = ""
     album_info: AlbumInfo | None = None
@@ -54,11 +53,11 @@ class DownloadResult:
     file_size_mb: float = 0.0
     image_count: int = 0
     from_cache: bool = False
+    error: str = ""
 
     def to_dict(self) -> dict:
         result = {
             "success": self.success,
-            "message": self.message,
             "album_id": self.album_id,
             "album_name": self.album_name,
             "file_size_mb": self.file_size_mb,
@@ -66,6 +65,8 @@ class DownloadResult:
             "from_cache": self.from_cache,
         }
 
+        if self.error:
+            result["error"] = self.error
         if self.album_info:
             result["album_info"] = self.album_info.to_dict()
         if self.pdf_path:

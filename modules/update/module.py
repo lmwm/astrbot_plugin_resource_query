@@ -10,11 +10,11 @@
 from __future__ import annotations
 
 import asyncio
-import re
 
 from astrbot.api.event import MessageChain
 
 from ...common.module_log import log_separator, module_logger
+from ...common.utils import parse_int, render_template
 from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .schedule import UpdateSchedule
@@ -136,9 +136,9 @@ class UpdateModule(ModuleBase):
         async with self._lock:
             config = self.load_module_config()
             proxy = str(config.get("proxy") or "").strip()
-            retries = self._to_int(
+            retries = parse_int(
                 config.get("max_retries"),
-                int(self._config_store.default_values().get("max_retries") or 0),
+                parse_int(self._config_store.default_values().get("max_retries"), 0),
             )
             current = get_current_version()
 
@@ -167,7 +167,7 @@ class UpdateModule(ModuleBase):
                 # 过程提示：聊天触发时直接发送；定时触发不通知
                 if notify is None:
                     return
-                text = self._render(config.get(key), variables)
+                text = render_template(config.get(key), variables)
                 if text:
                     await notify(text)
 
@@ -175,7 +175,7 @@ class UpdateModule(ModuleBase):
                 # 结果消息只在聊天触发时生成；定时触发不发送
                 if notify is None:
                     return ""
-                return self._render(config.get(key), variables)
+                return render_template(config.get(key), variables)
 
             try:
                 # 先回应指令，再开始联网检查
@@ -253,7 +253,7 @@ class UpdateModule(ModuleBase):
                 logger.info("插件重载成功")
                 end("ok")
 
-                done_text = self._render(config.get("message_done"), variables)
+                done_text = render_template(config.get("message_done"), variables)
                 if trigger == "schedule":
                     await self._send_scheduled_message(config, done_text)
                 return {
@@ -287,27 +287,6 @@ class UpdateModule(ModuleBase):
         except Exception as e:  # noqa: BLE001
             logger.error(f"定时更新成功，但发送完成消息失败：{type(e).__name__}: {e}")
 
-    @staticmethod
-    def _render(template, variables: dict) -> str:
-        # 缺失的变量保留 {name} 占位符，其余照常替换
-        text = str(template or "")
-
-        class _SafeDict(dict):
-            def __missing__(self, key):
-                return "{" + key + "}"
-
-        try:
-            return text.format_map(_SafeDict(variables))
-        except (ValueError, IndexError):
-            return text
-
-    @staticmethod
-    def _to_int(value, default: int) -> int:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return default
-
     #  Views 接口
 
     def config_payload(self, config: dict) -> dict:
@@ -319,34 +298,6 @@ class UpdateModule(ModuleBase):
         # 只接受用户配置中存在的键，避免把 current_version 等只读字段写回
         known = {field["key"] for field in self.get_config_fields()}
         return {k: v for k, v in payload.items() if k in known}
-
-    @staticmethod
-    def _used_variables(template) -> set[str]:
-        # 取出模板里使用的 {变量名}
-        return set(re.findall(r"\{([A-Za-z_][A-Za-z0-9_]*)\}", str(template or "")))
-
-    def validate_config_payload(self, payload: dict) -> str | None:
-        # 按插件流程限制每个消息模板可用的变量
-        for field in self.get_config_fields():
-            if field.get("type") != "template":
-                continue
-            key = field["key"]
-            if key not in payload:
-                continue
-
-            allowed = list(field.get("variables") or [])
-            invalid = self._used_variables(payload[key]) - set(allowed)
-            if not invalid:
-                continue
-
-            used_text = " ".join(f"{{{name}}}" for name in sorted(invalid))
-            allowed_text = " ".join(f"{{{name}}}" for name in allowed) or "（无）"
-            return (
-                f"「{field.get('label', key)}」使用了不可用变量：{used_text}；"
-                f"可用变量：{allowed_text}"
-            )
-
-        return None
 
     async def api_save_config(self):
         # 保存后立即按新配置重排定时任务

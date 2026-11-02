@@ -11,6 +11,10 @@ from pathlib import Path
 
 from PIL import Image
 
+from ...common.module_log import module_logger
+
+logger = module_logger("jm")
+
 _TMP_DIR_NAME = "__pdf_tmp__"
 
 
@@ -26,6 +30,7 @@ def make_pdf(album_root: Path, pdf_name: str, images: list[Path], quality: int) 
         tmp_dir.mkdir(parents=True, exist_ok=True)
 
         pages: list[str] = []
+        failed = 0
         for index, source in enumerate(images):
             target = tmp_dir / f"{index:05d}.jpg"
             try:
@@ -33,9 +38,18 @@ def make_pdf(album_root: Path, pdf_name: str, images: list[Path], quality: int) 
                     raw.convert("RGB").save(
                         target, format="JPEG", quality=quality, optimize=True
                     )
-            except Exception:
+            except (OSError, ValueError, SyntaxError) as e:
+                # 单张坏图不该让整本失败；记下原因，最后汇总一次
+                failed += 1
+                if failed == 1:
+                    logger.warning(
+                        f"图片转换失败：{source.name}：{type(e).__name__}: {e}"
+                    )
                 continue
             pages.append(str(target))
+
+        if failed:
+            logger.warning(f"有 {failed} 张图片无法转换为 JPEG，已跳过")
 
         if not pages:
             raise RuntimeError("没有可用于生成 PDF 的图片")

@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from ..common import utils as common_utils
 from ..common.module_log import log_separator, setup_module_logger
-from ..common.utils import get_platform_path
+from ..common.utils import get_platform_path, used_template_variables
 from .accounts import AccountStore
 from .config_store import ConfigStore
 from .result import QueryResult
@@ -404,7 +404,26 @@ class ModuleBase(ABC):
         return payload
 
     def validate_config_payload(self, payload: dict) -> str | None:
-        # 校验待保存配置；返回错误文案，None 表示通过（子类按需覆盖）
+        # 校验消息模板：字段用 variables 声明该阶段可用的变量，其余变量拒绝保存
+        for field in self.get_config_fields():
+            key = str(field.get("key") or "")
+            if field.get("type") != "template" or "variables" not in field:
+                continue
+            if key not in payload:
+                continue
+
+            allowed = list(field.get("variables") or [])
+            invalid = used_template_variables(payload[key]) - set(allowed)
+            if not invalid:
+                continue
+
+            used_text = " ".join(f"{{{name}}}" for name in sorted(invalid))
+            allowed_text = " ".join(f"{{{name}}}" for name in allowed) or "（无）"
+            return (
+                f"「{field.get('label', key)}」使用了不可用变量：{used_text}；"
+                f"可用变量：{allowed_text}"
+            )
+
         return None
 
     async def api_get_config(self):

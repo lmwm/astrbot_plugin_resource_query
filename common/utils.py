@@ -5,9 +5,13 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
+
+# 模板占位符：{变量名}
+_TEMPLATE_VAR_RE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
 def get_data_path(plugin_name: str) -> Path:
@@ -86,3 +90,30 @@ def save_text_file(file_path: Path, content: str) -> bool:
         return True
     except OSError:
         return False
+
+
+def render_template(template: str | None, variables: dict) -> str:
+    # 用变量渲染消息模板；缺失的变量保留 {name} 占位符，花括号不合法时原样返回
+    text = str(template or "")
+
+    class _SafeDict(dict):
+        def __missing__(self, key):
+            return "{" + key + "}"
+
+    try:
+        return text.format_map(_SafeDict(variables))
+    except (ValueError, IndexError, KeyError):
+        return text
+
+
+def used_template_variables(template: str | None) -> set[str]:
+    # 模板里用到的 {变量名}，用于保存前校验变量是否可用
+    return set(_TEMPLATE_VAR_RE.findall(str(template or "")))
+
+
+def parse_int(value, default: int) -> int:
+    # 宽松转整数：调用方配置值可能是字符串、空值或非法内容
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
