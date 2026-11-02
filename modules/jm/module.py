@@ -51,6 +51,7 @@ class JMModule(ModuleBase):
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
+        self._install_lock = asyncio.Lock()
 
     #  元信息
 
@@ -92,7 +93,8 @@ class JMModule(ModuleBase):
         if missing:
             logger.error(
                 f"缺少运行依赖：{'、'.join(missing)}；"
-                f"未安装的模块：{'、'.join(deps.missing_modules())}，/jm 只提示安装不会下载"
+                f"未安装的模块：{'、'.join(deps.missing_modules())}，"
+                "首次 /jm 时会尝试用 AstrBot 的安装器补装"
             )
 
     #  指令
@@ -117,19 +119,35 @@ class JMModule(ModuleBase):
             yield event.plain_result(_INVALID_ID_TEXT)
             return
 
-        # 依赖缺失时不进入下载流程，避免把 ModuleNotFoundError 抛给聊天
+        # 依赖缺失：先用 AstrBot 自带的安装器补装一次，仍缺才提示（不抛 ModuleNotFoundError）
         missing = deps.missing()
         if missing:
-            logger.error(
-                f"拒绝下载 JM{album_id}：缺少运行依赖 "
-                f"{'、'.join(missing)}（模块 {'、'.join(deps.missing_modules())}）"
+            logger.warning(
+                f"缺少运行依赖 {'、'.join(missing)}"
+                f"（模块 {'、'.join(deps.missing_modules())}），尝试补装"
             )
             yield event.plain_result(
                 self._render_message(
-                    "message_missing_deps", {"deps": "、".join(missing)}
+                    "message_installing_deps", {"deps": "、".join(missing)}
                 )
             )
-            return
+
+            async with self._install_lock:
+                # 等锁期间可能已被另一个请求装好
+                if deps.missing():
+                    ok, detail = await deps.install(
+                        str(self._plugin_dir / "requirements.txt")
+                    )
+                    if not ok:
+                        logger.error(f"补装 JM 依赖失败：{detail}")
+                        yield event.plain_result(
+                            self._render_message(
+                                "message_missing_deps",
+                                {"deps": "、".join(deps.missing()) or detail},
+                            )
+                        )
+                        return
+                    logger.info("JM 依赖补装完成，继续下载")
 
         force = len(args) > 1 and args[1].lower() == "redownload"
 

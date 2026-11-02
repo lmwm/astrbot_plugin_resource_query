@@ -53,3 +53,22 @@ def missing_modules() -> list[str]:
 def missing() -> list[str]:
     # 缺失依赖的安装名（如 PIL → Pillow），供用户提示
     return [REQUIRED_PACKAGES[name] for name in missing_modules()]
+
+
+def clear_cache() -> None:
+    # 补装或手动安装后清缓存，让下次探测重新导入
+    _PROBE_CACHE.clear()
+
+
+async def install(requirements_path: str) -> tuple[bool, str]:
+    # 复用 AstrBot 自带的安装器补装依赖；返回（是否齐全, 失败原因）
+    from astrbot.core import pip_installer
+
+    try:
+        await pip_installer.install(requirements_path=requirements_path)
+    except Exception as e:  # noqa: BLE001
+        return False, f"{type(e).__name__}: {e}"
+
+    clear_cache()
+    remaining = missing()
+    return (not remaining, "、".join(remaining))
