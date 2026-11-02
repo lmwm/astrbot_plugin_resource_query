@@ -120,14 +120,8 @@ class UpdateModule(ModuleBase):
             )
             current = get_current_version()
 
-            # 模板变量始终提供完整键，尚未产生值的阶段为空字符串
-            variables = {
-                "current": current,
-                "latest": "",
-                "sha": "",
-                "sha7": "",
-                "error": "",
-            }
+            # 模板变量按阶段赋值；未赋值的占位符在渲染时原样保留
+            variables = {"current": current}
 
             trigger_name = "聊天指令" if trigger == "chat" else "定时任务"
             result_names = {
