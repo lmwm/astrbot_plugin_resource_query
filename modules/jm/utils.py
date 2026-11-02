@@ -32,8 +32,8 @@ def normalize_album_id(raw: str) -> int | None:
     if text.isdigit():
         return int(text)
 
-    # JM+数字（允许 JM 与数字之间有空格，如 "JM 181251"）
-    match = re.match(r"^[Jj][Mm]?\s*(\d+)$", text)
+    # JM+数字（允许 JM 与数字之间用空格或连字符，如 "JM 181251"、"JM-181251"）
+    match = re.match(r"^[Jj][Mm]?[\s-]*(\d+)$", text)
     if match:
         return int(match.group(1))
 
@@ -44,3 +44,28 @@ def normalize_album_id(raw: str) -> int | None:
             return int(match.group(1))
 
     return None
+
+
+def normalize_proxy(raw: str) -> str:
+    # 补全代理协议：配置里常见的 127.0.0.1:7890 补成 http://
+    text = str(raw or "").strip()
+    if not text:
+        return ""
+    if "://" not in text:
+        return f"http://{text}"
+    return text
+
+
+def parse_cookies(raw: str) -> dict[str, str]:
+    # 解析 Cookie：支持分号或换行分隔，也容忍开头的 "Cookie:" 前缀
+    text = str(raw or "").strip()
+    if text.lower().startswith("cookie:"):
+        text = text[len("cookie:") :].strip()
+
+    cookies: dict[str, str] = {}
+    for part in re.split(r"[;\n]", text):
+        key, separator, value = part.strip().partition("=")
+        key = key.strip()
+        if separator and key:
+            cookies[key] = value.strip()
+    return cookies

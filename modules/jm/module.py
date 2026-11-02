@@ -11,6 +11,7 @@ import asyncio
 from pathlib import Path
 from typing import ClassVar
 
+from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -19,6 +20,7 @@ from ...common.utils import parse_int, render_template
 from ...core import dependencies
 from ...core.module import ModuleBase
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
+from .models import AlbumInfo
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
@@ -143,7 +145,7 @@ class JMModule(ModuleBase):
 
         force = len(args) > 1 and args[1].lower() == "redownload"
 
-        self._service.ensure_ready()
+        await self._service.ensure_ready()
 
         async for r in self._download_and_send(album_id, event, force):
             yield r
@@ -183,6 +185,35 @@ class JMModule(ModuleBase):
             parse_int(defaults.get("jm_max_file_size"), 0),
         )
 
+        # 缓存命中时完全不请求站点：用 info.json，缺失则从 PDF 文件名取标题
+        cached = self._service.check_local(album_id)
+        if not force and cached and cached.get("has_pdf"):
+            info = cached.get("info") or self._info_from_cached(album_id, cached)
+            variables.update(self._info_variables(album_id, info))
+
+            if show_info:
+                yield event.plain_result(self._render_message("message_info", variables))
+
+            size_mb = cached.get("pdf_size_mb", 0)
+            yield event.plain_result(
+                self._render_message(
+                    "message_cached",
+                    {**variables, "size_mb": f"{size_mb:.1f}"},
+                )
+            )
+
+            async for result in self._send_pdf(
+                event,
+                cached["pdf_path"],
+                cached["pdf_name"],
+                size_mb,
+                send_file,
+                max_size_mb,
+                {**variables, "size_mb": f"{size_mb:.1f}"},
+            ):
+                yield result
+            return
+
         info = await self._service.get_album_info(album_id)
         variables.update(self._info_variables(album_id, info))
 
@@ -190,42 +221,17 @@ class JMModule(ModuleBase):
         if show_info and not info_after:
             yield event.plain_result(self._render_message("message_info", variables))
 
-        # 命中本地缓存时不再下载，只补发缓存提示与文件
-        if not force:
-            cached = self._service.check_local(album_id)
-            if cached and cached.get("has_pdf"):
-                if show_info and info_after:
-                    yield event.plain_result(
-                        self._render_message("message_info", variables)
-                    )
-
-                size_mb = cached.get("pdf_size_mb", 0)
-                yield event.plain_result(
-                    self._render_message(
-                        "message_cached",
-                        {**variables, "size_mb": f"{size_mb:.1f}"},
-                    )
-                )
-
-                async for result in self._send_pdf(
-                    event,
-                    cached["pdf_path"],
-                    cached["pdf_name"],
-                    size_mb,
-                    send_file,
-                    max_size_mb,
-                    {**variables, "size_mb": f"{size_mb:.1f}"},
-                ):
-                    yield result
-                return
-
         yield event.plain_result(self._render_message("message_start", variables))
 
-        progress = self._make_progress_callback(event)
+        reporter = _ProgressReporter(event, self._progress_text)
 
         async with self._get_semaphore(config):
             result = await self._service.download(
-                album_id, progress=progress, force=force
+                album_id,
+                progress=reporter.report,
+                force=force,
+                cached=cached,
+                info=info,
             )
 
         if not result.success:
@@ -237,7 +243,7 @@ class JMModule(ModuleBase):
             )
             return
 
-        # 服务侧会用实际下载数修正页数，这里同步到模板变量
+        # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
             variables.update(self._info_variables(album_id, result.album_info))
 
@@ -306,30 +312,15 @@ class JMModule(ModuleBase):
 
     #  进度
 
-    def _make_progress_callback(self, event):
-        # 下载器回调在事件循环内执行；这里只投递发送任务，不阻塞图片下载
-        async def _callback(done: int, total: int) -> None:
-            text = self._progress_text(done, total)
-            if text:
-                asyncio.create_task(self._send_text(event, text))
-
-        return _callback
-
     def _progress_text(self, done: int, total: int) -> str:
         if total > 0:
-            percent = int(done / total * 100)
+            percent = min(100, int(done / total * 100))
             return self._render_message(
                 "message_progress",
                 {"percent": str(percent), "done": str(done), "total": str(total)},
             )
 
         return self._render_message("message_progress_count", {"done": str(done)})
-
-    async def _send_text(self, event, text: str) -> None:
-        try:
-            await event.send(event.message_result().message(text))
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"发送进度消息失败：{type(e).__name__}: {e}")
 
     #  模板与变量
 
@@ -338,12 +329,25 @@ class JMModule(ModuleBase):
         config = self._service.config or self.load_module_config()
         return render_template(config.get(key), variables)
 
+    def _info_from_cached(self, album_id: int, cached: dict) -> AlbumInfo:
+        # info.json 无效时至少从 PDF 文件名恢复标题，避免缓存命中还要联网
+        pdf_name = str(cached.get("pdf_name") or "")
+        prefix = f"JM{album_id}-"
+        title = ""
+        if (
+            pdf_name.lower().startswith(prefix.lower())
+            and pdf_name.lower().endswith(".pdf")
+        ):
+            title = pdf_name[len(prefix) : -len(".pdf")]
+        return AlbumInfo(id=str(album_id), name=title or "未知")
+
     def _info_variables(self, album_id: int, info) -> dict:
+        page_count = int(getattr(info, "page_count", 0) or 0)
         return {
             "id": str(album_id),
             "title": self._message_title(info),
             "author": str(getattr(info, "author", "") or "").strip() or "未知",
-            "pages": str(int(getattr(info, "page_count", 0) or 0)),
+            "pages": str(page_count) if page_count > 0 else "未知",
             "chapters": str(int(getattr(info, "chapter_count", 0) or 0)),
         }
 
@@ -365,7 +369,7 @@ class JMModule(ModuleBase):
             1,
             parse_int(
                 config.get("jm_max_concurrent"),
-                parse_int(defaults.get("jm_max_concurrent"), 1),
+                parse_int(defaults.get("jm_max_concurrent"), 2),
             ),
         )
 
@@ -374,3 +378,72 @@ class JMModule(ModuleBase):
             self._semaphore_limit = limit
 
         return self._semaphore
+
+
+class _ProgressReporter:
+    # 下载进度节流：按百分比/张数步长与最小时间间隔发送，失败后不再重试
+    # 用 event.send 直接发送，避免把 MessageEventResult 塞回指令生成器
+
+    _MIN_STEP = 10
+    _MIN_INTERVAL = 2.0
+
+    def __init__(self, event, render) -> None:
+        self._event = event
+        self._render = render
+        self._last_percent = -1
+        self._last_count = 0
+        self._last_at = 0.0
+        self._disabled = False
+        self._lock = asyncio.Lock()
+
+    async def report(self, done: int, total: int) -> None:
+        if self._disabled or done <= 0:
+            return
+
+        loop = asyncio.get_running_loop()
+        percent = self._due(done, total, loop.time())
+        if percent is None:
+            return
+
+        async with self._lock:
+            if self._disabled:
+                return
+            # 等锁期间可能已被其它回调推进
+            now = loop.time()
+            percent = self._due(done, total, now)
+            if percent is None:
+                return
+
+            text = self._render(done, total)
+            try:
+                await self._event.send(MessageChain().message(text))
+            except Exception as e:  # noqa: BLE001
+                self._disabled = True
+                logger.warning(
+                    f"发送进度消息失败，后续进度不再发送："
+                    f"{type(e).__name__}: {e}"
+                )
+                return
+
+            self._last_at = now
+            if total > 0:
+                self._last_percent = percent
+            else:
+                self._last_count = done
+
+    def _due(self, done: int, total: int, now: float) -> int | None:
+        # 返回本次应发送的百分比；未知总数时返回 -1，None 表示不发送
+        if total > 0:
+            percent = min(100, int(done * 100 / total))
+            final = percent >= 100 and self._last_percent < 100
+            if percent < self._last_percent + self._MIN_STEP and not final:
+                return None
+            if now - self._last_at < self._MIN_INTERVAL and not final:
+                return None
+            return percent
+
+        if done < self._last_count + self._MIN_STEP:
+            return None
+        if now - self._last_at < self._MIN_INTERVAL:
+            return None
+        return -1

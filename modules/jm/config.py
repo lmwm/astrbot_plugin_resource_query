@@ -85,21 +85,25 @@ CONFIG_FIELDS = {
         "label": "代理地址",
         "type": "text",
         "group": "download",
-        "hint": "如 127.0.0.1:7890 或 http://127.0.0.1:7890，留空不使用代理",
+        "hint": "如 127.0.0.1:7890 或 http://127.0.0.1:7890；未写协议时自动补 http://，留空不使用代理",
         "default": "",
     },
     "jm_cookies": {
         "label": "Cookie",
         "type": "password",
         "group": "download",
-        "hint": "格式 k=v; k2=v2，用于访问登录可见内容",
+        "hint": "格式 k=v; k2=v2（也可换行分隔），用于访问登录可见内容",
         "default": "",
     },
     "jm_jpeg_quality": {
         "label": "PDF 画质（JPEG 质量）",
         "type": "int",
         "group": "download",
-        "hint": "取值 1-95，越大越清晰体积越大。原图为 webp，生成 PDF 时二次压缩为 JPEG；实测 26 页：50→5.7MB、75→7.7MB、90→11.3MB",
+        "hint": (
+            "取值 1-95，越大越清晰体积越大。原图为 webp；"
+            "75（默认）在下载阶段直接转 JPEG，生成 PDF 不再二次转码，速度最快；"
+            "其它值会先下载原图再转码。实测 26 页：50→5.7MB、75→7.7MB、90→11.3MB"
+        ),
         "default": 75,
     },
     #  发送与文件

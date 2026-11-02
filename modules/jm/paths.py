@@ -3,12 +3,15 @@
 # 每部漫画一个根目录，PDF、info.json 与图片目录同级：
 #   JMDownload/
 #   └── JM 1083382/                     ← 第一层目录带空格
-#       ├── JM1083382-漫画名称/          ← 图片目录沿用原命名
+#       ├── JM1083382-漫画名称/          ← 图片目录
+#       │   ├── JP001-212214/            ← 章节子目录（Pindex-Pid）
+#       │   └── JP002-212215/
 #       ├── JM1083382-漫画名称.pdf
 #       └── info.json
 #
-# 兼容策略：第一层目录允许无空格旧名 `JM<ID>`，由 migrate_legacy_root 改名；
-# 图片目录同时认 `JM<ID>-` 与 5.8.0 产生的 `JM <ID>-`。
+# 章节子目录解决多章节图片同名（都是 00001.jpg）互相覆盖的问题；
+# 兼容策略：第一层目录允许无空格旧名 `JM<ID>`，图片目录同时认 `JM<ID>-`
+# 与 5.8.0 产生的 `JM <ID>-`，旧版直接放在图片目录下的扁平图片由清理逻辑移除。
 
 from __future__ import annotations
 
@@ -39,33 +42,37 @@ class AlbumPaths:
         return self.root / f"JM {album_id}"
 
     def ensure_album_root(self, album_id: str) -> Path:
-        # 漫画根目录，并把历史遗留的小写目录名规范为 `JM <ID>`
+        # 漫画根目录；仅在目标不存在时扫描同名大小写变体（兼容 Linux 旧数据）
         target = self.album_root(album_id)
 
-        if target.exists():
-            actual = None
-            try:
-                actual = next(
-                    (
-                        item
-                        for item in self.root.iterdir()
-                        if item.is_dir() and item.name.lower() == target.name.lower()
-                    ),
-                    None,
-                )
-            except OSError:
-                actual = None
-
-            if actual is not None and actual.name != target.name:
-                temp = self.root / f"{target.name}__renaming"
-                try:
-                    actual.rename(temp)
-                    temp.rename(target)
-                except OSError:
-                    pass
+        if not target.exists():
+            self._rename_case_variant(target)
 
         target.mkdir(parents=True, exist_ok=True)
         return target
+
+    def _rename_case_variant(self, target: Path) -> None:
+        try:
+            actual = next(
+                (
+                    item
+                    for item in self.root.iterdir()
+                    if item.is_dir() and item.name.lower() == target.name.lower()
+                ),
+                None,
+            )
+        except OSError:
+            return
+
+        if actual is None or actual.name == target.name:
+            return
+
+        temp = self.root / f"{target.name}__renaming"
+        try:
+            actual.rename(temp)
+            temp.rename(target)
+        except OSError:
+            pass
 
     @staticmethod
     def display_title(info: AlbumInfo) -> str:
@@ -108,7 +115,7 @@ class AlbumPaths:
         return max(candidates, key=lambda path: path.stat().st_mtime)
 
     def list_images(self, album_id: str) -> list[Path]:
-        # 当前图片目录里的图片，按文件名去重并保留最新的一份（防 webp/jpg 双份）
+        # 当前图片目录里的图片（含章节子目录），按相对路径去重并保留最新的一份
         target = self.current_image_dir(album_id)
         if target is None:
             return []
@@ -124,28 +131,33 @@ class AlbumPaths:
 
         latest: dict[str, Path] = {}
         for path in images:
-            previous = latest.get(path.stem)
+            try:
+                key = str(path.relative_to(target).with_suffix("")).lower()
+            except ValueError:
+                continue
+            previous = latest.get(key)
             if previous is None:
-                latest[path.stem] = path
+                latest[key] = path
                 continue
             try:
                 if path.stat().st_mtime > previous.stat().st_mtime:
-                    latest[path.stem] = path
+                    latest[key] = path
             except OSError:
                 continue
 
-        return sorted(latest.values())
+        return sorted(latest.values(), key=lambda path: str(path).lower())
 
     def cleanup_legacy_layout(
         self, album_id: str, keep_dir: Path | None = None
     ) -> None:
-        # 清理历史目录：旧版 images/pdf 子目录与命名变化后残留的其它 JM<ID>- 目录
+        # 清理历史目录：旧版 images/pdf 子目录、改名后残留的其它 JM<ID>- 目录，
+        # 以及章节子目录启用前直接放在图片目录下的扁平图片
         root = self.album_root(album_id)
         if not root.exists():
             return
 
         current = keep_dir or self.current_image_dir(album_id)
-        if current is None or not self.list_images(album_id):
+        if current is None:
             return
 
         for name in _LEGACY_SUBDIRS:
@@ -157,13 +169,33 @@ class AlbumPaths:
         try:
             subdirs = [item for item in root.iterdir() if item.is_dir()]
         except OSError:
-            return
+            subdirs = []
 
         for subdir in subdirs:
             if subdir == current:
                 continue
             if subdir.name.lower().startswith(prefixes):
                 shutil.rmtree(subdir, ignore_errors=True)
+
+        self._cleanup_flat_images(current)
+
+    @staticmethod
+    def _cleanup_flat_images(image_dir: Path) -> None:
+        # 章节子目录存在时，图片目录下直接的旧扁平图片已被取代，可以删除
+        try:
+            items = list(image_dir.iterdir())
+        except OSError:
+            return
+
+        if not any(item.is_dir() for item in items):
+            return
+
+        for item in items:
+            if item.is_file() and item.suffix.lower() in _IMAGE_SUFFIXES:
+                try:
+                    item.unlink(missing_ok=True)
+                except OSError:
+                    continue
 
     def migrate_legacy_root(self, legacy_dir: str | Path) -> int:
         # 把旧版下载根目录（AstrBot 数据根下的 JMDownload）搬入当前根目录

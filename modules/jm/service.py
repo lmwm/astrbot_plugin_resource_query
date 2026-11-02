@@ -2,8 +2,14 @@
 #
 # 负责配置构建、漫画信息获取、下载与 PDF 生成。
 # 下载交给 jmcomic 的异步下载器（2.7+），进度直接回到事件循环，
-# 不再需要线程池与跨线程调度。
-# 本层只产出数据（进度、结果、错误原因），发给用户的消息由模块按模板渲染。
+# 不再需要线程池与跨线程调度。本层只产出数据（进度、结果、错误原因），
+# 发给用户的消息由模块按模板渲染。
+#
+# 与 2.7.x 源码对齐的几点：
+# - 图片目录按章节分子目录，避免多章节图片同名（都是 00001.jpg）互相覆盖；
+# - 用 DownloadResult.manifest.image_filepath_list 拿按章节/页码排好序的图片；
+# - check_exception=True 让库抛 PartialDownloadFailedException，不再自己拼错误；
+# - 质量 75 时让库在下载阶段直接存 JPEG，PDF 直接嵌入，省掉二次转码。
 
 from __future__ import annotations
 
@@ -15,8 +21,12 @@ from .cache import AlbumCache
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
 from .pdf import make_pdf
+from .utils import normalize_proxy, parse_cookies
 
 logger = module_logger("jm")
+
+# 每个章节一个子目录：Pindex 排序、Pid 保证唯一
+_CHAPTER_DIR_RULE = "Bd/JP{Pindex:03}-{Pid}"
 
 # 异常类名 → 用户可读提示；按类名匹配，避免依赖库内部模块
 _ERROR_MESSAGES = {
@@ -39,6 +49,7 @@ class JMService:
         self.cache = AlbumCache(self.paths)
         self._legacy_dir = Path(legacy_dir) if legacy_dir else None
         self._ready = False
+        self._ready_lock: asyncio.Lock | None = None
         self._config: dict = {}
 
     #  配置与生命周期
@@ -52,16 +63,27 @@ class JMService:
         # 绑定当前配置
         self._config = config or {}
 
-    def ensure_ready(self) -> None:
-        # 首次使用时执行一次旧数据迁移（幂等，不在插件加载期做磁盘操作）
+    async def ensure_ready(self) -> None:
+        # 首次使用时执行一次旧数据迁移（幂等）；文件操作放到线程里，不卡事件循环
         if self._ready:
             return
-        self._ready = True
+        if self._ready_lock is None:
+            self._ready_lock = asyncio.Lock()
 
-        if self._legacy_dir is not None:
-            moved = self.paths.migrate_legacy_root(self._legacy_dir)
-            if moved:
-                logger.info(f"已迁移 {moved} 个旧版漫画目录")
+        async with self._ready_lock:
+            if self._ready:
+                return
+            self._ready = True
+            if self._legacy_dir is not None:
+                try:
+                    moved = await asyncio.to_thread(
+                        self.paths.migrate_legacy_root, self._legacy_dir
+                    )
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"旧版下载目录迁移失败：{type(e).__name__}: {e}")
+                    return
+                if moved:
+                    logger.info(f"已迁移 {moved} 个旧版漫画目录")
 
     #  配置构建
 
@@ -71,56 +93,53 @@ class JMService:
         except (TypeError, ValueError):
             return default
 
-    def _build_option(self, image_dir: Path):
-        # 按用户配置构建 JmOption；关闭库日志，避免刷屏 AstrBot 日志
+    def _quality(self) -> int:
+        return max(1, min(95, self._int("jm_jpeg_quality", 75)))
+
+    def _build_option(self, image_dir: Path, direct_jpeg: bool):
+        # 从最小配置构建 JmOption，其余项交给库的默认值合并
         import jmcomic
 
-        raw = jmcomic.JmOption.default().deconstruct()
-        raw["log"] = False
+        raw = {
+            "log": False,
+            "dir_rule": {"rule": _CHAPTER_DIR_RULE, "base_dir": str(image_dir)},
+            "download": {
+                "cache": True,
+                "image": {
+                    "decode": True,
+                    # 质量 75：下载时直接落 JPEG，PDF 不再读图重编码
+                    "suffix": ".jpg" if direct_jpeg else None,
+                },
+                "threading": {
+                    "image": max(1, self._int("jm_image_threads", 10)),
+                    "photo": max(1, self._int("jm_photo_threads", 2)),
+                },
+            },
+            "client": {
+                "retry_times": max(1, self._int("jm_retry_times", 3)),
+                "timeout": max(5, self._int("jm_timeout", 20)),
+                "postman": {"meta_data": self._meta_data()},
+            },
+        }
+        return jmcomic.JmOption.construct(raw)
 
-        download = raw.setdefault("download", {})
-        download["cache"] = True
-        download.setdefault("image", {})["decode"] = True
+    def _meta_data(self) -> dict:
+        meta: dict = {}
 
-        threading = download.setdefault("threading", {})
-        threading["image"] = max(1, self._int("jm_image_threads", 10))
-        threading["photo"] = max(1, self._int("jm_photo_threads", 2))
-
-        client = raw.setdefault("client", {})
-        client["retry_times"] = max(1, self._int("jm_retry_times", 3))
-        client["timeout"] = max(5, self._int("jm_timeout", 20))
-
-        meta = client.setdefault("postman", {}).setdefault("meta_data", {})
-
-        proxy = str(self._config.get("jm_proxy") or "").strip()
+        proxy = normalize_proxy(str(self._config.get("jm_proxy") or ""))
         if proxy:
             meta["proxies"] = {"http": proxy, "https": proxy}
 
-        cookies = self._parse_cookies(str(self._config.get("jm_cookies") or ""))
+        cookies = parse_cookies(str(self._config.get("jm_cookies") or ""))
         if cookies:
             meta["cookies"] = cookies
 
-        raw["dir_rule"] = {"rule": "Bd", "base_dir": str(image_dir)}
-        return jmcomic.JmOption.construct(raw)
-
-    @staticmethod
-    def _parse_cookies(raw: str) -> dict[str, str]:
-        cookies: dict[str, str] = {}
-
-        for part in raw.split(";"):
-            if "=" not in part:
-                continue
-            key, value = part.split("=", 1)
-            key = key.strip()
-            if key:
-                cookies[key] = value.strip()
-
-        return cookies
+        return meta
 
     #  本地缓存
 
     def check_local(self, album_id: str) -> dict | None:
-        # 供模块在下载前判断走缓存还是下载（权威判定仍在 download 内）
+        # 供模块在下载前判断走缓存还是下载（权威判定仍会复用这份结果）
         return self.cache.check_local(album_id)
 
     #  漫画信息
@@ -135,7 +154,7 @@ class JMService:
             album = await self._fetch_album(album_id)
         except ImportError:
             return AlbumInfo(id=str(album_id), name="未知（jmcomic 未安装）")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"JM{album_id} 获取漫画详情失败：{self._describe_error(e)}")
             return AlbumInfo(id=str(album_id), name=self._describe_error(e))
 
@@ -144,12 +163,16 @@ class JMService:
         return info
 
     async def _fetch_album(self, album_id: str):
-        # 仅取详情，不下载：借用异步下载器的客户端
-        import jmcomic
-
-        option = self._build_option(self.paths.ensure_album_root(album_id))
-        async with jmcomic.JmAsyncDownloader(option) as downloader:
-            return await downloader.client.get_album_detail(str(album_id))
+        # 仅取详情，不下载：用轻量异步客户端，避免构造完整下载器
+        option = self._build_option(
+            self.paths.album_root(album_id), self._quality() == 75
+        )
+        client = option.new_jm_async_client()
+        try:
+            await client.setup()
+            return await client.get_album_detail(str(album_id))
+        finally:
+            await client.close()
 
     @staticmethod
     def _to_info(album_id: str, album) -> AlbumInfo:
@@ -173,6 +196,8 @@ class JMService:
         album_id: str,
         progress: ProgressCallback | None = None,
         force: bool = False,
+        cached: dict | None = None,
+        info: AlbumInfo | None = None,
     ) -> DownloadResult:
         # 下载漫画并生成 PDF；本方法不抛异常，失败原因放在返回值里
         try:
@@ -184,44 +209,50 @@ class JMService:
                 success=False, album_id=album_id, error=f"依赖导入失败：{e}"
             )
 
+        await self.ensure_ready()
+
         if not force:
-            cached = self.cache.check_local(album_id)
+            if cached is None:
+                cached = self.cache.check_local(album_id)
             if cached and cached.get("has_pdf"):
                 logger.info(f"JM{album_id} 命中本地缓存：{cached.get('pdf_name')}")
                 return DownloadResult(
                     success=True,
                     album_id=album_id,
+                    album_info=cached.get("info"),
                     pdf_path=cached.get("pdf_path"),
                     pdf_name=cached.get("pdf_name"),
                     file_size_mb=cached.get("pdf_size_mb", 0),
                     from_cache=True,
                 )
 
-        info = await self.get_album_info(album_id)
+        if info is None:
+            info = await self.get_album_info(album_id)
 
         try:
-            pdf_path, image_count = await self._run_download(album_id, info, progress)
-        except Exception as e:
+            pdf_path, album_info, image_count, size_mb = await self._run_download(
+                album_id, info, progress
+            )
+        except Exception as e:  # noqa: BLE001
             error = self._describe_error(e)
             logger.error(f"JM{album_id} 下载失败：{error}")
             return DownloadResult(
                 success=False, album_id=album_id, album_info=info, error=error
             )
 
-        file_size_mb = pdf_path.stat().st_size / (1024 * 1024)
         logger.info(
             f"JM{album_id} 下载完成：{image_count} 张图片，"
-            f"PDF {round(file_size_mb, 2)} MB"
+            f"PDF {round(size_mb, 2)} MB"
         )
 
         return DownloadResult(
             success=True,
             album_id=album_id,
-            album_name=info.name,
-            album_info=info,
+            album_name=album_info.name,
+            album_info=album_info,
             pdf_path=str(pdf_path),
             pdf_name=pdf_path.name,
-            file_size_mb=round(file_size_mb, 2),
+            file_size_mb=round(size_mb, 2),
             image_count=image_count,
         )
 
@@ -230,73 +261,94 @@ class JMService:
         album_id: str,
         info: AlbumInfo,
         progress: ProgressCallback | None,
-    ) -> tuple[Path, int]:
+    ) -> tuple[Path, AlbumInfo, int, float]:
         import jmcomic
 
+        quality = self._quality()
+        direct_jpeg = quality == 75
         image_dir = self.paths.ensure_image_dir(album_id, info)
-        option = self._build_option(image_dir)
-        downloader_cls = _make_progress_downloader(progress, info.page_count)
+        option = self._build_option(image_dir, direct_jpeg)
+        downloader_cls = _make_progress_downloader(
+            progress, info.page_count, quality
+        )
 
-        _album, downloader = await jmcomic.download_album_async(
+        result = await jmcomic.download_album_async(
             str(album_id),
             option=option,
             downloader=downloader_cls,
-            check_exception=False,
+            check_exception=True,
         )
 
-        if downloader.has_download_failures:
-            raise RuntimeError(
-                "下载失败："
-                f"{len(downloader.download_failed_image)} 张图片、"
-                f"{len(downloader.download_failed_photo)} 个章节未完成"
-            )
-
-        images = _collect_images(downloader)
+        # 2.7.4+ 返回 DownloadResult（带 manifest）；2.7.0–2.7.3 返回元组
+        album, downloader = result
+        manifest = getattr(result, "manifest", None)
+        if manifest is not None:
+            images = [
+                Path(str(path))
+                for path in (getattr(manifest, "image_filepath_list", None) or [])
+            ]
+        else:
+            images = _collect_images(downloader)
         if not images:
             raise RuntimeError("下载失败：未获取到图片")
 
-        pdf_name = f"JM{album_id}-{self.paths.display_title(info)}"
+        album_info = self._to_info(album_id, album) if album is not None else info
+        # 2.7.5 的 API 不返回总页数，用实际下载数修正；2.7.10 起接口已提供
+        album_info.page_count = len(images)
+
+        pdf_name = f"JM{album_id}-{self.paths.display_title(album_info)}"
         pdf_path = await asyncio.to_thread(
             make_pdf,
             self.paths.ensure_album_root(album_id),
             pdf_name,
             images,
-            self._int("jm_jpeg_quality", 75),
+            quality,
+            direct_jpeg,
         )
 
         await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, image_dir)
 
-        # 接口返回的 page_count 常为 0，用实际下载数修正
-        info.page_count = len(images)
-        self.cache.save_info(info)
+        try:
+            size_mb = pdf_path.stat().st_size / (1024 * 1024)
+        except OSError:
+            size_mb = 0.0
 
-        return pdf_path, len(images)
+        self.cache.save_info(album_info)
+        self.cache.save_pdf_state(album_id, pdf_path)
+        return pdf_path, album_info, len(images), size_mb
 
     @staticmethod
     def _describe_error(error: Exception) -> str:
         message = _ERROR_MESSAGES.get(type(error).__name__)
         if message:
             return message
-        return f"{type(error).__name__}: {error}"
+
+        text = str(error)
+        # 本层抛出的「下载失败：…」已带前缀，模板里还有「下载失败：」，去重
+        if isinstance(error, RuntimeError) and text.startswith("下载失败："):
+            return text[len("下载失败：") :]
+        return f"{type(error).__name__}: {text}"
 
 
 def _collect_images(downloader) -> list[Path]:
-    # 从下载器的成功记录里取图片路径，按文件名排序保证页码顺序
+    # 旧版 jmcomic（无 manifest）的兜底：从成功记录取路径，按完整路径排序
     paths: set[Path] = set()
+    success = getattr(downloader, "download_success_dict", None) or {}
 
-    for photo_map in downloader.download_success_dict.values():
+    for photo_map in success.values():
         for items in photo_map.values():
             for save_path, _image in items:
-                paths.add(Path(save_path))
+                paths.add(Path(str(save_path)))
 
-    return sorted(paths, key=lambda path: path.name)
+    return sorted(paths, key=lambda path: str(path).lower())
 
 
 def _make_progress_downloader(
     callback: ProgressCallback | None,
     initial_total: int = 0,
+    quality: int = 75,
 ):
-    # 生成带进度的异步下载器类；回调只报数量，文案由模块渲染
+    # 生成带进度的异步下载器类；回调只报数量，文案与节流由模块负责
     import jmcomic
 
     class _ProgressDownloader(jmcomic.JmAsyncDownloader):
@@ -304,8 +356,6 @@ def _make_progress_downloader(
             super().__init__(option)
             self._done = 0
             self._total = max(0, int(initial_total or 0))
-            self._last_percent = -1
-            self._reported = False
 
         async def before_photo(self, photo):
             await super().before_photo(photo)
@@ -318,21 +368,28 @@ def _make_progress_downloader(
         async def after_image(self, image, img_save_path):
             await super().after_image(image, img_save_path)
             self._done += 1
+            if callback is not None:
+                await callback(self._done, self._total)
 
-            if callback is None:
+        @staticmethod
+        def _save_raw(image_bytes, save_path, need_convert=False):
+            # 直接落 JPEG 时统一转 RGB，避免 RGBA/P 模式（PNG、GIF）保存失败
+            if not need_convert:
+                with open(save_path, "wb") as handle:
+                    handle.write(image_bytes)
                 return
 
-            if self._total > 0:
-                percent = int(self._done / self._total * 100)
-                if percent <= self._last_percent:
-                    return
-                self._last_percent = percent
-            else:
-                # 总页数未知时按数量播报，每 10 张一次
-                if self._reported and self._done % 10 != 0:
-                    return
-                self._reported = True
-
-            await callback(self._done, self._total)
+            source = jmcomic.JmImageTool.open_image(image_bytes)
+            try:
+                target = source
+                if source.mode not in ("RGB", "L"):
+                    target = source.convert("RGB")
+                try:
+                    target.save(save_path, format="JPEG", quality=quality)
+                finally:
+                    if target is not source:
+                        target.close()
+            finally:
+                source.close()
 
     return _ProgressDownloader
