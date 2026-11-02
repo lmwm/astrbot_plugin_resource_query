@@ -12,6 +12,7 @@ from astrbot.api.event import AstrMessageEvent, filter
 from astrbot.api.star import Context, Star
 
 from .common.module_log import log_separator, setup_module_logger
+from .core import dependencies
 from .core.commands import help_text, parse_args
 from .core.registry import ModuleRegistry
 from .core.web import GlobalWebApi
@@ -73,10 +74,29 @@ class ResourceQueryPlugin(Star):
                 )
 
     async def initialize(self) -> None:
-        # AstrBot 加载插件后调用：准备核心日志，再让各模块做异步初始化
-        log_separator(setup_module_logger("core"), "插件启动")
+        # AstrBot 加载插件后调用：先补齐模块声明的依赖，再让各模块做异步初始化
+        core_logger = setup_module_logger("core")
+        log_separator(core_logger, "插件启动")
+        await self._ensure_dependencies(core_logger)
         for module in self._registry.get_all_modules():
             await module.on_load()
+
+    async def _ensure_dependencies(self, core_logger) -> None:
+        # 缺库时用 AstrBot 的安装器按插件 requirements.txt 补装一次；失败不影响加载
+        required = dependencies.collect_required(self._registry.get_all_modules())
+        if not required:
+            return
+
+        missing, ok, detail = await dependencies.ensure(
+            required, str(self._plugin_dir / "requirements.txt")
+        )
+        if not missing:
+            return
+
+        if ok:
+            core_logger.info(f"依赖补装完成：{'、'.join(missing)}")
+        else:
+            core_logger.error(f"依赖补装失败：{detail}；仍缺：{'、'.join(missing)}")
 
     async def terminate(self) -> None:
         # 插件卸载/重载前调用：让各模块清理注册

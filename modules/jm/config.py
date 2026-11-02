@@ -39,12 +39,8 @@ _NO_PDF_LINES = [
 ]
 _MISSING_DEPS_LINES = [
     "× 缺少运行依赖：{deps}",
-    "自动补装失败，请在 AstrBot 插件管理中重装 / 更新本插件；",
+    "插件初始化时已尝试自动补装但未成功，请在 AstrBot 插件管理中重装插件；",
     "仍失败时可在 AstrBot 的 Python 环境里手动安装",
-]
-_INSTALLING_DEPS_LINES = [
-    "正在补装 JM 运行依赖：{deps}",
-    "首次安装可能需要一两分钟，请稍候…",
 ]
 
 # 配置字段（key -> label / type / hint / group / variables / default）
@@ -216,19 +212,11 @@ CONFIG_FIELDS = {
         "default": "\n".join(_NO_PDF_LINES),
         "variables": ["id", "title"],
     },
-    "message_installing_deps": {
-        "label": "正在补装依赖",
-        "type": "template",
-        "group": "messages",
-        "hint": "检测到缺库、开始用 AstrBot 的安装器补装时发送；变量 {deps}",
-        "default": "\n".join(_INSTALLING_DEPS_LINES),
-        "variables": ["deps"],
-    },
     "message_missing_deps": {
         "label": "缺少运行依赖",
         "type": "template",
         "group": "messages",
-        "hint": "变量 {deps}；依赖装在 AstrBot 的 site-packages，补装失败时才发送",
+        "hint": "变量 {deps}；依赖装在 AstrBot 的 site-packages，初始化补装失败时才发送",
         "default": "\n".join(_MISSING_DEPS_LINES),
         "variables": ["deps"],
     },

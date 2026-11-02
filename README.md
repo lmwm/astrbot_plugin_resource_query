@@ -133,7 +133,7 @@ JMDownload/
 > 旧版本把下载内容放在 AstrBot 数据根目录的 `JMDownload/` 下（目录名为 `JM<ID>`）；
 > 升级后会自动搬移到新位置并给第一层目录加空格，图片目录与 PDF 名称保持原样。
 
-> JM 的运行依赖（`jmcomic`、`img2pdf`、`Pillow`）由 AstrBot 在**安装插件**（以及 AstrBot 自己的插件更新）时按 `requirements.txt` 装进它的 `site-packages`；普通重载、本插件的 `/query update` 自更新都**不会**重装依赖。依赖缺失时插件仍能正常加载：首次 `/jm` 会先按「正在补装依赖」模板提示，再用 AstrBot 的安装器补装一次，成功则继续下载；仍失败才发「缺少运行依赖」提示。两条模板都可在 Views 修改，日志会记录缺失的模块名。
+> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失，用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发）。JM 目前声明 `jmcomic`、`img2pdf`、`Pillow`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
 
 ## 首次使用
 

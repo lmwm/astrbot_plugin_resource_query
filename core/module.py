@@ -42,6 +42,9 @@ class ModuleBase(ABC):
     var_samples: ClassVar[dict[str, str]] = {}
     default_template: ClassVar[str] = ""
 
+    # 运行依赖（导入名 → 安装名）；插件初始化时统一检查并按 requirements.txt 补装
+    required_packages: ClassVar[dict[str, str]] = {}
+
     def __init__(self, plugin_dir: Path, plugin_name: str) -> None:
         # 初始化模块；配置目录与账号存储在构造时一次性定位
         self._plugin_dir = plugin_dir

@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import ClassVar
 
 from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ...common.module_log import log_separator, module_logger
 from ...common.utils import parse_int, render_template
+from ...core import dependencies
 from ...core.module import ModuleBase
-from . import deps
 from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
@@ -43,6 +44,13 @@ class JMModule(ModuleBase):
     variable_defaults = VARIABLES
     var_samples = VAR_SAMPLES
 
+    #  运行依赖（插件初始化时统一检查与补装）
+    required_packages: ClassVar[dict[str, str]] = {
+        "jmcomic": "jmcomic",
+        "img2pdf": "img2pdf",
+        "PIL": "Pillow",
+    }
+
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
         self._service = JMService(
@@ -51,7 +59,6 @@ class JMModule(ModuleBase):
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
-        self._install_lock = asyncio.Lock()
 
     #  元信息
 
@@ -87,14 +94,14 @@ class JMModule(ModuleBase):
     #  生命周期
 
     async def on_load(self) -> None:
-        # 加载后检查运行依赖；缺失只记日志，不阻断其他模块与插件加载
+        # 插件初始化已统一补装过；这里再复查一次，缺库只记日志，不阻断加载
         await super().on_load()
-        missing = deps.missing()
+        missing = dependencies.missing(self.required_packages)
         if missing:
             logger.error(
                 f"缺少运行依赖：{'、'.join(missing)}；"
-                f"未安装的模块：{'、'.join(deps.missing_modules())}，"
-                "首次 /jm 时会尝试用 AstrBot 的安装器补装"
+                f"未安装的模块：{'、'.join(dependencies.missing_modules(self.required_packages))}，"
+                "/jm 只提示安装，不会下载"
             )
 
     #  指令
@@ -119,35 +126,20 @@ class JMModule(ModuleBase):
             yield event.plain_result(_INVALID_ID_TEXT)
             return
 
-        # 依赖缺失：先用 AstrBot 自带的安装器补装一次，仍缺才提示（不抛 ModuleNotFoundError）
-        missing = deps.missing()
+        # 依赖由插件初始化时统一检查与补装；这里只复查，仍缺就提示，不抛 ModuleNotFoundError
+        missing = dependencies.missing(self.required_packages)
         if missing:
-            logger.warning(
-                f"缺少运行依赖 {'、'.join(missing)}"
-                f"（模块 {'、'.join(deps.missing_modules())}），尝试补装"
+            logger.error(
+                f"拒绝下载 JM{album_id}：缺少运行依赖 "
+                f"{'、'.join(missing)}"
+                f"（模块 {'、'.join(dependencies.missing_modules(self.required_packages))}）"
             )
             yield event.plain_result(
                 self._render_message(
-                    "message_installing_deps", {"deps": "、".join(missing)}
+                    "message_missing_deps", {"deps": "、".join(missing)}
                 )
             )
-
-            async with self._install_lock:
-                # 等锁期间可能已被另一个请求装好
-                if deps.missing():
-                    ok, detail = await deps.install(
-                        str(self._plugin_dir / "requirements.txt")
-                    )
-                    if not ok:
-                        logger.error(f"补装 JM 依赖失败：{detail}")
-                        yield event.plain_result(
-                            self._render_message(
-                                "message_missing_deps",
-                                {"deps": "、".join(deps.missing()) or detail},
-                            )
-                        )
-                        return
-                    logger.info("JM 依赖补装完成，继续下载")
+            return
 
         force = len(args) > 1 and args[1].lower() == "redownload"
 
