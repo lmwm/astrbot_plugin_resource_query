@@ -4,6 +4,11 @@
 # 这里只提供默认值与界面定义。
 # 消息模板用 {变量} 占位，每个模板可用的变量写在字段的 variables 里（Views 据此过滤标签）。
 
+from ...common.module_log import PLUGIN_NAME
+
+# 默认下载目录：相对 AstrBot 数据根，保持 6.16.x 的既有位置
+DEFAULT_DOWNLOAD_DIR = f"plugin_data/{PLUGIN_NAME}/JMDownload"
+
 # 消息模板默认内容（按行拼接，便于阅读）
 _INFO_LINES = [
     "I  D：{id}",
@@ -45,39 +50,56 @@ _MISSING_DEPS_LINES = [
 
 # 配置字段（key -> label / type / hint / group / variables / default）
 CONFIG_FIELDS = {
-    #  下载（这些字段写入 config/jm/option.yml，不再存进 config.json）
+    #  下载参数（这些字段写入 config/jm/option.yml，不再存进 config.json）
+    "jm_download_dir": {
+        "label": "下载路径",
+        "type": "text",
+        "group": "option",
+        "hint": (
+            "相对 AstrBot 数据根（data/）的目录，如 JMDownload 或 jm/漫画；"
+            "默认保持旧位置；对应 option.yml 的 dir_rule.base_dir"
+        ),
+        "default": DEFAULT_DOWNLOAD_DIR,
+    },
+    "jm_download_log": {
+        "label": "输出下载日志",
+        "type": "bool",
+        "group": "option",
+        "hint": "开启 jmcomic 的下载日志（写入 AstrBot 日志，内容较多）；对应 option.yml 的 log",
+        "default": True,
+    },
     "jm_image_threads": {
         "label": "图片并发数",
         "type": "int",
-        "group": "download",
+        "group": "option",
         "hint": "单章节内的图片下载并发；对应 option.yml 的 download.threading.image",
         "default": 10,
     },
     "jm_photo_threads": {
         "label": "章节并发数",
         "type": "int",
-        "group": "download",
+        "group": "option",
         "hint": "章节之间的下载并发；对应 option.yml 的 download.threading.photo",
         "default": 2,
     },
     "jm_download_cache": {
         "label": "使用下载缓存",
         "type": "bool",
-        "group": "download",
+        "group": "option",
         "hint": "图片文件已存在时跳过重新下载；对应 option.yml 的 download.cache",
         "default": True,
     },
     "jm_image_decode": {
         "label": "还原混淆图",
         "type": "bool",
-        "group": "download",
+        "group": "option",
         "hint": "按站点规则还原被打乱的图片；对应 option.yml 的 download.image.decode",
         "default": True,
     },
     "jm_image_suffix": {
         "label": "图片后缀",
         "type": "text",
-        "group": "download",
+        "group": "option",
         "hint": (
             "留空按站点原格式保存（多为 webp，保留原图存档）；"
             "填 .jpg 则在下载时转成 JPEG（PDF 直嵌）；对应 option.yml 的 download.image.suffix"
@@ -87,28 +109,28 @@ CONFIG_FIELDS = {
     "jm_client_impl": {
         "label": "客户端类型",
         "type": "text",
-        "group": "download",
+        "group": "option",
         "hint": "api 为 APP 端（默认，限 IP 少），html 为网页端；对应 option.yml 的 client.impl",
         "default": "api",
     },
     "jm_retry_times": {
         "label": "重试次数",
         "type": "int",
-        "group": "download",
+        "group": "option",
         "hint": "网络请求失败后的重试次数；对应 option.yml 的 client.retry_times",
         "default": 3,
     },
     "jm_timeout": {
         "label": "请求超时（秒）",
         "type": "int",
-        "group": "download",
+        "group": "option",
         "hint": "单次网络请求的超时时间；对应 option.yml 的 client.timeout",
         "default": 20,
     },
     "jm_proxy": {
         "label": "代理地址",
         "type": "text",
-        "group": "download",
+        "group": "option",
         "hint": (
             "如 127.0.0.1:7890 或 http://127.0.0.1:7890；未写协议时自动补 http://，"
             "留空使用系统代理；对应 option.yml 的 client.postman.meta_data.proxies"
@@ -118,7 +140,7 @@ CONFIG_FIELDS = {
     "jm_cookies": {
         "label": "Cookie",
         "type": "password",
-        "group": "download",
+        "group": "option",
         "hint": (
             "格式 k=v; k2=v2（也可换行分隔），用于访问登录可见内容；"
             "对应 option.yml 的 client.postman.meta_data.cookies"
@@ -128,7 +150,7 @@ CONFIG_FIELDS = {
     "jm_max_concurrent": {
         "label": "同时下载任务数",
         "type": "int",
-        "group": "download",
+        "group": "output",
         "hint": "插件同时运行的漫画下载数，属于插件调度，不写入 option.yml",
         "default": 2,
     },
@@ -266,6 +288,8 @@ CONFIG_FIELDS = {
 # 下载参数的字段映射：表单字段 → option.yml 的键
 # 这些字段只存 option.yml，不写 config.json；kind 决定表单值与 option 值的转换
 OPTION_FIELDS = {
+    "jm_download_dir": {"path": "dir_rule.base_dir", "kind": "path"},
+    "jm_download_log": {"path": "log", "kind": "bool"},
     "jm_image_threads": {"path": "download.threading.image", "kind": "int"},
     "jm_photo_threads": {"path": "download.threading.photo", "kind": "int"},
     "jm_download_cache": {"path": "download.cache", "kind": "bool"},
@@ -281,8 +305,8 @@ OPTION_FIELDS = {
 # 配置分组：每组在 Views 里单独一页
 CONFIG_GROUPS = [
     {
-        "key": "download",
-        "label": "下载",
+        "key": "option",
+        "label": "下载参数",
     },
     {
         "key": "output",

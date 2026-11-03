@@ -117,7 +117,7 @@ plugin_data/astrbot_plugin_resource_query/
 页面内每个模块按能力显示对应区块：
 
 - **账号管理**（`mimo` / `wasu`）：添加、编辑、删除账号；支持登录与凭据测试的模块会显示相应按钮
-- **模块设置**：该模块自己的配置项，按「下载 / 发送与文件」等分组显示
+- **模块设置**：该模块自己的配置项；JM 的下载参数单独一页「下载参数」，其余在「发送与文件」
 - **消息模板**（`jm` / `update`）：按流程阶段分开的文案，可逐条修改、实时预览并恢复默认；每个模板只能使用该阶段已产生的变量，保存时后端会拒绝不可用变量
 - **模板变量**：变量的中文说明、预览示例值与是否在快捷插入区显示
 - 账号编辑窗内可编辑该账号的**消息模板**并实时预览
@@ -141,13 +141,15 @@ JMDownload/
 
 JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全部字段。文件在
 `config/jm/option.yml`（与 `config.json` 同目录），首次加载时自动生成；**Views 的
-「JM 下载 → 下载」页直接编辑它**：并发、缓存、解码、图片后缀、客户端类型、重试、
-超时、代理、Cookie 都会写入对应键，`config.json` 不再保存这些下载参数。
+「JM 下载 → 下载参数」页直接编辑它**：下载路径、下载日志、并发、缓存、解码、图片
+后缀、客户端类型、重试、超时、代理、Cookie 都会写入对应键，`config.json` 不再保存
+这些下载参数。
 
 ```yaml
-log: false
+log: true                     # 输出 jmcomic 下载日志（写入 AstrBot 日志）
 dir_rule:
   rule: Bd/JP{Pindex:03}-{Pid}   # 每章一个子目录；运行时 base_dir 换成当前漫画目录
+  base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 相对 AstrBot 数据根
 download:
   cache: true
   image: {decode: true, suffix: null}   # suffix 为 null 时保留站点原图（webp/jpg）
@@ -161,6 +163,9 @@ client:
       proxies: ...    # 留空时不写，沿用库默认（系统代理）
       cookies: ...
 ```
+
+「下载路径」填相对 AstrBot 数据根（`data/`）的目录，默认保持旧位置；填绝对路径时
+只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。
 
 表单没有覆盖的键（`client.domain`、`plugins.after_album` 等）仍可手工加进文件并保留；
 可用的全部字段见 jmcomic 的

@@ -23,6 +23,7 @@ from ...core.module import ModuleBase
 from .config import (
     CONFIG_FIELDS,
     CONFIG_GROUPS,
+    DEFAULT_DOWNLOAD_DIR,
     OPTION_FIELDS,
     VAR_SAMPLES,
     VARIABLES,
@@ -62,10 +63,10 @@ class JMModule(ModuleBase):
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
-        data_dir = self.get_data_path()
+        data_root = Path(get_astrbot_data_path())
         self._service = JMService(
-            download_dir=data_dir / "JMDownload",
-            legacy_dir=Path(get_astrbot_data_path()) / "JMDownload",
+            download_dir=data_root / DEFAULT_DOWNLOAD_DIR,
+            legacy_dir=data_root / "JMDownload",
             option_file=self.get_config_path() / "option.yml",
         )
         self._semaphore: asyncio.Semaphore | None = None
@@ -95,8 +96,41 @@ class JMModule(ModuleBase):
         # 普通字段来自 config.json；下载参数从 option.yml 读入并覆盖同名表单字段
         config = super().load_module_config()
         config.update(self._service.read_option_values())
+
+        raw = str(config.get("jm_download_dir") or "").strip()
+        relative, absolute = self._resolve_download_dir(raw)
+        config["jm_download_dir"] = relative
+        self._service.set_download_root(absolute)
+
+        # 旧文件的绝对路径在读取时换成相对数据根的写法，避免换机器失效
+        if relative != raw and self._service.option_file.is_file():
+            self._service.update_option_values({"jm_download_dir": relative})
+
         self._service.bind_config(config)
         return config
+
+    def _resolve_download_dir(self, raw: str) -> tuple[str, Path]:
+        # 下载路径相对 AstrBot 数据根；绝对路径在数据根内时转相对，越界回退默认
+        data_root = Path(get_astrbot_data_path()).resolve()
+        text = str(raw or "").strip().replace("\\", "/") or DEFAULT_DOWNLOAD_DIR
+
+        path = Path(text)
+        if path.is_absolute():
+            try:
+                text = path.resolve().relative_to(data_root).as_posix()
+            except ValueError:
+                logger.warning(f"下载路径必须位于 AstrBot 数据根内，已回退默认：{path}")
+                text = DEFAULT_DOWNLOAD_DIR
+
+        resolved = (data_root / text).resolve()
+        try:
+            resolved.relative_to(data_root)
+        except ValueError:
+            logger.warning(f"下载路径越出数据根，已回退默认：{text}")
+            text = DEFAULT_DOWNLOAD_DIR
+            resolved = (data_root / text).resolve()
+
+        return text, resolved
 
     def save_module_config(self, config: dict) -> bool:
         # 下载参数字段写 option.yml，config.json 只存其余字段
@@ -118,7 +152,7 @@ class JMModule(ModuleBase):
         from astrbot.api.web import json_response
 
         self._config_store.reset()
-        self._service.reset_option_file()
+        self._service.reset_option_file(DEFAULT_DOWNLOAD_DIR)
         self._service.bind_config(self.load_module_config())
         return json_response(
             {"status": "ok", "config": self.config_payload(self.load_module_config())}

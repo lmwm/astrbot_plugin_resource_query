@@ -1,3 +1,16 @@
+## v6.18.0 (2026-11-03)
+
+### 功能
+
+- **下载参数独立成页**：option.yml 的全部字段集中到 Views「JM 下载 → 下载参数」页；原「下载」页删除，`jm_max_concurrent` 移到「发送与文件」
+- 新增「下载路径」：相对 AstrBot 数据根的目录（默认保持旧位置 `plugin_data/astrbot_plugin_resource_query/JMDownload`）；填绝对路径且在数据根内时自动转相对，越界或含 `..` 回退默认，切换后重建下载目录与缓存
+- 新增「输出下载日志」：默认开启 jmcomic 日志（`log: true`，写入 AstrBot 日志）；运行中从关闭改为开启时会恢复库的日志开关（库只有 `disable_jm_log`，没有 enable）
+
+### 变更
+
+- `option.yml` 的 `dir_rule.base_dir` 改为相对数据根保存；运行时解析为绝对路径，并按漫画图片目录覆盖
+- 旧文件里的绝对 `base_dir` 在加载时自动转成相对写法
+
 ## v6.17.0 (2026-11-03)
 
 ### 功能

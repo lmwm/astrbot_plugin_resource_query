@@ -22,7 +22,7 @@ from pathlib import Path
 from ...common.module_log import module_logger
 from . import option as jm_option
 from .cache import AlbumCache
-from .config import OPTION_FIELDS
+from .config import DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
 from .pdf import make_pdf
@@ -59,6 +59,8 @@ class JMService:
             if option_file
             else self.paths.root.parent / "option.yml"
         )
+        # 写入 option.yml 的下载根（相对数据根），bind_config 时更新
+        self._download_dir_text = DEFAULT_DOWNLOAD_DIR
         self._ready = False
         self._ready_lock: asyncio.Lock | None = None
         self._config: dict = {}
@@ -75,15 +77,31 @@ class JMService:
         # option.yml 的位置（与 config.json 同目录，由 Views 表单维护）
         return self._option_file
 
+    @property
+    def download_root(self) -> Path:
+        # 当前下载根（由 config 的「下载路径」解析而来）
+        return self.paths.root
+
     def bind_config(self, config: dict) -> None:
         self._config = config or {}
+        self._download_dir_text = str(
+            self._config.get("jm_download_dir") or DEFAULT_DOWNLOAD_DIR
+        )
+
+    def set_download_root(self, path: str | Path) -> None:
+        # 下载路径变化时重建目录与缓存（路径不变则不动）
+        target = Path(path)
+        if self.paths.root == target:
+            return
+        self.paths = AlbumPaths(target)
+        self.cache = AlbumCache(self.paths)
 
     #  下载参数（option.yml）
 
     def ensure_option_file(self) -> None:
         # 首次加载时生成默认 option.yml；已存在不覆盖
         try:
-            jm_option.ensure_file(self._option_file, self.paths.root)
+            jm_option.ensure_file(self._option_file, self._download_dir_text)
         except ImportError as e:
             logger.warning(f"生成 option 配置文件失败（缺依赖）：{e}")
 
@@ -106,10 +124,12 @@ class JMService:
         except ImportError as e:
             logger.warning(f"写入 option 配置失败（缺依赖）：{e}")
 
-    def reset_option_file(self) -> None:
+    def reset_option_file(self, base_dir_text: str | None = None) -> None:
         # 恢复默认下载参数（Views 的「恢复默认」）
         try:
-            jm_option.reset_file(self._option_file, self.paths.root)
+            jm_option.reset_file(
+                self._option_file, base_dir_text or self._download_dir_text
+            )
         except ImportError as e:
             logger.warning(f"重置 option 配置失败（缺依赖）：{e}")
 

@@ -107,8 +107,15 @@ def load_option(path: Path, image_dir: Path):
     # 读取 option 文件；每本漫画的图片目录在运行时替换，不写回文件
     import jmcomic
 
+    data = _read(path)
     option = jmcomic.JmOption.from_file(str(path))
     option.dir_rule.base_dir = str(image_dir)
+
+    # 库只有 disable_jm_log，没有对应的 enable；log 在运行中改成 true 后
+    # 需要显式恢复开关，否则会被之前加载的 log: false 永久关掉
+    if data.get("log"):
+        jmcomic.JmModuleConfig.FLAG_ENABLE_JM_LOG = True
+
     return option
 
 
@@ -158,6 +165,10 @@ def _to_form(value, kind: str):
     if kind == "bool":
         return bool(value)
 
+    if kind == "path":
+        text = str(value or "").strip()
+        return text.replace("\\", "/")
+
     if kind == "suffix":
         return "" if value in (None, "") else str(value)
 
@@ -184,6 +195,10 @@ def _from_form(raw, kind: str):
 
     if kind == "bool":
         return bool(raw), False
+
+    if kind == "path":
+        text = str(raw or "").strip().replace("\\", "/")
+        return text or DEFAULT_OPTION["dir_rule"]["base_dir"], False
 
     if kind == "suffix":
         text = str(raw or "").strip()

@@ -57,8 +57,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--base-dir",
-        default="./JMDownload",
-        help="写入 dir_rule.base_dir 的路径，默认 ./JMDownload",
+        default="JMDownload",
+        help="写入 dir_rule.base_dir 的相对路径（相对 AstrBot 数据根），默认 JMDownload",
     )
     parser.add_argument(
         "--stdout",
