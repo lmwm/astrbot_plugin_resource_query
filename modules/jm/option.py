@@ -121,8 +121,17 @@ def load_option(path: Path, image_dir: Path):
         # 这里恢复传播与 INFO 级别（download_progress 插件会关掉传播）
         jm_logger = logging.getLogger("jmcomic")
         jm_logger.setLevel(logging.INFO)
+        jm_logger.disabled = False
         if not jm_logger.propagate:
             jm_logger.propagate = True
+
+        logger.info(
+            f"jmcomic 下载日志已开启（FLAG={jmcomic.JmModuleConfig.FLAG_ENABLE_JM_LOG}，"
+            f"propagate={jm_logger.propagate}，level={jm_logger.level}，"
+            f"handlers={len(jm_logger.handlers)}）"
+        )
+    else:
+        logger.info("jmcomic 下载日志已关闭")
 
     return option
 
