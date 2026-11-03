@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import copy
+import logging
 from pathlib import Path
 
 from ...common.module_log import module_logger
@@ -115,6 +116,13 @@ def load_option(path: Path, image_dir: Path):
     # 需要显式恢复开关，否则会被之前加载的 log: false 永久关掉
     if data.get("log"):
         jmcomic.JmModuleConfig.FLAG_ENABLE_JM_LOG = True
+
+        # 确保日志能进 AstrBot：库自己的 StreamHandler 不一定被收集，
+        # 这里恢复传播与 INFO 级别（download_progress 插件会关掉传播）
+        jm_logger = logging.getLogger("jmcomic")
+        jm_logger.setLevel(logging.INFO)
+        if not jm_logger.propagate:
+            jm_logger.propagate = True
 
     return option
 

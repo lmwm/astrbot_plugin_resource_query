@@ -1,3 +1,9 @@
+## v6.18.1 (2026-11-03)
+
+### 修复
+
+- **开启「输出下载日志」后日志仍不出现**：`log: true` 时除恢复 `FLAG_ENABLE_JM_LOG`，还把 `jmcomic` logger 的级别设为 INFO、传播恢复为 True；库的 `download_progress` 插件会关闭传播，关闭后记录只进它自己的 handler，AstrBot 日志收不到
+
 ## v6.18.0 (2026-11-03)
 
 ### 功能
