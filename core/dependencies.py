@@ -85,11 +85,28 @@ def pinned_versions(requirements_path: str) -> dict[str, str]:
     return pins
 
 
+def _version_key(version: str) -> tuple[int, ...]:
+    # 只按数字段比较；2.7.10 > 2.7.5，非数字段记 0
+    parts = re.split(r"[.\-+]", str(version))
+    return tuple(int(part) if part.isdigit() else 0 for part in parts)
+
+
 def _installed_version(distribution: str) -> str | None:
+    # 取同名发行包的最高版本：pip --target --upgrade 会残留旧 dist-info，
+    # 只看第一个可能读到升级前的版本，导致补装后仍被判为冲突
+    versions: list[str] = []
     try:
-        return importlib.metadata.version(distribution)
-    except importlib.metadata.PackageNotFoundError:
+        for dist in importlib.metadata.distributions(name=distribution):
+            try:
+                versions.append(str(dist.version))
+            except (AttributeError, ValueError):
+                continue
+    except (AttributeError, ValueError, OSError):
         return None
+
+    if not versions:
+        return None
+    return max(versions, key=_version_key)
 
 
 def version_conflicts(pins: dict[str, str]) -> list[tuple[str, str, str]]:
