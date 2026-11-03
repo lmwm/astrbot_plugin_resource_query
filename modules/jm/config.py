@@ -46,18 +46,28 @@ _MISSING_DEPS_LINES = [
 # 配置字段（key -> label / type / hint / group / variables / default）
 CONFIG_FIELDS = {
     #  下载
+    "jm_option_file": {
+        "label": "下载参数文件",
+        "type": "text",
+        "group": "download",
+        "hint": (
+            "留空使用插件数据目录下的 option.yml（首次加载自动生成，含 jmcomic 全部下载参数，可直接编辑）；"
+            "填写路径则只读该文件、不再生成或覆盖（相对路径按插件数据目录解析）"
+        ),
+        "default": "",
+    },
     "jm_image_threads": {
         "label": "图片并发数",
         "type": "int",
         "group": "download",
-        "hint": "单章节内的图片下载并发",
+        "hint": "单章节内的图片下载并发；写入 option.yml 的 download.threading.image",
         "default": 10,
     },
     "jm_photo_threads": {
         "label": "章节并发数",
         "type": "int",
         "group": "download",
-        "hint": "章节之间的下载并发",
+        "hint": "章节之间的下载并发；写入 option.yml 的 download.threading.photo",
         "default": 2,
     },
     "jm_max_concurrent": {
@@ -71,28 +81,34 @@ CONFIG_FIELDS = {
         "label": "请求超时（秒）",
         "type": "int",
         "group": "download",
-        "hint": "单次网络请求的超时时间",
+        "hint": "单次网络请求的超时时间；写入 option.yml 的 client.timeout",
         "default": 20,
     },
     "jm_retry_times": {
         "label": "重试次数",
         "type": "int",
         "group": "download",
-        "hint": "网络请求失败后的重试次数",
+        "hint": "网络请求失败后的重试次数；写入 option.yml 的 client.retry_times",
         "default": 3,
     },
     "jm_proxy": {
         "label": "代理地址",
         "type": "text",
         "group": "download",
-        "hint": "如 127.0.0.1:7890 或 http://127.0.0.1:7890；未写协议时自动补 http://，留空不使用代理",
+        "hint": (
+            "如 127.0.0.1:7890 或 http://127.0.0.1:7890；未写协议时自动补 http://，"
+            "留空使用系统代理（写入 option.yml 的 client.postman.meta_data.proxies）"
+        ),
         "default": "",
     },
     "jm_cookies": {
         "label": "Cookie",
         "type": "password",
         "group": "download",
-        "hint": "格式 k=v; k2=v2（也可换行分隔），用于访问登录可见内容",
+        "hint": (
+            "格式 k=v; k2=v2（也可换行分隔），用于访问登录可见内容；"
+            "写入 option.yml 的 client.postman.meta_data.cookies"
+        ),
         "default": "",
     },
     "jm_jpeg_quality": {

@@ -43,7 +43,7 @@ main.py                     插件入口：只做「注册 + 分发」
   └── modules/              功能模块层（每个功能一个包）
         ├── mimo/           MiMo 查询
         ├── wasu/           华数查询
-        ├── jm/             JM 下载（module / service / paths / cache / pdf）
+        ├── jm/             JM 下载（module / service / option / paths / cache / pdf）
         └── update/         插件更新
   └── common/               通用工具层：路径、文件读写、YAML 解析与写入
   └── views/template-editor/  管理界面（schema 驱动，单文件入口，脚本内联）
@@ -106,6 +106,8 @@ plugin_data/astrbot_plugin_resource_query/
 │   │   └── config.json        # 下载 / 发送 / 消息模板配置
 │   └── update/
 │       └── config.json        # 代理、重试、自动更新、消息模板
+├── option.yml                 # jmcomic 下载参数（首次加载自动生成，可直接编辑）
+└── JMDownload/                # JM 下载产物（见下）
 ```
 
 默认值、字段定义（label/type/hint）、默认模板与变量说明写在插件目录的 `modules/<模块>/config.py`；`config.json` 只保存值，缺少的项自动回退默认值，删除该文件即恢复全部默认。旧版本的 `config.yaml` 与 `var_config.json` 会在首次读取时自动迁移为 `config.json` 并删除。
@@ -135,10 +137,40 @@ JMDownload/
 > 升级后会自动搬移到新位置并给第一层目录加空格。多章节漫画的图片从新版本起按章节
 > 分子目录存放；旧版本直接堆在图片目录里的扁平图片会在重新下载成功后自动清理。
 
-> PDF 画质默认 75 时，jmcomic 在下载阶段就把图片直接转成 JPEG，生成 PDF 时直接嵌入，
-> 不再二次读图转码；其它画质值才下载原图后转码。缓存命中时只读 `info.json`，不请求站点。
+### JM 下载参数（option.yml）
 
-> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失，用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发）。JM 目前声明 `jmcomic`、`img2pdf`、`Pillow`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
+JM 的下载参数不再写在代码里，而是写进 jmcomic 原生的 `option.yml`，由库自己解释
+全部字段。文件在插件数据目录下，首次加载时生成；表单里的并发、超时、重试、代理、
+Cookie 会被写入对应键，保存表单时只覆盖这些键，手工添加的其它配置会保留：
+
+```yaml
+log: false
+dir_rule:
+  rule: Bd/JP{Pindex:03}-{Pid}   # 每章一个子目录；运行时 base_dir 换成当前漫画目录
+download:
+  cache: true
+  image: {decode: true, suffix: null}   # suffix 为 null 时保留站点原图（webp/jpg）
+  threading: {image: 10, photo: 2}
+client:
+  retry_times: 3
+  timeout: 20
+  postman:
+    meta_data:
+      proxies: ...    # 留空时不写，沿用库默认（系统代理）
+      cookies: ...
+```
+
+想完全手工维护，可在「JM 下载 → 下载」页把「下载参数文件」填成另一个路径：
+模块只读该文件，不再生成或覆盖。可用字段见 jmcomic 的
+[配置文件文档](https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/)，
+例如 `client.impl`、`client.domain`、`plugins.after_album` 等都可以直接加进去。
+
+> 图片按站点原格式（多为 webp）保留在图片目录作为存档；生成 PDF 时才把非 JPEG
+> 转码成目标画质（默认 75）。jmcomic 自带的 `img2pdf` 插件不做这层转码，直接嵌入
+> webp 会按无损重编码、体积膨胀数倍，所以 PDF 合成仍由本模块完成。
+> 缓存命中时只读 `info.json`，不请求站点。
+
+> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失、**或 requirements.txt 里 `==` 锁定的版本与已装版本不一致**，就用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发；pip 的 `only-if-needed` 策略也不会升级已满足下限的旧包）。JM 声明 `jmcomic`、`img2pdf`、`Pillow`，并把 `jmcomic` 锁定为 `2.7.10`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
 
 ## 首次使用
 

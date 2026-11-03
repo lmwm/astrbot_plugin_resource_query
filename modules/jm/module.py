@@ -55,9 +55,11 @@ class JMModule(ModuleBase):
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
+        data_dir = self.get_data_path()
         self._service = JMService(
-            download_dir=self.get_data_path() / "JMDownload",
+            download_dir=data_dir / "JMDownload",
             legacy_dir=Path(get_astrbot_data_path()) / "JMDownload",
+            data_dir=data_dir,
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
@@ -91,6 +93,7 @@ class JMModule(ModuleBase):
         saved = super().save_module_config(config)
         if saved:
             self._service.bind_config(self.load_module_config())
+            self._service.sync_option_file()
         return saved
 
     #  生命周期
@@ -98,6 +101,7 @@ class JMModule(ModuleBase):
     async def on_load(self) -> None:
         # 插件初始化已统一补装过；这里再复查一次，缺库只记日志，不阻断加载
         await super().on_load()
+        self._service.ensure_option_file()
         missing = dependencies.missing(self.required_packages)
         if missing:
             logger.error(

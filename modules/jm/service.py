@@ -5,9 +5,11 @@
 # 不再需要线程池与跨线程调度。本层只产出数据（进度、结果、错误原因），
 # 发给用户的消息由模块按模板渲染。
 #
-# 与 2.7.x 源码对齐的几点：
+# 与 2.7.10 源码对齐的几点：
+# - 下载参数写在原生 option.yml 里（见 option.py），不再用代码拼字典；
 # - 图片目录按章节分子目录，避免多章节图片同名（都是 00001.jpg）互相覆盖；
-# - 用 DownloadResult.manifest.image_filepath_list 拿按章节/页码排好序的图片；
+# - 用 DownloadResult.manifest.image_filepath_list 拿按章节/页码排好序的图片，
+#   旧版无 manifest 的兜底已删除（依赖固定 2.7.10）；
 # - check_exception=True 让库抛 PartialDownloadFailedException，不再自己拼错误；
 # - 下载阶段保留站点原图（webp/jpg 原样落盘），作为存档；PDF 生成时才按画质
 #   转码到临时目录，不覆盖原图。
@@ -18,6 +20,7 @@ import asyncio
 from pathlib import Path
 
 from ...common.module_log import module_logger
+from . import option as jm_option
 from .cache import AlbumCache
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
@@ -25,9 +28,6 @@ from .pdf import make_pdf
 from .utils import normalize_proxy, parse_cookies
 
 logger = module_logger("jm")
-
-# 每个章节一个子目录：Pindex 排序、Pid 保证唯一
-_CHAPTER_DIR_RULE = "Bd/JP{Pindex:03}-{Pid}"
 
 # 异常类名 → 用户可读提示；按类名匹配，避免依赖库内部模块
 _ERROR_MESSAGES = {
@@ -45,10 +45,19 @@ _ERROR_MESSAGES = {
 class JMService:
     # JM 下载服务：路径、缓存、下载与 PDF 生成都收敛在这里
 
-    def __init__(self, download_dir: str | Path, legacy_dir: str | Path | None = None):
+    def __init__(
+        self,
+        download_dir: str | Path,
+        legacy_dir: str | Path | None = None,
+        data_dir: str | Path | None = None,
+    ):
         self.paths = AlbumPaths(download_dir)
         self.cache = AlbumCache(self.paths)
         self._legacy_dir = Path(legacy_dir) if legacy_dir else None
+        self._data_dir = Path(data_dir) if data_dir else self.paths.root.parent
+        self._default_option_file = self._data_dir / "option.yml"
+        self._option_file = self._default_option_file
+        self._option_readonly = False
         self._ready = False
         self._ready_lock: asyncio.Lock | None = None
         self._config: dict = {}
@@ -60,9 +69,46 @@ class JMService:
         # 当前模块配置；由模块在加载与保存后绑定，避免每次下载都读盘
         return self._config
 
+    @property
+    def option_file(self) -> Path:
+        # 实际使用的 option 文件路径（只读模式时为用户指定路径）
+        return self._option_file
+
     def bind_config(self, config: dict) -> None:
-        # 绑定当前配置
+        # 绑定当前配置，并解析「下载参数文件」路径
         self._config = config or {}
+
+        custom = str(self._config.get("jm_option_file") or "").strip()
+        if custom:
+            path = Path(custom).expanduser()
+            self._option_file = path if path.is_absolute() else self._data_dir / path
+            self._option_readonly = True
+        else:
+            self._option_file = self._default_option_file
+            self._option_readonly = False
+
+    def ensure_option_file(self) -> None:
+        # 首次加载时生成默认 option.yml；已存在不覆盖，保留手工修改
+        if self._option_readonly:
+            if not self._option_file.is_file():
+                logger.warning(f"指定的 JM option 文件不存在：{self._option_file}")
+            return
+
+        try:
+            jm_option.ensure_file(self._option_file, self._option_payload())
+        except ImportError as e:
+            logger.warning(f"生成 option 配置文件失败（缺依赖）：{e}")
+
+    def sync_option_file(self) -> None:
+        # 表单保存后重写表单对应的键；只读模式不写
+        if self._option_readonly:
+            self.ensure_option_file()
+            return
+
+        try:
+            jm_option.sync_file(self._option_file, self._option_payload())
+        except ImportError as e:
+            logger.warning(f"更新 option 配置文件失败（缺依赖）：{e}")
 
     async def ensure_ready(self) -> None:
         # 首次使用时执行一次旧数据迁移（幂等）；文件操作放到线程里，不卡事件循环
@@ -75,6 +121,7 @@ class JMService:
             if self._ready:
                 return
             self._ready = True
+            self.ensure_option_file()
             if self._legacy_dir is not None:
                 try:
                     moved = await asyncio.to_thread(
@@ -97,19 +144,17 @@ class JMService:
     def _quality(self) -> int:
         return max(1, min(95, self._int("jm_jpeg_quality", 75)))
 
-    def _build_option(self, image_dir: Path):
-        # 从最小配置构建 JmOption，其余项交给库的默认值合并
-        # 不设置 download.image.suffix：按站点原格式落盘（webp/jpg），保留原图存档
-        import jmcomic
-
-        raw = {
+    def _option_payload(self) -> dict:
+        # 表单对应的 option 键；其它键（plugins、client.impl 等）留给文件自己
+        return {
             "log": False,
-            "dir_rule": {"rule": _CHAPTER_DIR_RULE, "base_dir": str(image_dir)},
+            "dir_rule": {
+                "rule": jm_option.CHAPTER_RULE,
+                "base_dir": str(self.paths.root),
+            },
             "download": {
                 "cache": True,
-                "image": {
-                    "decode": True,
-                },
+                "image": {"decode": True, "suffix": None},
                 "threading": {
                     "image": max(1, self._int("jm_image_threads", 10)),
                     "photo": max(1, self._int("jm_photo_threads", 2)),
@@ -121,7 +166,6 @@ class JMService:
                 "postman": {"meta_data": self._meta_data()},
             },
         }
-        return jmcomic.JmOption.construct(raw)
 
     def _meta_data(self) -> dict:
         meta: dict = {}
@@ -135,6 +179,13 @@ class JMService:
             meta["cookies"] = cookies
 
         return meta
+
+    def _build_option(self, image_dir: Path):
+        # 从 option 文件读取配置，再把 base_dir 换成当前漫画的图片目录
+        self.ensure_option_file()
+        if not self._option_file.is_file():
+            raise RuntimeError(f"下载失败：option 配置文件不存在：{self._option_file}")
+        return jm_option.load_option(self._option_file, image_dir)
 
     #  本地缓存
 
@@ -266,33 +317,24 @@ class JMService:
         # 默认画质对已是 JPEG 的源图直接嵌入；其它画质统一转码
         embed_jpeg = quality == 75
         image_dir = self.paths.ensure_image_dir(album_id, info)
-        option = self._build_option(image_dir)
-        downloader_cls = _make_progress_downloader(
-            progress, info.page_count, quality
-        )
+        downloader_cls = _make_progress_downloader(progress, info.page_count)
 
         result = await jmcomic.download_album_async(
             str(album_id),
-            option=option,
+            option=self._build_option(image_dir),
             downloader=downloader_cls,
             check_exception=True,
         )
 
-        # 2.7.4+ 返回 DownloadResult（带 manifest）；2.7.0–2.7.3 返回元组
-        album, downloader = result
-        manifest = getattr(result, "manifest", None)
-        if manifest is not None:
-            images = [
-                Path(str(path))
-                for path in (getattr(manifest, "image_filepath_list", None) or [])
-            ]
-        else:
-            images = _collect_images(downloader)
+        images = [
+            Path(str(path)) for path in (result.manifest.image_filepath_list or [])
+        ]
         if not images:
             raise RuntimeError("下载失败：未获取到图片")
 
+        album = result.album
         album_info = self._to_info(album_id, album) if album is not None else info
-        # 2.7.5 的 API 不返回总页数，用实际下载数修正；2.7.10 起接口已提供
+        # 接口未提供总页数时用实际下载数修正（HTML 端有值，API 端常为 0）
         album_info.page_count = len(images)
 
         pdf_name = f"JM{album_id}-{self.paths.display_title(album_info)}"
@@ -329,23 +371,9 @@ class JMService:
         return f"{type(error).__name__}: {text}"
 
 
-def _collect_images(downloader) -> list[Path]:
-    # 旧版 jmcomic（无 manifest）的兜底：从成功记录取路径，按完整路径排序
-    paths: set[Path] = set()
-    success = getattr(downloader, "download_success_dict", None) or {}
-
-    for photo_map in success.values():
-        for items in photo_map.values():
-            for save_path, _image in items:
-                paths.add(Path(str(save_path)))
-
-    return sorted(paths, key=lambda path: str(path).lower())
-
-
 def _make_progress_downloader(
     callback: ProgressCallback | None,
     initial_total: int = 0,
-    quality: int = 75,
 ):
     # 生成带进度的异步下载器类；回调只报数量，文案与节流由模块负责
     import jmcomic
@@ -354,8 +382,8 @@ def _make_progress_downloader(
         def __init__(self, option):
             super().__init__(option)
             self._done = 0
-            # 2.7.5 的 API 不返回总页数：总数未知时只报已下载张数，
-            # 不在章节开始时逐章累加，避免多章节尚未全部开始时误报 100%
+            # 总数未知时只报已下载张数，不在章节开始时逐章累加，
+            # 避免多章节尚未全部开始时误报 100%
             self._total = max(0, int(initial_total or 0))
 
         async def after_image(self, image, img_save_path):
@@ -363,26 +391,5 @@ def _make_progress_downloader(
             self._done += 1
             if callback is not None:
                 await callback(self._done, self._total)
-
-        @staticmethod
-        def _save_raw(image_bytes, save_path, need_convert=False):
-            # 直接落 JPEG 时统一转 RGB，避免 RGBA/P 模式（PNG、GIF）保存失败
-            if not need_convert:
-                with open(save_path, "wb") as handle:
-                    handle.write(image_bytes)
-                return
-
-            source = jmcomic.JmImageTool.open_image(image_bytes)
-            try:
-                target = source
-                if source.mode not in ("RGB", "L"):
-                    target = source.convert("RGB")
-                try:
-                    target.save(save_path, format="JPEG", quality=quality)
-                finally:
-                    if target is not source:
-                        target.close()
-            finally:
-                source.close()
 
     return _ProgressDownloader

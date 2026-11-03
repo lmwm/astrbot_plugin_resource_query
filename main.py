@@ -96,7 +96,7 @@ class ResourceQueryPlugin(Star):
         if ok:
             core_logger.info(f"依赖补装完成：{'、'.join(missing)}")
         else:
-            core_logger.error(f"依赖补装失败：{detail}；仍缺：{'、'.join(missing)}")
+            core_logger.error(f"依赖补装失败：{detail}；仍待处理：{'、'.join(missing)}")
 
     async def terminate(self) -> None:
         # 插件卸载/重载前调用：让各模块清理注册

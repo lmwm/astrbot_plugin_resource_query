@@ -1,3 +1,21 @@
+## v6.16.0 (2026-11-03)
+
+### 重构
+
+- **JM 下载参数改用 jmcomic 原生 option.yml**：首次加载在插件数据目录生成 `option.yml`，表单的并发、超时、重试、代理、Cookie 写入对应键；保存表单只覆盖这些键，手工添加的 `client.impl`、`client.domain`、`plugins` 等配置会保留。新增「下载参数文件」配置，填自定义路径时模块只读该文件、不再生成或覆盖
+- 删除与 jmcomic 2.7.10 重复的代码：无 manifest 的旧版兜底收集（`_collect_images`）、下载器子类里的 `_save_raw` 转码覆写（6.15.0 起不再设 `download.image.suffix`，该分支已不可达）
+- 下载结果统一从 `DownloadResult.manifest.image_filepath_list` 取图，详情与下载共用 option 文件
+
+### 变更
+
+- `requirements.txt` 将 `jmcomic` 从 `>=2.7.0,<3` 收紧为 `==2.7.10`：原来的下限约束配合 pip 的 `only-if-needed` 会一直停在首次安装的 2.7.5
+- **依赖检查新增版本校验**：`requirements.txt` 里 `==` 锁定的版本与已装版本不一致时，插件初始化也会补装一次（之前只在缺库时补装）；`jmcomic` 2.7.5 → 2.7.10 无需手动重装
+- 下载参数文件缺失时返回「option 配置文件不存在：<路径>」的可读错误
+
+### 文档
+
+- README 补 JM 目录结构、`option.yml` 字段说明与依赖锁定说明；修正「下载阶段直接转 JPEG」的过期描述（6.15.0 起保留站点原图）
+
 ## v6.15.1 (2026-11-03)
 
 ### 文档
