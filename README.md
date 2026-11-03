@@ -141,21 +141,24 @@ JMDownload/
 
 JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全部字段。文件在
 `config/jm/option.yml`（与 `config.json` 同目录），首次加载时自动生成；**Views 的
-「JM 下载 → 下载参数」页直接编辑它**：下载路径、下载日志、并发、缓存、解码、图片
-后缀、客户端类型、重试、超时、代理、Cookie 都会写入对应键，`config.json` 不再保存
-这些下载参数。
+「JM 下载 → 下载参数」页直接编辑它**：下载路径、下载日志、目录繁简转换、客户端域名、
+并发、缓存、解码、图片后缀、客户端类型、重试、超时、代理、Cookie 都会写入对应键，
+`config.json` 不再保存这些下载参数。
 
 ```yaml
 log: true                     # 输出 jmcomic 下载日志（写入 AstrBot 日志）
 dir_rule:
   rule: Bd/JP{Pindex:03}-{Pid}   # 每章一个子目录；运行时 base_dir 换成当前漫画目录
   base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 相对 AstrBot 数据根
+  normalize_zh: zh-cn           # 目录名统一为简体（zh-tw 繁体，留空不转换）
 download:
   cache: true
   image: {decode: true, suffix: null}   # suffix 为 null 时保留站点原图（webp/jpg）
   threading: {image: 10, photo: 2}
 client:
   impl: api
+  domain:                       # 按客户端配置域名，留空使用库内置域名
+    api: [a.com, b.com]
   retry_times: 3
   timeout: 20
   postman:
@@ -165,9 +168,11 @@ client:
 ```
 
 「下载路径」填相对 AstrBot 数据根（`data/`）的目录，默认保持旧位置；填绝对路径时
-只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。
+只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。「客户端域名」填写
+格式为 `api: a.com, b.com; html: c.com`（支持全角冒号与换行分隔），留空则删除该键、
+使用库内置域名。
 
-表单没有覆盖的键（`client.domain`、`plugins.after_album` 等）仍可手工加进文件并保留；
+表单没有覆盖的键（`plugins.after_album` 等）仍可手工加进文件并保留；
 可用的全部字段见 jmcomic 的
 [配置文件文档](https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/)。
 源码里的 `Scripts/gen_option.py` 可按默认值重新生成一份
@@ -179,7 +184,7 @@ client:
 > webp 会按无损重编码、体积膨胀数倍，所以 PDF 合成仍由本模块完成。
 > 缓存命中时只读 `info.json`，不请求站点。
 
-> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失、**或 requirements.txt 里 `==` 锁定的版本与已装版本不一致**，就用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发；pip 的 `only-if-needed` 策略也不会升级已满足下限的旧包）。JM 声明 `jmcomic`、`img2pdf`、`Pillow`，并把 `jmcomic` 锁定为 `2.7.10`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
+> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失、**或 requirements.txt 里 `==` 锁定的版本与已装版本不一致**，就用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发；pip 的 `only-if-needed` 策略也不会升级已满足下限的旧包）。JM 声明 `jmcomic`、`img2pdf`、`Pillow`、`zhconv`（目录繁简转换），并把 `jmcomic` 锁定为 `2.7.10`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
 
 ## 首次使用
 

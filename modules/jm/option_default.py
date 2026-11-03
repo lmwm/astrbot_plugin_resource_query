@@ -20,6 +20,7 @@ DEFAULT_OPTION = {
     "dir_rule": {
         "rule": CHAPTER_RULE,
         "base_dir": "JMDownload",
+        "normalize_zh": "zh-cn",
     },
     "download": {
         "cache": True,

@@ -1,3 +1,14 @@
+## v6.19.0 (2026-11-03)
+
+### 功能
+
+- 新增「目录繁简转换」（`dir_rule.normalize_zh`）：默认 `zh-cn`（简体），可改 `zh-tw` 或留空不转换；依赖新增 `zhconv`，缺库时插件初始化补装
+- 新增「客户端域名」（`client.domain`）：按 `api: a.com, b.com; html: c.com` 格式填写（支持全角冒号、换行/分号分隔），留空使用库内置域名
+
+### 变更
+
+- `option.default.yml` 与默认值同步加入 `normalize_zh: zh-cn`
+
 ## v6.18.3 (2026-11-03)
 
 ### 修复

@@ -68,6 +68,26 @@ CONFIG_FIELDS = {
         "hint": "开启 jmcomic 的下载日志（写入 AstrBot 日志，内容较多）；对应 option.yml 的 log",
         "default": True,
     },
+    "jm_normalize_zh": {
+        "label": "目录繁简转换",
+        "type": "text",
+        "group": "option",
+        "hint": (
+            "把目录名统一为 zh-cn（简体，默认）或 zh-tw（繁体）；留空不转换；"
+            "依赖 zhconv；对应 option.yml 的 dir_rule.normalize_zh"
+        ),
+        "default": "zh-cn",
+    },
+    "jm_client_domain": {
+        "label": "客户端域名",
+        "type": "text",
+        "group": "option",
+        "hint": (
+            "按客户端配置域名，格式 api: a.com, b.com; html: c.com；留空使用库内置域名；"
+            "对应 option.yml 的 client.domain"
+        ),
+        "default": "",
+    },
     "jm_image_threads": {
         "label": "图片并发数",
         "type": "int",
@@ -290,6 +310,8 @@ CONFIG_FIELDS = {
 OPTION_FIELDS = {
     "jm_download_dir": {"path": "dir_rule.base_dir", "kind": "path"},
     "jm_download_log": {"path": "log", "kind": "bool"},
+    "jm_normalize_zh": {"path": "dir_rule.normalize_zh", "kind": "zh"},
+    "jm_client_domain": {"path": "client.domain", "kind": "domain"},
     "jm_image_threads": {"path": "download.threading.image", "kind": "int"},
     "jm_photo_threads": {"path": "download.threading.photo", "kind": "int"},
     "jm_download_cache": {"path": "download.cache", "kind": "bool"},

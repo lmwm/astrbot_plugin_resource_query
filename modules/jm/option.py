@@ -217,6 +217,22 @@ def _to_form(value, kind: str):
     if kind == "suffix":
         return "" if value in (None, "") else str(value)
 
+    if kind == "zh":
+        return "" if value is None else str(value)
+
+    if kind == "domain":
+        if not isinstance(value, dict):
+            return ""
+
+        blocks = []
+        for impl, domains in value.items():
+            if not isinstance(domains, (list, tuple)) or not domains:
+                continue
+            blocks.append(
+                f"{impl}: {', '.join(str(item) for item in domains)}"
+            )
+        return "; ".join(blocks)
+
     if kind == "proxy":
         if isinstance(value, dict):
             return str(value.get("http") or value.get("https") or "")
@@ -248,6 +264,27 @@ def _from_form(raw, kind: str):
     if kind == "suffix":
         text = str(raw or "").strip()
         return (text, False) if text else (None, False)
+
+    if kind == "zh":
+        text = str(raw or "").strip().lower()
+        return (text if text in ("zh-cn", "zh-tw") else None), False
+
+    if kind == "domain":
+        text = str(raw or "").strip().replace("：", ":")
+        if not text:
+            return None, True
+
+        domains: dict[str, list[str]] = {}
+        for block in text.replace("\n", ";").split(";"):
+            key, separator, value = block.strip().partition(":")
+            if not separator:
+                key, separator, value = block.strip().partition("=")
+            key = key.strip()
+            items = [item.strip() for item in value.split(",") if item.strip()]
+            if separator and key and items:
+                domains[key] = items
+
+        return (domains, False) if domains else (None, True)
 
     if kind == "proxy":
         text = str(raw or "").strip()

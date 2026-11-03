@@ -7,6 +7,7 @@ log: true
 dir_rule:
   rule: Bd/JP{Pindex:03}-{Pid}
   base_dir: JMDownload
+  normalize_zh: zh-cn
 download:
   cache: true
   image:

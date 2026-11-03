@@ -59,6 +59,7 @@ class JMModule(ModuleBase):
         "jmcomic": "jmcomic",
         "img2pdf": "img2pdf",
         "PIL": "Pillow",
+        "zhconv": "zhconv",
     }
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
