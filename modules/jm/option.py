@@ -21,6 +21,31 @@ logger = module_logger("jm")
 _MISSING = object()
 
 
+class _JmLogBridge(logging.Handler):
+    # 把 jmcomic 的记录转给插件 logger，确保进入 AstrBot 日志
+    # 库自带的 handler 与 root 传播在不同运行环境下不一定被收集，桥接最稳
+
+    def __init__(self) -> None:
+        super().__init__(logging.INFO)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            logger.info(f"[jmcomic] {record.getMessage()}")
+        except Exception:  # noqa: BLE001
+            self.handleError(record)
+
+
+def _ensure_log_bridge() -> None:
+    # 同一个 logger 只挂一个桥接 handler，插件重载后仍复用
+    jm_logger = logging.getLogger("jmcomic")
+    if any(getattr(handler, "_astrbot_jm_bridge", False) for handler in jm_logger.handlers):
+        return
+
+    bridge = _JmLogBridge()
+    bridge._astrbot_jm_bridge = True
+    jm_logger.addHandler(bridge)
+
+
 def default_payload(base_dir: str | Path) -> dict:
     # 完整默认配置；base_dir 换成实际的下载根目录
     payload = copy.deepcopy(DEFAULT_OPTION)
@@ -124,11 +149,14 @@ def load_option(path: Path, image_dir: Path):
         jm_logger.disabled = False
         if not jm_logger.propagate:
             jm_logger.propagate = True
+        _ensure_log_bridge()
 
+        root = logging.getLogger()
         logger.info(
             f"jmcomic 下载日志已开启（FLAG={jmcomic.JmModuleConfig.FLAG_ENABLE_JM_LOG}，"
             f"propagate={jm_logger.propagate}，level={jm_logger.level}，"
-            f"handlers={len(jm_logger.handlers)}）"
+            f"handlers={[type(item).__name__ for item in jm_logger.handlers]}，"
+            f"root_handlers={[type(item).__name__ for item in root.handlers]}）"
         )
     else:
         logger.info("jmcomic 下载日志已关闭")

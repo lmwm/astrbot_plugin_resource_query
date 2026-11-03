@@ -1,3 +1,9 @@
+## v6.18.3 (2026-11-03)
+
+### 修复
+
+- **jmcomic 日志经 AstrBot 日志链路丢失**：实测 `log: true` 时库 logger 的 `FLAG`、`propagate`、`level` 都正确，但记录没有进入 `astrbot.log`（root 传播在运行环境下不可靠）。改为给 `jmcomic` logger 挂一个桥接 handler，把记录转发到插件的模块 logger，日志稳定写入 AstrBot 日志（带 `[jmcomic]` 前缀）
+
 ## v6.18.2 (2026-11-03)
 
 ### 修复
