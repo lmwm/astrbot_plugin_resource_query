@@ -103,10 +103,10 @@ plugin_data/astrbot_plugin_resource_query/
 │   │   ├── config.json
 │   │   └── <名称>.json        # 账号
 │   ├── jm/
-│   │   └── config.json        # 下载 / 发送 / 消息模板配置
+│   │   ├── config.json        # 发送 / 模板 / 画质 / 任务数
+│   │   └── option.yml         # 下载参数（jmcomic 原生 option，由 Views 维护）
 │   └── update/
 │       └── config.json        # 代理、重试、自动更新、消息模板
-├── option.yml                 # jmcomic 下载参数（首次加载自动生成，可直接编辑）
 └── JMDownload/                # JM 下载产物（见下）
 ```
 
@@ -139,9 +139,10 @@ JMDownload/
 
 ### JM 下载参数（option.yml）
 
-JM 的下载参数不再写在代码里，而是写进 jmcomic 原生的 `option.yml`，由库自己解释
-全部字段。文件在插件数据目录下，首次加载时生成；表单里的并发、超时、重试、代理、
-Cookie 会被写入对应键，保存表单时只覆盖这些键，手工添加的其它配置会保留：
+JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全部字段。文件在
+`config/jm/option.yml`（与 `config.json` 同目录），首次加载时自动生成；**Views 的
+「JM 下载 → 下载」页直接编辑它**：并发、缓存、解码、图片后缀、客户端类型、重试、
+超时、代理、Cookie 都会写入对应键，`config.json` 不再保存这些下载参数。
 
 ```yaml
 log: false
@@ -152,6 +153,7 @@ download:
   image: {decode: true, suffix: null}   # suffix 为 null 时保留站点原图（webp/jpg）
   threading: {image: 10, photo: 2}
 client:
+  impl: api
   retry_times: 3
   timeout: 20
   postman:
@@ -160,10 +162,12 @@ client:
       cookies: ...
 ```
 
-想完全手工维护，可在「JM 下载 → 下载」页把「下载参数文件」填成另一个路径：
-模块只读该文件，不再生成或覆盖。可用字段见 jmcomic 的
-[配置文件文档](https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/)，
-例如 `client.impl`、`client.domain`、`plugins.after_album` 等都可以直接加进去。
+表单没有覆盖的键（`client.domain`、`plugins.after_album` 等）仍可手工加进文件并保留；
+可用的全部字段见 jmcomic 的
+[配置文件文档](https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/)。
+源码里的 `Scripts/gen_option.py` 可按默认值重新生成一份
+（`python Scripts/gen_option.py` 写 `modules/jm/option.default.yml`，
+`--stdout` 直接打印，`--base-dir` 指定目录）；删除 `config/jm/option.yml` 后重载也会恢复默认。
 
 > 图片按站点原格式（多为 webp）保留在图片目录作为存档；生成 PDF 时才把非 JPEG
 > 转码成目标画质（默认 75）。jmcomic 自带的 `img2pdf` 插件不做这层转码，直接嵌入

@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 from pathlib import Path
 from typing import ClassVar
 
@@ -19,7 +20,13 @@ from ...common.module_log import log_separator, module_logger
 from ...common.utils import parse_int, render_template
 from ...core import dependencies
 from ...core.module import ModuleBase
-from .config import CONFIG_FIELDS, CONFIG_GROUPS, VAR_SAMPLES, VARIABLES
+from .config import (
+    CONFIG_FIELDS,
+    CONFIG_GROUPS,
+    OPTION_FIELDS,
+    VAR_SAMPLES,
+    VARIABLES,
+)
 from .models import AlbumInfo
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
@@ -59,7 +66,7 @@ class JMModule(ModuleBase):
         self._service = JMService(
             download_dir=data_dir / "JMDownload",
             legacy_dir=Path(get_astrbot_data_path()) / "JMDownload",
-            data_dir=data_dir,
+            option_file=self.get_config_path() / "option.yml",
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
@@ -85,23 +92,47 @@ class JMModule(ModuleBase):
     #  模块配置
 
     def load_module_config(self) -> dict:
+        # 普通字段来自 config.json；下载参数从 option.yml 读入并覆盖同名表单字段
         config = super().load_module_config()
+        config.update(self._service.read_option_values())
         self._service.bind_config(config)
         return config
 
     def save_module_config(self, config: dict) -> bool:
-        saved = super().save_module_config(config)
+        # 下载参数字段写 option.yml，config.json 只存其余字段
+        option_values = {
+            key: config[key] for key in OPTION_FIELDS if key in config
+        }
+        plain = {
+            key: value for key, value in config.items() if key not in OPTION_FIELDS
+        }
+
+        saved = super().save_module_config(plain)
         if saved:
+            self._service.update_option_values(option_values)
             self._service.bind_config(self.load_module_config())
-            self._service.sync_option_file()
         return saved
+
+    async def api_reset_config(self):
+        # 恢复默认：config.json 与 option.yml 一起重置
+        from astrbot.api.web import json_response
+
+        self._config_store.reset()
+        self._service.reset_option_file()
+        self._service.bind_config(self.load_module_config())
+        return json_response(
+            {"status": "ok", "config": self.config_payload(self.load_module_config())}
+        )
 
     #  生命周期
 
     async def on_load(self) -> None:
         # 插件初始化已统一补装过；这里再复查一次，缺库只记日志，不阻断加载
         await super().on_load()
+        self._migrate_option_location()
         self._service.ensure_option_file()
+        self._migrate_download_params()
+        self._service.bind_config(self.load_module_config())
         missing = dependencies.missing(self.required_packages)
         if missing:
             logger.error(
@@ -109,6 +140,37 @@ class JMModule(ModuleBase):
                 f"未安装的模块：{'、'.join(dependencies.missing_modules(self.required_packages))}，"
                 "/jm 只提示安装，不会下载"
             )
+
+    def _migrate_option_location(self) -> None:
+        # 6.16.x 的 option.yml 在插件数据根；6.17.0 起与 config.json 同目录
+        old = self.get_data_path() / "option.yml"
+        new = self._service.option_file
+        if old == new or not old.is_file():
+            return
+
+        try:
+            if not new.is_file():
+                new.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(old), str(new))
+                logger.info(f"已将 option.yml 迁移到 {new.parent.name}/")
+                return
+            old.unlink()
+        except OSError as e:
+            logger.warning(f"迁移 option.yml 失败：{type(e).__name__}: {e}")
+
+    def _migrate_download_params(self) -> None:
+        # 旧版把下载参数存在 config.json；搬到 option.yml 后删除旧键
+        legacy = {
+            key: value
+            for key, value in self._config_store.user_values().items()
+            if key in OPTION_FIELDS
+        }
+        if not legacy:
+            return
+
+        self._service.update_option_values(legacy)
+        self._config_store.remove_values(list(legacy))
+        logger.info(f"已将 {len(legacy)} 个下载参数迁移到 option.yml")
 
     #  指令
 

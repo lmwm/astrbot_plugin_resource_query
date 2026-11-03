@@ -18,5 +18,6 @@ jm_images/
 modules/*/var_config.json
 
 # 调试/临时文件
+.tmp/
 新建 文本文档.txt
 

@@ -22,10 +22,10 @@ from pathlib import Path
 from ...common.module_log import module_logger
 from . import option as jm_option
 from .cache import AlbumCache
+from .config import OPTION_FIELDS
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
 from .pdf import make_pdf
-from .utils import normalize_proxy, parse_cookies
 
 logger = module_logger("jm")
 
@@ -49,15 +49,16 @@ class JMService:
         self,
         download_dir: str | Path,
         legacy_dir: str | Path | None = None,
-        data_dir: str | Path | None = None,
+        option_file: str | Path | None = None,
     ):
         self.paths = AlbumPaths(download_dir)
         self.cache = AlbumCache(self.paths)
         self._legacy_dir = Path(legacy_dir) if legacy_dir else None
-        self._data_dir = Path(data_dir) if data_dir else self.paths.root.parent
-        self._default_option_file = self._data_dir / "option.yml"
-        self._option_file = self._default_option_file
-        self._option_readonly = False
+        self._option_file = (
+            Path(option_file)
+            if option_file
+            else self.paths.root.parent / "option.yml"
+        )
         self._ready = False
         self._ready_lock: asyncio.Lock | None = None
         self._config: dict = {}
@@ -71,44 +72,46 @@ class JMService:
 
     @property
     def option_file(self) -> Path:
-        # 实际使用的 option 文件路径（只读模式时为用户指定路径）
+        # option.yml 的位置（与 config.json 同目录，由 Views 表单维护）
         return self._option_file
 
     def bind_config(self, config: dict) -> None:
-        # 绑定当前配置，并解析「下载参数文件」路径
         self._config = config or {}
 
-        custom = str(self._config.get("jm_option_file") or "").strip()
-        if custom:
-            path = Path(custom).expanduser()
-            self._option_file = path if path.is_absolute() else self._data_dir / path
-            self._option_readonly = True
-        else:
-            self._option_file = self._default_option_file
-            self._option_readonly = False
+    #  下载参数（option.yml）
 
     def ensure_option_file(self) -> None:
-        # 首次加载时生成默认 option.yml；已存在不覆盖，保留手工修改
-        if self._option_readonly:
-            if not self._option_file.is_file():
-                logger.warning(f"指定的 JM option 文件不存在：{self._option_file}")
-            return
-
+        # 首次加载时生成默认 option.yml；已存在不覆盖
         try:
-            jm_option.ensure_file(self._option_file, self._option_payload())
+            jm_option.ensure_file(self._option_file, self.paths.root)
         except ImportError as e:
             logger.warning(f"生成 option 配置文件失败（缺依赖）：{e}")
 
-    def sync_option_file(self) -> None:
-        # 表单保存后重写表单对应的键；只读模式不写
-        if self._option_readonly:
-            self.ensure_option_file()
-            return
-
+    def read_option_values(self) -> dict:
+        # 从 option.yml 读出表单字段的值；缺文件时返回空字典，由字段默认值兜底
         try:
-            jm_option.sync_file(self._option_file, self._option_payload())
+            return jm_option.read_values(self._option_file, OPTION_FIELDS)
         except ImportError as e:
-            logger.warning(f"更新 option 配置文件失败（缺依赖）：{e}")
+            logger.warning(f"读取 option 配置失败（缺依赖）：{e}")
+            return {}
+
+    def update_option_values(self, values: dict) -> None:
+        # 把 Views 保存的下载参数写回 option.yml
+        if not values:
+            return
+        try:
+            jm_option.update_values(self._option_file, OPTION_FIELDS, values)
+        except FileNotFoundError as e:
+            logger.warning(f"写入 option 配置失败：{e}")
+        except ImportError as e:
+            logger.warning(f"写入 option 配置失败（缺依赖）：{e}")
+
+    def reset_option_file(self) -> None:
+        # 恢复默认下载参数（Views 的「恢复默认」）
+        try:
+            jm_option.reset_file(self._option_file, self.paths.root)
+        except ImportError as e:
+            logger.warning(f"重置 option 配置失败（缺依赖）：{e}")
 
     async def ensure_ready(self) -> None:
         # 首次使用时执行一次旧数据迁移（幂等）；文件操作放到线程里，不卡事件循环
@@ -143,42 +146,6 @@ class JMService:
 
     def _quality(self) -> int:
         return max(1, min(95, self._int("jm_jpeg_quality", 75)))
-
-    def _option_payload(self) -> dict:
-        # 表单对应的 option 键；其它键（plugins、client.impl 等）留给文件自己
-        return {
-            "log": False,
-            "dir_rule": {
-                "rule": jm_option.CHAPTER_RULE,
-                "base_dir": str(self.paths.root),
-            },
-            "download": {
-                "cache": True,
-                "image": {"decode": True, "suffix": None},
-                "threading": {
-                    "image": max(1, self._int("jm_image_threads", 10)),
-                    "photo": max(1, self._int("jm_photo_threads", 2)),
-                },
-            },
-            "client": {
-                "retry_times": max(1, self._int("jm_retry_times", 3)),
-                "timeout": max(5, self._int("jm_timeout", 20)),
-                "postman": {"meta_data": self._meta_data()},
-            },
-        }
-
-    def _meta_data(self) -> dict:
-        meta: dict = {}
-
-        proxy = normalize_proxy(str(self._config.get("jm_proxy") or ""))
-        if proxy:
-            meta["proxies"] = {"http": proxy, "https": proxy}
-
-        cookies = parse_cookies(str(self._config.get("jm_cookies") or ""))
-        if cookies:
-            meta["cookies"] = cookies
-
-        return meta
 
     def _build_option(self, image_dir: Path):
         # 从 option 文件读取配置，再把 base_dir 换成当前漫画的图片目录

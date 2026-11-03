@@ -1,3 +1,20 @@
+## v6.17.0 (2026-11-03)
+
+### 功能
+
+- **JM 下载参数全部改为 Views 可视化编辑**：图片/章节并发、下载缓存、还原混淆图、图片后缀、客户端类型、重试、超时、代理、Cookie 直接编辑 `config/jm/option.yml` 对应键，不再需要手改配置文件；`config.json` 不再保存下载参数
+- 新增 `Scripts/gen_option.py`：按 `modules/jm/option_default.py` 生成默认 option.yml（默认写 `modules/jm/option.default.yml`，支持 `--stdout` 与 `--base-dir`）
+- 删除「下载参数文件」配置项，option.yml 固定放在 `config/jm/`（与 `config.json` 同目录）
+
+### 变更
+
+- 「恢复默认」同时重置 `config.json` 与 `option.yml`
+- 6.16.x 位于插件数据根的 `option.yml` 在加载时迁移到 `config/jm/`（新位置已存在则删除旧文件）
+
+### 修复
+
+- 旧版存在 `config.json` 的下载参数在首次加载时自动迁移到 `option.yml` 并清理旧键，用户已设置的值不丢
+
 ## v6.16.1 (2026-11-03)
 
 ### 修复

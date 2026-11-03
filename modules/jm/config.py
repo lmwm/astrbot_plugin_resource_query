@@ -45,51 +45,65 @@ _MISSING_DEPS_LINES = [
 
 # 配置字段（key -> label / type / hint / group / variables / default）
 CONFIG_FIELDS = {
-    #  下载
-    "jm_option_file": {
-        "label": "下载参数文件",
-        "type": "text",
-        "group": "download",
-        "hint": (
-            "留空使用插件数据目录下的 option.yml（首次加载自动生成，含 jmcomic 全部下载参数，可直接编辑）；"
-            "填写路径则只读该文件、不再生成或覆盖（相对路径按插件数据目录解析）"
-        ),
-        "default": "",
-    },
+    #  下载（这些字段写入 config/jm/option.yml，不再存进 config.json）
     "jm_image_threads": {
         "label": "图片并发数",
         "type": "int",
         "group": "download",
-        "hint": "单章节内的图片下载并发；写入 option.yml 的 download.threading.image",
+        "hint": "单章节内的图片下载并发；对应 option.yml 的 download.threading.image",
         "default": 10,
     },
     "jm_photo_threads": {
         "label": "章节并发数",
         "type": "int",
         "group": "download",
-        "hint": "章节之间的下载并发；写入 option.yml 的 download.threading.photo",
+        "hint": "章节之间的下载并发；对应 option.yml 的 download.threading.photo",
         "default": 2,
     },
-    "jm_max_concurrent": {
-        "label": "同时下载任务数",
-        "type": "int",
+    "jm_download_cache": {
+        "label": "使用下载缓存",
+        "type": "bool",
         "group": "download",
-        "hint": "限制同时进行的漫画下载数量",
-        "default": 2,
+        "hint": "图片文件已存在时跳过重新下载；对应 option.yml 的 download.cache",
+        "default": True,
     },
-    "jm_timeout": {
-        "label": "请求超时（秒）",
-        "type": "int",
+    "jm_image_decode": {
+        "label": "还原混淆图",
+        "type": "bool",
         "group": "download",
-        "hint": "单次网络请求的超时时间；写入 option.yml 的 client.timeout",
-        "default": 20,
+        "hint": "按站点规则还原被打乱的图片；对应 option.yml 的 download.image.decode",
+        "default": True,
+    },
+    "jm_image_suffix": {
+        "label": "图片后缀",
+        "type": "text",
+        "group": "download",
+        "hint": (
+            "留空按站点原格式保存（多为 webp，保留原图存档）；"
+            "填 .jpg 则在下载时转成 JPEG（PDF 直嵌）；对应 option.yml 的 download.image.suffix"
+        ),
+        "default": "",
+    },
+    "jm_client_impl": {
+        "label": "客户端类型",
+        "type": "text",
+        "group": "download",
+        "hint": "api 为 APP 端（默认，限 IP 少），html 为网页端；对应 option.yml 的 client.impl",
+        "default": "api",
     },
     "jm_retry_times": {
         "label": "重试次数",
         "type": "int",
         "group": "download",
-        "hint": "网络请求失败后的重试次数；写入 option.yml 的 client.retry_times",
+        "hint": "网络请求失败后的重试次数；对应 option.yml 的 client.retry_times",
         "default": 3,
+    },
+    "jm_timeout": {
+        "label": "请求超时（秒）",
+        "type": "int",
+        "group": "download",
+        "hint": "单次网络请求的超时时间；对应 option.yml 的 client.timeout",
+        "default": 20,
     },
     "jm_proxy": {
         "label": "代理地址",
@@ -97,7 +111,7 @@ CONFIG_FIELDS = {
         "group": "download",
         "hint": (
             "如 127.0.0.1:7890 或 http://127.0.0.1:7890；未写协议时自动补 http://，"
-            "留空使用系统代理（写入 option.yml 的 client.postman.meta_data.proxies）"
+            "留空使用系统代理；对应 option.yml 的 client.postman.meta_data.proxies"
         ),
         "default": "",
     },
@@ -107,14 +121,21 @@ CONFIG_FIELDS = {
         "group": "download",
         "hint": (
             "格式 k=v; k2=v2（也可换行分隔），用于访问登录可见内容；"
-            "写入 option.yml 的 client.postman.meta_data.cookies"
+            "对应 option.yml 的 client.postman.meta_data.cookies"
         ),
         "default": "",
+    },
+    "jm_max_concurrent": {
+        "label": "同时下载任务数",
+        "type": "int",
+        "group": "download",
+        "hint": "插件同时运行的漫画下载数，属于插件调度，不写入 option.yml",
+        "default": 2,
     },
     "jm_jpeg_quality": {
         "label": "PDF 画质（JPEG 质量）",
         "type": "int",
-        "group": "download",
+        "group": "output",
         "hint": (
             "取值 1-95，越大越清晰体积越大。站点原图（多为 webp）会原样保留在图片目录作为存档；"
             "生成 PDF 时默认 75：JPEG 原图直接嵌入、webp 转 JPEG；其它值统一按目标质量转码。"
@@ -240,6 +261,21 @@ CONFIG_FIELDS = {
         "default": "\n".join(_MISSING_DEPS_LINES),
         "variables": ["deps"],
     },
+}
+
+# 下载参数的字段映射：表单字段 → option.yml 的键
+# 这些字段只存 option.yml，不写 config.json；kind 决定表单值与 option 值的转换
+OPTION_FIELDS = {
+    "jm_image_threads": {"path": "download.threading.image", "kind": "int"},
+    "jm_photo_threads": {"path": "download.threading.photo", "kind": "int"},
+    "jm_download_cache": {"path": "download.cache", "kind": "bool"},
+    "jm_image_decode": {"path": "download.image.decode", "kind": "bool"},
+    "jm_image_suffix": {"path": "download.image.suffix", "kind": "suffix"},
+    "jm_client_impl": {"path": "client.impl", "kind": "text"},
+    "jm_retry_times": {"path": "client.retry_times", "kind": "int"},
+    "jm_timeout": {"path": "client.timeout", "kind": "int"},
+    "jm_proxy": {"path": "client.postman.meta_data.proxies", "kind": "proxy"},
+    "jm_cookies": {"path": "client.postman.meta_data.cookies", "kind": "cookie"},
 }
 
 # 配置分组：每组在 Views 里单独一页

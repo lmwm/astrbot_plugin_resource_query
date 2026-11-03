@@ -205,6 +205,13 @@ class ConfigStore:
         data = self._read()
         return self._extract_variables(data.get(VARIABLES_KEY))
 
+    def user_values(self) -> dict:
+        # 只返回用户显式保存过的值（不含默认值），用于把旧字段迁移到别处
+        data = self._read()
+        return {
+            key: copy.deepcopy(data[key]) for key in self._fields if key in data
+        }
+
     #  写入
 
     def _write(self, data: dict) -> bool:
@@ -223,6 +230,18 @@ class ConfigStore:
         for key, value in values.items():
             if key in self._fields:
                 data[key] = copy.deepcopy(value)
+        return self._write(data)
+
+    def remove_values(self, keys) -> bool:
+        # 删除用户配置中的指定键（字段迁移到别处后清理旧值）
+        data = self._read()
+        changed = False
+        for key in keys:
+            if key in data:
+                data.pop(key, None)
+                changed = True
+        if not changed:
+            return True
         return self._write(data)
 
     def save_variables(self, variables: dict) -> bool:
