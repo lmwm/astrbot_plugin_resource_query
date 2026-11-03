@@ -33,9 +33,14 @@ _ALBUM_DIR_RE = re.compile(r"^JM\s*(\d+)$", re.IGNORECASE | re.ASCII)
 class AlbumPaths:
     # 负责漫画目录的解析、创建、清理与旧数据迁移
 
-    def __init__(self, download_dir: str | Path) -> None:
+    def __init__(self, download_dir: str | Path, normalize_zh: str | None = None) -> None:
         self.root = Path(download_dir)
         self.root.mkdir(parents=True, exist_ok=True)
+        self._normalize_zh = normalize_zh or None
+
+    def set_normalize_zh(self, value: str | None) -> None:
+        # 目录/PDF 名的繁简统一（zh-cn / zh-tw / None）
+        self._normalize_zh = str(value or "").strip() or None
 
     def album_root(self, album_id: str) -> Path:
         # 漫画根目录（不创建）
@@ -74,11 +79,21 @@ class AlbumPaths:
         except OSError:
             pass
 
-    @staticmethod
-    def display_title(info: AlbumInfo) -> str:
-        # 文件与目录命名用的标题：优先含中文的 oname，并清洗非法字符
+    def display_title(self, info: AlbumInfo) -> str:
+        # 文件与目录命名用的标题：优先含中文的 oname，清洗非法字符后统一繁简
         title = pick_display_name(info.oname, info.name)
-        return AlbumPaths.safe_name(title) or f"JM{info.id}"
+        title = self.safe_name(title) or f"JM{info.id}"
+        return self._to_zh(title)
+
+    def _to_zh(self, text: str) -> str:
+        # 缺 zhconv 或转换失败时保留原文，不影响下载
+        if not self._normalize_zh:
+            return text
+        try:
+            import jmcomic
+        except ImportError:
+            return text
+        return jmcomic.JmcomicText.to_zh(text, self._normalize_zh)
 
     def image_dir_name(self, album_id: str, info: AlbumInfo) -> str:
         return f"JM{album_id}-{self.display_title(info)}"

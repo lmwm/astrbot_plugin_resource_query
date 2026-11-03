@@ -87,13 +87,15 @@ class JMService:
         self._download_dir_text = str(
             self._config.get("jm_download_dir") or DEFAULT_DOWNLOAD_DIR
         )
+        self.paths.set_normalize_zh(self._config.get("jm_normalize_zh"))
 
     def set_download_root(self, path: str | Path) -> None:
-        # 下载路径变化时重建目录与缓存（路径不变则不动）
+        # 下载路径变化时重建目录与缓存（路径不变时仍同步繁简设置）
         target = Path(path)
         if self.paths.root == target:
+            self.paths.set_normalize_zh(self._config.get("jm_normalize_zh"))
             return
-        self.paths = AlbumPaths(target)
+        self.paths = AlbumPaths(target, self._config.get("jm_normalize_zh"))
         self.cache = AlbumCache(self.paths)
 
     #  下载参数（option.yml）

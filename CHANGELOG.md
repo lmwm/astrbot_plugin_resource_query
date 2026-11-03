@@ -1,3 +1,9 @@
+## v6.19.1 (2026-11-03)
+
+### 修复
+
+- **目录繁简转换未作用到图片目录与 PDF 名**：`dir_rule.normalize_zh` 只影响库自己生成的规则层级，而图片目录名 `JM<ID>-<标题>` 由模块拼接。`AlbumPaths.display_title` 现在对标题应用 `JmcomicText.to_zh`，`JMService.bind_config/set_download_root` 同步该设置；切换 `zh-cn`/`zh-tw` 后重下会生成对应繁简的目录与 PDF 名
+
 ## v6.19.0 (2026-11-03)
 
 ### 功能
