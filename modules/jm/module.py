@@ -124,6 +124,28 @@ class JMModule(ModuleBase):
         self._service.bind_config(config)
         return config
 
+    def config_payload(self, config: dict) -> dict:
+        # 返回给 Views 的配置：下载路径显示真实路径（配置里仍存 {plugin}）
+        payload = dict(config)
+        raw = str(payload.get("jm_download_dir") or "").strip()
+        if raw:
+            payload["jm_download_dir"] = self._expand_plugin_token(raw)
+        return payload
+
+    def accept_config_payload(self, payload: dict, config: dict) -> dict:
+        # 表单回传的真实路径还原成 {plugin} 占位符再落盘
+        result = dict(payload)
+        raw = result.get("jm_download_dir")
+        if isinstance(raw, str) and raw.strip():
+            data_root = Path(get_astrbot_data_path()).resolve()
+            text = raw.strip().replace("\\", "/")
+            try:
+                text = (data_root / text).resolve().relative_to(data_root).as_posix()
+            except ValueError:
+                pass
+            result["jm_download_dir"] = self._shrink_plugin_token(text)
+        return super().accept_config_payload(result, config)
+
     def _expand_plugin_token(self, text: str) -> str:
         # {plugin} → 实际插件目录名，改名后配置无需同步修改
         return text.replace(PLUGIN_NAME_TOKEN, self._plugin_name)

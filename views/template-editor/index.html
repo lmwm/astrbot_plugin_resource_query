@@ -437,11 +437,14 @@
           '</div>';
       }
 
-      const label = '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>';
+      const labelRow = '<div class="form-label-row">' +
+        '<label class="form-label" for="' + esc(id) + '">' + esc(field.label) + '</label>' +
+        buildConfigHelpButton(mod, field) +
+        '</div>';
       const tokens = buildConfigTokensHtml(mod, field);
 
       return '<div class="form-group">' +
-        label +
+        labelRow +
         fieldInputHtml(id, field, value) +
         tokens +
         (field.hint ? '<div class="hint">' + esc(field.hint) + '</div>' : '') +
@@ -449,16 +452,69 @@
     }).join('');
   }
 
-  /** 普通配置字段的快捷输入按钮（field.tokens 里的文本，点击追加到输入框） */
+  /** 普通配置字段的快捷输入按钮（field.tokens，支持字符串或 {label, value} 对象） */
   function buildConfigTokensHtml(mod, field) {
     const tokens = field.tokens;
     if (!Array.isArray(tokens) || !tokens.length) return '';
 
-    return '<div class="variable-tags config-tokens">' + tokens.map((token) =>
-      '<button class="variable-tag" data-action="insert-config-token" ' +
+    return '<div class="variable-tags config-tokens">' + tokens.map((token) => {
+      const item = typeof token === 'string' ? { label: token, value: token } : token;
+      const label = item && item.label ? item.label : item.value;
+      const value = item && item.value !== undefined ? item.value : label;
+      return '<button class="variable-tag" data-action="insert-config-token" ' +
         'data-module="' + esc(mod.name) + '" data-field="' + esc(field.key) + '" ' +
-        'data-token="' + esc(token) + '" title="' + esc(token) + '">' + esc(token) + '</button>'
-    ).join('') + '</div>';
+        'data-token="' + esc(value) + '" title="' + esc(value) + '">' + esc(label) + '</button>';
+    }).join('') + '</div>';
+  }
+
+  /** 字段名后的「可用参数」按钮（field.help 存在时才显示） */
+  function buildConfigHelpButton(mod, field) {
+    if (!field.help) return '';
+    return '<button class="btn btn-ghost btn-sm field-help" data-action="show-field-help" ' +
+      'data-module="' + esc(mod.name) + '" data-field="' + esc(field.key) + '">? 可用参数</button>';
+  }
+
+  function showFieldHelp(moduleName, fieldKey) {
+    const mod = moduleByName(moduleName);
+    const field = mod && (mod.config_fields || []).find((f) => f.key === fieldKey);
+    const help = field && field.help;
+    if (!help) return;
+
+    const title = $('field-help-title');
+    const body = $('field-help-body');
+    if (!title || !body) return;
+
+    title.textContent = help.title || '参数说明';
+
+    const parts = [];
+    if (help.intro) {
+      parts.push('<p class="help-intro">' + esc(help.intro) + '</p>');
+    }
+
+    (help.groups || []).forEach((group) => {
+      parts.push('<div class="help-group"><div class="help-group-title">' + esc(group.title) + '</div>');
+      parts.push('<table class="help-table"><tbody>');
+      (group.items || []).forEach((item) => {
+        parts.push('<tr><td class="help-name"><code>{' + esc(item.name) + '}</code></td>' +
+          '<td class="help-desc">' + esc(item.desc) + '</td></tr>');
+      });
+      parts.push('</tbody></table></div>');
+    });
+
+    if ((help.examples || []).length) {
+      parts.push('<div class="help-group"><div class="help-group-title">示例</div>');
+      parts.push('<table class="help-table"><tbody>');
+      help.examples.forEach((example) => {
+        parts.push('<tr><td class="help-name"><code>' + esc(example.rule) + '</code></td>' +
+          '<td class="help-desc">→ ' + esc(example.result) +
+          (example.note ? '<br><span class="help-note">' + esc(example.note) + '</span>' : '') +
+          '</td></tr>');
+      });
+      parts.push('</tbody></table></div>');
+    }
+
+    body.innerHTML = parts.join('');
+    $('field-help-modal').classList.add('active');
   }
 
   /** 消息模板字段：左侧编辑、右侧预览、下方变量标签 */
@@ -1304,6 +1360,14 @@
         insertConfigToken(moduleName, target.dataset.field, target.dataset.token);
         break;
 
+      case 'show-field-help':
+        showFieldHelp(moduleName, target.dataset.field);
+        break;
+
+      case 'close-field-help':
+        closeModal('field-help-modal');
+        break;
+
       case 'reset-template':
         resetTemplateField(moduleName, target.dataset.field);
         break;
@@ -1549,6 +1613,20 @@
     .variable-tag { display: inline-block; padding: 5px 10px; background: var(--primary-light); color: var(--primary); border-radius: 4px; font-size: 12px; cursor: pointer; transition: all 0.15s; border: none; }
     .variable-tag:hover { background: var(--primary); color: white; }
 
+    /* 字段帮助弹窗 */
+    .field-help { padding: 2px 8px; font-size: 12px; line-height: 1.4; }
+    .help-body { max-height: 60vh; overflow-y: auto; }
+    .help-intro { font-size: 13px; line-height: 1.7; color: var(--text-muted); margin-bottom: 14px; white-space: pre-wrap; }
+    .help-group { margin-bottom: 16px; }
+    .help-group-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .help-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .help-table td { padding: 5px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    .help-table tr:last-child td { border-bottom: none; }
+    .help-name { width: 44%; }
+    .help-name code { background: var(--primary-light); color: var(--primary); padding: 1px 6px; border-radius: 3px; font-size: 12px; }
+    .help-desc { color: var(--text-muted); line-height: 1.6; }
+    .help-note { font-size: 12px; opacity: 0.8; }
+
     /* 变量配置表格 */
     .table-scroll { overflow-x: auto; }
     .var-table { width: 100%; border-collapse: collapse; min-width: 560px; }
@@ -1674,6 +1752,19 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-action="close-delete-modal">取消</button>
         <button class="btn btn-danger" data-action="confirm-delete">删除</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 字段参数帮助 -->
+  <div class="modal-overlay" id="field-help-modal">
+    <div class="modal" style="max-width:640px">
+      <div class="modal-header">
+        <div class="modal-title" id="field-help-title">参数说明</div>
+      </div>
+      <div class="modal-body help-body" id="field-help-body"></div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" data-action="close-field-help">关闭</button>
       </div>
     </div>
   </div>

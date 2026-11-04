@@ -81,29 +81,87 @@ CONFIG_FIELDS = {
         "type": "text",
         "group": "option",
         "hint": (
-            "相对 AstrBot 数据根（data/）的目录；{plugin} 自动替换成插件目录名，改名无需修改；"
+            "相对 AstrBot 数据根（data/）的目录，实际是 "
+            "「data/plugin_data/<插件目录名>/JMDownload」；插件改名后自动跟随，无需修改。"
             "对应 option.yml 的 dir_rule.base_dir"
         ),
+        # 保存时仍写 {plugin} 占位符，显示时替换成真实路径
         "default": DEFAULT_DOWNLOAD_DIR,
-        "tokens": [PLUGIN_NAME_TOKEN, "JMDownload", "jm/漫画"],
+        "tokens": [
+            {"label": "插件默认位置", "value": DEFAULT_DOWNLOAD_DIR},
+            {"label": "JMDownload", "value": "JMDownload"},
+            {"label": "jm/漫画", "value": "jm/漫画"},
+        ],
     },
     "jm_dir_rule": {
         "label": "目录规则",
         "type": "rule",
         "group": "option",
-        "hint": (
-            "决定每本漫画的图片目录层级，省略开头的 Bd/。"
-            "可用章节 {Pid} {Pindex} {Pindex:03} {Pname} {Ptitle}，本子 {Aid} {Aname} {Aoname} {Atitle} {Aauthor}，"
-            "以及模块解析的 {title}（含中文标题+繁简转换）；留空或只填 Bd 则图片直接放 JM <ID> 根目录"
-        ),
+        "hint": "决定图片放在哪个子目录；点击名称后的「可用参数」查看全部字段",
         # 表单只显示 Bd 之后的部分
         "default": DIR_RULE_BODY,
+        "help": {
+            "title": "目录规则可用参数",
+            "intro": (
+                "规则用 / 分隔层级，省略开头的 Bd/（下载根由「下载路径」决定）。"
+                "方括号 {Xxx} 会被替换成对应字段；{Pindex:03} 表示补零到 3 位（P001）。"
+                "留空或填 Bd 表示图片直接放 JM <ID> 根目录。"
+            ),
+            "groups": [
+                {
+                    "title": "本子（整本共用）",
+                    "items": [
+                        {"name": "Aid", "desc": "本子 ID，如 350234"},
+                        {"name": "Atitle", "desc": "本子完整标题（含作者、社团等前缀）"},
+                        {"name": "Aname", "desc": "本子名称，通常与 Atitle 相同"},
+                        {"name": "Aoname", "desc": "本子原始短名，常更简洁"},
+                        {"name": "Aauthor", "desc": "作者名"},
+                        {"name": "Aauthoroname", "desc": "作者原始名"},
+                    ],
+                },
+                {
+                    "title": "章节（每个章节不同）",
+                    "items": [
+                        {"name": "Pindex", "desc": "章节序号，从 1 开始；{Pindex:03} 补零成 P001"},
+                        {"name": "Pid", "desc": "章节 ID；单章节本子与本子 ID 相同"},
+                        {"name": "Ptitle", "desc": "章节标题（首章常为空，建议改用 {title}）"},
+                        {"name": "Pname", "desc": "章节名，通常同 Ptitle"},
+                        {"name": "Psort", "desc": "站点给的排序号（不补零时用这个）"},
+                    ],
+                },
+                {
+                    "title": "模块扩展",
+                    "items": [
+                        {
+                            "name": "title",
+                            "desc": "模块解析的标题：优先中文短名，并按「目录繁简转换」统一简繁",
+                        },
+                    ],
+                },
+            ],
+            "examples": [
+                {
+                    "rule": "JM{Aid}-P{Pindex:03}-{title}",
+                    "result": "JM350234-P001-董卓 上+下/",
+                    "note": "默认：每章一个目录",
+                },
+                {
+                    "rule": "{Aauthor}/{title}/P{Pindex:03}",
+                    "result": "KINN/董卓 上+下/P001/",
+                    "note": "按作者、本子、章节三级分",
+                },
+                {
+                    "rule": "{title}",
+                    "result": "董卓 上+下/",
+                    "note": "所有章节的图片放同一目录（同名会覆盖）",
+                },
+            ],
+        },
         "tokens": [
-            "JM{Aid}-P{Pindex:03}-{title}",
-            "JM{Aid}/P{Pindex:03}",
-            "{Aauthor}/{title}",
-            "{title}",
-            "{Atitle}/{Pindex:03}",
+            {"label": "本子ID-章节-标题", "value": "JM{Aid}-P{Pindex:03}-{title}"},
+            {"label": "本子ID/章节", "value": "JM{Aid}/P{Pindex:03}"},
+            {"label": "作者/标题", "value": "{Aauthor}/{title}"},
+            {"label": "标题", "value": "{title}"},
         ],
     },
     "jm_download_log": {
