@@ -162,6 +162,17 @@ class AlbumPaths:
 
         return sorted(latest.values(), key=lambda path: str(path).lower())
 
+    def remove_chapter_dirs(self, image_dir: Path) -> None:
+        # 扁平规则下清理旧版留下的章节目录（只删目录，不动图片文件）
+        try:
+            items = list(image_dir.iterdir())
+        except OSError:
+            return
+
+        for item in items:
+            if item.is_dir():
+                shutil.rmtree(item, ignore_errors=True)
+
     def cleanup_legacy_layout(
         self, album_id: str, keep_dir: Path | None = None
     ) -> None:

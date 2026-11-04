@@ -3,13 +3,18 @@
 # 只依赖标准库：运行时的 option.py 与 Scripts/gen_option.py 共用这一份默认值，
 # 避免脚本生成的默认文件与插件实际使用的不一致。
 
-CHAPTER_RULE = "Bd/JP{Pindex:03}-{Pid}"
+# 目录规则：只用库的根规则 Bd，图片直接放进当前漫画的图片目录（扁平，旧版行为）
+# 注意：多章节本子的章节图片同名（00001.webp…）会互相覆盖，这是扁平结构的固有限制
+DIR_RULE = "Bd"
+
+# 6.14–6.19 用过的章节子目录规则；加载时自动迁移回 DIR_RULE
+LEGACY_CHAPTER_RULE = "Bd/JP{Pindex:03}-{Pid}"
 
 # 生成文件时的表头；option.py 与 Scripts/gen_option.py 共用
 HEADER = """# JMComic 下载参数（jmcomic 原生 option 配置文件）
 #
 # 由插件按 Views「JM 下载 → 下载参数」表单生成并维护；表单保存会重写下面这些键，
-# 手工添加的其它配置（plugins、client.domain 等）会保留。
+# 手工添加的其它配置（plugins 等）会保留。
 # 默认值可用 Scripts/gen_option.py 重新生成。
 """
 
@@ -18,7 +23,7 @@ HEADER = """# JMComic 下载参数（jmcomic 原生 option 配置文件）
 DEFAULT_OPTION = {
     "log": True,
     "dir_rule": {
-        "rule": CHAPTER_RULE,
+        "rule": DIR_RULE,
         "base_dir": "JMDownload",
         "normalize_zh": "zh-cn",
     },

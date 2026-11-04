@@ -141,14 +141,14 @@ JMDownload/
 
 JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全部字段。文件在
 `config/jm/option.yml`（与 `config.json` 同目录），首次加载时自动生成；**Views 的
-「JM 下载 → 下载参数」页直接编辑它**：下载路径、下载日志、目录繁简转换、客户端域名、
-并发、缓存、解码、图片后缀、客户端类型、重试、超时、代理、Cookie 都会写入对应键，
+「JM 下载 → 下载参数」页直接编辑它**：下载路径、下载日志、目录繁简转换、并发、缓存、
+解码、图片后缀、客户端类型、重试、超时、代理、Cookie 都会写入对应键，
 `config.json` 不再保存这些下载参数。
 
 ```yaml
 log: true                     # 输出 jmcomic 下载日志（写入 AstrBot 日志）
 dir_rule:
-  rule: Bd/JP{Pindex:03}-{Pid}   # 每章一个子目录；运行时 base_dir 换成当前漫画目录
+  rule: Bd                      # 库根规则：图片直接放当前漫画的图片目录（扁平）
   base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 相对 AstrBot 数据根
   normalize_zh: zh-cn           # 目录名统一为简体（zh-tw 繁体，留空不转换）
 download:
@@ -157,8 +157,6 @@ download:
   threading: {image: 10, photo: 2}
 client:
   impl: api
-  domain:                       # 按客户端配置域名，留空使用库内置域名
-    api: [a.com, b.com]
   retry_times: 3
   timeout: 20
   postman:
@@ -168,11 +166,14 @@ client:
 ```
 
 「下载路径」填相对 AstrBot 数据根（`data/`）的目录，默认保持旧位置；填绝对路径时
-只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。「客户端域名」填写
-格式为 `api: a.com, b.com; html: c.com`（支持全角冒号与换行分隔），留空则删除该键、
-使用库内置域名。
+只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。
 
-表单没有覆盖的键（`plugins.after_album` 等）仍可手工加进文件并保留；
+**扁平结构的限制**：图片直接放在 `JM<ID>/JM<ID>-<名称>/` 下，多章节本子各章的图片
+同名（`00001.webp`…）会互相覆盖，PDF 可能出现重复页；单章节本子不受影响。需要完整
+保留多章节时，可在 `option.yml` 里把 `dir_rule.rule` 改回 `Bd/JP{Pindex:03}-{Pid}`
+（表单不再覆盖该键，手工改会保留），但这会让图片重新按章节分子目录。
+
+表单没有覆盖的键（`client.domain`、`plugins` 等）仍可手工加进文件并保留；
 可用的全部字段见 jmcomic 的
 [配置文件文档](https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/)。
 源码里的 `Scripts/gen_option.py` 可按默认值重新生成一份

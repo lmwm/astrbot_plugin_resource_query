@@ -20,6 +20,7 @@ from ...common.module_log import log_separator, module_logger
 from ...common.utils import parse_int, render_template
 from ...core import dependencies
 from ...core.module import ModuleBase
+from . import option as jm_option
 from .config import (
     CONFIG_FIELDS,
     CONFIG_GROUPS,
@@ -166,6 +167,7 @@ class JMModule(ModuleBase):
         await super().on_load()
         self._migrate_option_location()
         self._service.ensure_option_file()
+        self._migrate_legacy_rule()
         self._migrate_download_params()
         self._service.bind_config(self.load_module_config())
         missing = dependencies.missing(self.required_packages)
@@ -192,6 +194,14 @@ class JMModule(ModuleBase):
             old.unlink()
         except OSError as e:
             logger.warning(f"迁移 option.yml 失败：{type(e).__name__}: {e}")
+
+    def _migrate_legacy_rule(self) -> None:
+        # 6.14–6.19 的章节子目录规则改回 Bd（图片直接放图片目录）
+        try:
+            if jm_option.migrate_legacy_rule(self._service.option_file):
+                logger.info("目录规则已改回 Bd（图片不再按章节分子目录）")
+        except ImportError:
+            pass
 
     def _migrate_download_params(self) -> None:
         # 旧版把下载参数存在 config.json；搬到 option.yml 后删除旧键

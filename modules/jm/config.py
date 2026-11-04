@@ -78,16 +78,6 @@ CONFIG_FIELDS = {
         ),
         "default": "zh-cn",
     },
-    "jm_client_domain": {
-        "label": "客户端域名",
-        "type": "text",
-        "group": "option",
-        "hint": (
-            "按客户端配置域名，格式 api: a.com, b.com; html: c.com；留空使用库内置域名；"
-            "对应 option.yml 的 client.domain"
-        ),
-        "default": "",
-    },
     "jm_image_threads": {
         "label": "图片并发数",
         "type": "int",
@@ -311,7 +301,6 @@ OPTION_FIELDS = {
     "jm_download_dir": {"path": "dir_rule.base_dir", "kind": "path"},
     "jm_download_log": {"path": "log", "kind": "bool"},
     "jm_normalize_zh": {"path": "dir_rule.normalize_zh", "kind": "zh"},
-    "jm_client_domain": {"path": "client.domain", "kind": "domain"},
     "jm_image_threads": {"path": "download.threading.image", "kind": "int"},
     "jm_photo_threads": {"path": "download.threading.photo", "kind": "int"},
     "jm_download_cache": {"path": "download.cache", "kind": "bool"},

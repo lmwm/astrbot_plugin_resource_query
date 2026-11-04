@@ -13,7 +13,12 @@ import logging
 from pathlib import Path
 
 from ...common.module_log import module_logger
-from .option_default import DEFAULT_OPTION, HEADER
+from .option_default import (
+    DEFAULT_OPTION,
+    DIR_RULE,
+    HEADER,
+    LEGACY_CHAPTER_RULE,
+)
 
 logger = module_logger("jm")
 
@@ -129,6 +134,28 @@ def update_values(path: Path, specs: dict[str, dict], values: dict) -> None:
     write_file(path, data)
 
 
+def read_rule(path: Path) -> str:
+    # 当前目录规则；缺省按库根规则 Bd 处理
+    data = _read(path)
+    rule = data.get("dir_rule", {}).get("rule") if isinstance(data.get("dir_rule"), dict) else None
+    return str(rule or DIR_RULE).strip()
+
+
+def migrate_legacy_rule(path: Path) -> bool:
+    # 6.14–6.19 用过的章节子目录规则改回 Bd（图片直接放图片目录）
+    data = _read(path)
+    if not data or not isinstance(data.get("dir_rule"), dict):
+        return False
+
+    rule = str(data["dir_rule"].get("rule") or "").strip()
+    if rule != LEGACY_CHAPTER_RULE:
+        return False
+
+    data["dir_rule"]["rule"] = DIR_RULE
+    write_file(path, data)
+    return True
+
+
 def load_option(path: Path, image_dir: Path):
     # 读取 option 文件；每本漫画的图片目录在运行时替换，不写回文件
     import jmcomic
@@ -220,19 +247,6 @@ def _to_form(value, kind: str):
     if kind == "zh":
         return "" if value is None else str(value)
 
-    if kind == "domain":
-        if not isinstance(value, dict):
-            return ""
-
-        blocks = []
-        for impl, domains in value.items():
-            if not isinstance(domains, (list, tuple)) or not domains:
-                continue
-            blocks.append(
-                f"{impl}: {', '.join(str(item) for item in domains)}"
-            )
-        return "; ".join(blocks)
-
     if kind == "proxy":
         if isinstance(value, dict):
             return str(value.get("http") or value.get("https") or "")
@@ -268,23 +282,6 @@ def _from_form(raw, kind: str):
     if kind == "zh":
         text = str(raw or "").strip().lower()
         return (text if text in ("zh-cn", "zh-tw") else None), False
-
-    if kind == "domain":
-        text = str(raw or "").strip().replace("：", ":")
-        if not text:
-            return None, True
-
-        domains: dict[str, list[str]] = {}
-        for block in text.replace("\n", ";").split(";"):
-            key, separator, value = block.strip().partition(":")
-            if not separator:
-                key, separator, value = block.strip().partition("=")
-            key = key.strip()
-            items = [item.strip() for item in value.split(",") if item.strip()]
-            if separator and key and items:
-                domains[key] = items
-
-        return (domains, False) if domains else (None, True)
 
     if kind == "proxy":
         text = str(raw or "").strip()
