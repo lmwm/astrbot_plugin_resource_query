@@ -129,7 +129,8 @@ class JMModule(ModuleBase):
     @staticmethod
     def _rule_for_form(rule: str) -> str:
         # 表单不显示开头的 Bd/（下载根由「下载路径」决定）
-        text = str(rule or "").strip().replace("\\", "/")
+        # 顺带清理历史版本误写入的 %% 转义
+        text = str(rule or "").strip().replace("\\", "/").replace("%%", "")
         if text.startswith("Bd/"):
             return text[len("Bd/") :]
         return "" if text == "Bd" else text
@@ -137,7 +138,7 @@ class JMModule(ModuleBase):
     @staticmethod
     def _rule_for_option(rule: str) -> str:
         # 表单里的规则 → option.yml 的完整 DSL
-        text = str(rule or "").strip().replace("\\", "/")
+        text = str(rule or "").strip().replace("\\", "/").replace("%%", "")
         text = "/".join(part.strip() for part in text.split("/") if part.strip())
         if not text or text == "Bd":
             return "Bd"
