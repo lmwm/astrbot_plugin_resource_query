@@ -12,6 +12,9 @@ DIR_RULE = "Bd/JM{Aid}-P{Pindex:03}-{title}"
 # 6.14–6.19 用过的章节子目录规则；加载时自动迁移到 DIR_RULE
 LEGACY_CHAPTER_RULE = "Bd/JP{Pindex:03}-{Pid}"
 
+# 6.20–6.23 的旧默认（裸 Bd，图片直接堆在漫画根）；同样是模块写入的默认值
+LEGACY_FLAT_RULES = ("Bd",)
+
 # 生成文件时的表头；option.py 与 Scripts/gen_option.py 共用
 HEADER = """# JMComic 下载参数（jmcomic 原生 option 配置文件）
 #

@@ -18,6 +18,7 @@ from .option_default import (
     DIR_RULE,
     HEADER,
     LEGACY_CHAPTER_RULE,
+    LEGACY_FLAT_RULES,
 )
 
 logger = module_logger("jm")
@@ -142,13 +143,14 @@ def read_rule(path: Path) -> str:
 
 
 def migrate_legacy_rule(path: Path) -> bool:
-    # 6.14–6.19 用过的章节子目录规则改回 Bd（图片直接放图片目录）
+    # 旧默认值迁到当前默认：6.14–6.19 的章节子目录规则、6.20–6.23 的裸 Bd
+    # 这两个值都是模块自己写进去的默认，用户不会主动填，直接换成当前 DIR_RULE
     data = _read(path)
     if not data or not isinstance(data.get("dir_rule"), dict):
         return False
 
     rule = str(data["dir_rule"].get("rule") or "").strip()
-    if rule != LEGACY_CHAPTER_RULE:
+    if rule not in (LEGACY_CHAPTER_RULE, *LEGACY_FLAT_RULES):
         return False
 
     data["dir_rule"]["rule"] = DIR_RULE
