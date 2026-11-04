@@ -17,8 +17,6 @@ from .option_default import (
     DEFAULT_OPTION,
     DIR_RULE,
     HEADER,
-    LEGACY_CHAPTER_RULE,
-    LEGACY_FLAT_RULES,
 )
 
 logger = module_logger("jm")
@@ -142,20 +140,28 @@ def read_rule(path: Path) -> str:
     return str(rule or DIR_RULE).strip()
 
 
-def migrate_legacy_rule(path: Path) -> bool:
-    # 旧默认值迁到当前默认：6.14–6.19 的章节子目录规则、6.20–6.23 的裸 Bd
-    # 这两个值都是模块自己写进去的默认，用户不会主动填，直接换成当前 DIR_RULE
+def enforce_fixed_dir(path: Path, base_dir: str, rule: str) -> list[str]:
+    # 下载路径与目录规则是固定值：文件里被改成别的就写回，返回被纠正的键
     data = _read(path)
-    if not data or not isinstance(data.get("dir_rule"), dict):
-        return False
+    if not data:
+        return []
 
-    rule = str(data["dir_rule"].get("rule") or "").strip()
-    if rule not in (LEGACY_CHAPTER_RULE, *LEGACY_FLAT_RULES):
-        return False
+    dir_rule = data.get("dir_rule")
+    if not isinstance(dir_rule, dict):
+        dir_rule = {}
+        data["dir_rule"] = dir_rule
 
-    data["dir_rule"]["rule"] = DIR_RULE
-    write_file(path, data)
-    return True
+    changed: list[str] = []
+    if str(dir_rule.get("base_dir") or "").strip() != base_dir:
+        dir_rule["base_dir"] = base_dir
+        changed.append("base_dir")
+    if str(dir_rule.get("rule") or "").strip() != rule:
+        dir_rule["rule"] = rule
+        changed.append("rule")
+
+    if changed:
+        write_file(path, data)
+    return changed
 
 
 def _dir_rule_instance(jmcomic, rule: str, image_dir: Path, normalize_zh):

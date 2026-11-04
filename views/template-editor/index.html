@@ -633,21 +633,9 @@
     toast('已填入默认模板，保存后生效');
   }
 
-  /** 一组消息模板全部恢复为默认 */
-  function resetTemplateGroup(moduleName) {
-    const mod = moduleByName(moduleName);
-    if (!mod) return;
-
-    const fields = (mod.config_fields || []).filter((f) => f.type === 'template');
-    fields.forEach((field) => {
-      const textarea = $('cfg-' + mod.name + '-' + field.key);
-      if (textarea && field.default !== undefined) {
-        textarea.value = field.default;
-        updateConfigTemplatePreview(mod.name, field.key);
-      }
-    });
-
-    toast('已填入默认模板，保存后生效');
+  /** 一个分组的字段全部恢复为默认：直接调后端 reset，立即生效 */
+  async function resetTemplateGroup(moduleName) {
+    await resetModuleConfig(moduleName);
   }
 
   /** 模块设置恢复默认（调用后端 reset 接口） */
@@ -1373,7 +1361,7 @@
         break;
 
       case 'reset-templates':
-        resetTemplateGroup(moduleName);
+        await resetModuleConfig(moduleName);
         break;
 
       case 'reset-config':

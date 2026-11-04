@@ -20,19 +20,17 @@ from ...common.module_log import log_separator, module_logger
 from ...common.utils import parse_int, render_template
 from ...core import dependencies
 from ...core.module import ModuleBase
-from . import option as jm_option
 from .config import (
     CONFIG_FIELDS,
     CONFIG_GROUPS,
-    DEFAULT_DIR_RULE,
     DEFAULT_DOWNLOAD_DIR,
     OPTION_FIELDS,
     PLUGIN_NAME_TOKEN,
     VAR_SAMPLES,
     VARIABLES,
-    validate_dir_rule,
 )
 from .models import AlbumInfo
+from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
@@ -102,111 +100,32 @@ class JMModule(ModuleBase):
         config = super().load_module_config()
         config.update(self._service.read_option_values())
 
-        raw = str(config.get("jm_download_dir") or "").strip()
-        relative, absolute = self._resolve_download_dir(raw)
-        config["jm_download_dir"] = relative
-        self._service.set_download_root(absolute)
+        # 下载根固定：数据根下 plugin_data/<插件>/JMDownload
+        self._service.set_download_root(
+            self._default_download_root()
+        )
 
-        # 旧文件的绝对路径在读取时换成相对数据根的写法，避免换机器失效
-        if relative != raw and self._service.option_file.is_file():
-            self._service.update_option_values({"jm_download_dir": relative})
-
-        # 目录规则：表单只显示 Bd 之后的部分，保存时再补回
-        rule = str(config.get("jm_dir_rule") or "").strip() or DEFAULT_DIR_RULE
-        config["jm_dir_rule"] = self._rule_for_form(rule)
-
-        # 文件里的规则与规范形式不一致时（如历史遗留的 %% 或缺失 Bd）回写修正
+        # 旧文件里可能残留可配置的规则/路径，统一纠正为固定值
         if self._service.option_file.is_file():
-            normalized = self._rule_for_option(config["jm_dir_rule"])
-            if normalized != rule:
-                self._service.update_option_values({"jm_dir_rule": normalized})
+            self._normalize_option_file()
 
         self._service.bind_config(config)
         return config
 
-    def config_payload(self, config: dict) -> dict:
-        # 返回给 Views 的配置：下载路径显示真实路径（配置里仍存 {plugin}）
-        payload = dict(config)
-        raw = str(payload.get("jm_download_dir") or "").strip()
-        if raw:
-            payload["jm_download_dir"] = self._expand_plugin_token(raw)
-        return payload
-
-    def accept_config_payload(self, payload: dict, config: dict) -> dict:
-        # 表单回传的真实路径还原成 {plugin} 占位符再落盘
-        result = dict(payload)
-        raw = result.get("jm_download_dir")
-        if isinstance(raw, str) and raw.strip():
-            data_root = Path(get_astrbot_data_path()).resolve()
-            text = raw.strip().replace("\\", "/")
-            try:
-                text = (data_root / text).resolve().relative_to(data_root).as_posix()
-            except ValueError:
-                pass
-            result["jm_download_dir"] = self._shrink_plugin_token(text)
-        return super().accept_config_payload(result, config)
-
-    def _expand_plugin_token(self, text: str) -> str:
-        # {plugin} → 实际插件目录名，改名后配置无需同步修改
-        return text.replace(PLUGIN_NAME_TOKEN, self._plugin_name)
-
-    def _shrink_plugin_token(self, text: str) -> str:
-        # 实际插件名 → {plugin}，避免把名字写进用户配置
-        return text.replace(self._plugin_name, PLUGIN_NAME_TOKEN)
-
-    @staticmethod
-    def _rule_for_form(rule: str) -> str:
-        # 表单不显示开头的 Bd/（下载根由「下载路径」决定）
-        # 顺带清理历史版本误写入的 %% 转义
-        text = str(rule or "").strip().replace("\\", "/").replace("%%", "")
-        if text.startswith("Bd/"):
-            return text[len("Bd/") :]
-        return "" if text == "Bd" else text
-
-    @staticmethod
-    def _rule_for_option(rule: str) -> str:
-        # 表单里的规则 → option.yml 的完整 DSL
-        text = str(rule or "").strip().replace("\\", "/").replace("%%", "")
-        text = "/".join(part.strip() for part in text.split("/") if part.strip())
-        if not text or text == "Bd":
-            return "Bd"
-        return text if text.startswith("Bd") else f"Bd/{text}"
-
-    def _resolve_download_dir(self, raw: str) -> tuple[str, Path]:
-        # 下载路径相对 AstrBot 数据根；绝对路径在数据根内时转相对，越界回退默认
-        # 配置里用 {plugin} 占位，解析时替换成实际插件名
+    def _default_download_root(self) -> Path:
         data_root = Path(get_astrbot_data_path()).resolve()
-        text = self._expand_plugin_token(str(raw or "").strip().replace("\\", "/"))
-        text = text or self._expand_plugin_token(DEFAULT_DOWNLOAD_DIR)
+        text = DEFAULT_DOWNLOAD_DIR.replace(PLUGIN_NAME_TOKEN, self._plugin_name)
+        return (data_root / text).resolve()
 
-        path = Path(text)
-        if path.is_absolute():
-            try:
-                text = path.resolve().relative_to(data_root).as_posix()
-            except ValueError:
-                logger.warning(f"下载路径必须位于 AstrBot 数据根内，已回退默认：{path}")
-                text = self._expand_plugin_token(DEFAULT_DOWNLOAD_DIR)
-
-        resolved = (data_root / text).resolve()
-        try:
-            resolved.relative_to(data_root)
-        except ValueError:
-            logger.warning(f"下载路径越出数据根，已回退默认：{text}")
-            text = self._expand_plugin_token(DEFAULT_DOWNLOAD_DIR)
-            resolved = (data_root / text).resolve()
-
-        # 写回配置时恢复占位符
-        return self._shrink_plugin_token(text), resolved
+    def _normalize_option_file(self) -> None:
+        # 下载路径与目录规则是固定值，文件里被改过的部分强制写回
+        self._service.enforce_fixed_dir()
 
     def save_module_config(self, config: dict) -> bool:
         # 下载参数字段写 option.yml，config.json 只存其余字段
         option_values = {
             key: config[key] for key in OPTION_FIELDS if key in config
         }
-        if "jm_dir_rule" in option_values:
-            option_values["jm_dir_rule"] = self._rule_for_option(
-                option_values["jm_dir_rule"]
-            )
 
         plain = {
             key: value for key, value in config.items() if key not in OPTION_FIELDS
@@ -217,15 +136,6 @@ class JMModule(ModuleBase):
             self._service.update_option_values(option_values)
             self._service.bind_config(self.load_module_config())
         return saved
-
-    def validate_config_payload(self, payload: dict) -> str | None:
-        # 目录规则校验：补回 Bd 后检查层级与占位符
-        rule = payload.get("jm_dir_rule")
-        if isinstance(rule, str) and rule.strip():
-            problem = validate_dir_rule(self._rule_for_option(rule))
-            if problem:
-                return problem
-        return super().validate_config_payload(payload)
 
     async def api_reset_config(self):
         # 恢复默认：config.json 与 option.yml 一起重置
@@ -245,7 +155,6 @@ class JMModule(ModuleBase):
         await super().on_load()
         self._migrate_option_location()
         self._service.ensure_option_file()
-        self._migrate_legacy_rule()
         self._migrate_download_params()
         self._service.bind_config(self.load_module_config())
         missing = dependencies.missing(self.required_packages)
@@ -272,14 +181,6 @@ class JMModule(ModuleBase):
             old.unlink()
         except OSError as e:
             logger.warning(f"迁移 option.yml 失败：{type(e).__name__}: {e}")
-
-    def _migrate_legacy_rule(self) -> None:
-        # 6.14–6.19 的章节子目录规则改回 Bd（图片直接放图片目录）
-        try:
-            if jm_option.migrate_legacy_rule(self._service.option_file):
-                logger.info("目录规则已改回 Bd（图片不再按章节分子目录）")
-        except ImportError:
-            pass
 
     def _migrate_download_params(self) -> None:
         # 旧版把下载参数存在 config.json；搬到 option.yml 后删除旧键

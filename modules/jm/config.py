@@ -4,34 +4,10 @@
 # 这里只提供默认值与界面定义。
 # 消息模板用 {变量} 占位，每个模板可用的变量写在字段的 variables 里（Views 据此过滤标签）。
 
-import re
-
-from .option_default import DIR_RULE as DEFAULT_DIR_RULE
-
-# 插件名占位符：写入配置时用它代替实际插件名，改名后无需同步修改
+# 插件名占位符：目录固定为 plugin_data/<插件>/JMDownload，改名后自动跟随
 PLUGIN_NAME_TOKEN = "{plugin}"
 
-# 目录规则在表单里省略开头的 Bd/
-DIR_RULE_BODY = DEFAULT_DIR_RULE[len("Bd/") :] if DEFAULT_DIR_RULE.startswith("Bd/") else ""
-
-# 目录规则里允许的占位符（{title} 由模块解析，其余由 jmcomic 解析）
-RULE_FIELDS = {
-    "title",
-    "Pid",
-    "Pindex",
-    "Pname",
-    "Ptitle",
-    "Psort",
-    "Aid",
-    "Aname",
-    "Aoname",
-    "Atitle",
-    "Aauthor",
-}
-
-_RULE_TOKEN_RE = re.compile(r"\{([^{}]*)\}")
-
-# 默认下载目录：相对 AstrBot 数据根，用占位符避免写死插件名
+# 默认下载目录：相对 AstrBot 数据根；不作为配置项暴露，仅内部使用
 DEFAULT_DOWNLOAD_DIR = f"plugin_data/{PLUGIN_NAME_TOKEN}/JMDownload"
 
 # 消息模板默认内容（按行拼接，便于阅读）
@@ -76,94 +52,8 @@ _MISSING_DEPS_LINES = [
 # 配置字段（key -> label / type / hint / group / variables / default）
 CONFIG_FIELDS = {
     #  下载参数（这些字段写入 config/jm/option.yml，不再存进 config.json）
-    "jm_download_dir": {
-        "label": "下载路径",
-        "type": "text",
-        "group": "option",
-        "hint": (
-            "相对 AstrBot 数据根（data/）的目录，实际是 "
-            "「data/plugin_data/<插件目录名>/JMDownload」；插件改名后自动跟随，无需修改。"
-            "对应 option.yml 的 dir_rule.base_dir"
-        ),
-        # 保存时仍写 {plugin} 占位符，显示时替换成真实路径
-        "default": DEFAULT_DOWNLOAD_DIR,
-        "tokens": [
-            {"label": "插件默认位置", "value": DEFAULT_DOWNLOAD_DIR},
-            {"label": "JMDownload", "value": "JMDownload"},
-            {"label": "jm/漫画", "value": "jm/漫画"},
-        ],
-    },
-    "jm_dir_rule": {
-        "label": "目录规则",
-        "type": "rule",
-        "group": "option",
-        "hint": "决定图片放在哪个子目录；点击名称后的「可用参数」查看全部字段",
-        # 表单只显示 Bd 之后的部分
-        "default": DIR_RULE_BODY,
-        "help": {
-            "title": "目录规则可用参数",
-            "intro": (
-                "规则用 / 分隔层级，省略开头的 Bd/（下载根由「下载路径」决定）。"
-                "方括号 {Xxx} 会被替换成对应字段；{Pindex:03} 表示补零到 3 位（P001）。"
-                "留空或填 Bd 表示图片直接放 JM <ID> 根目录。"
-            ),
-            "groups": [
-                {
-                    "title": "本子（整本共用）",
-                    "items": [
-                        {"name": "Aid", "desc": "本子 ID，如 350234"},
-                        {"name": "Atitle", "desc": "本子完整标题（含作者、社团等前缀）"},
-                        {"name": "Aname", "desc": "本子名称，通常与 Atitle 相同"},
-                        {"name": "Aoname", "desc": "本子原始短名，常更简洁"},
-                        {"name": "Aauthor", "desc": "作者名"},
-                        {"name": "Aauthoroname", "desc": "作者原始名"},
-                    ],
-                },
-                {
-                    "title": "章节（每个章节不同）",
-                    "items": [
-                        {"name": "Pindex", "desc": "章节序号，从 1 开始；{Pindex:03} 补零成 P001"},
-                        {"name": "Pid", "desc": "章节 ID；单章节本子与本子 ID 相同"},
-                        {"name": "Ptitle", "desc": "章节标题（首章常为空，建议改用 {title}）"},
-                        {"name": "Pname", "desc": "章节名，通常同 Ptitle"},
-                        {"name": "Psort", "desc": "站点给的排序号（不补零时用这个）"},
-                    ],
-                },
-                {
-                    "title": "模块扩展",
-                    "items": [
-                        {
-                            "name": "title",
-                            "desc": "模块解析的标题：优先中文短名，并按「目录繁简转换」统一简繁",
-                        },
-                    ],
-                },
-            ],
-            "examples": [
-                {
-                    "rule": "JM{Aid}-P{Pindex:03}-{title}",
-                    "result": "JM350234-P001-董卓 上+下/",
-                    "note": "默认：每章一个目录",
-                },
-                {
-                    "rule": "{Aauthor}/{title}/P{Pindex:03}",
-                    "result": "KINN/董卓 上+下/P001/",
-                    "note": "按作者、本子、章节三级分",
-                },
-                {
-                    "rule": "{title}",
-                    "result": "董卓 上+下/",
-                    "note": "所有章节的图片放同一目录（同名会覆盖）",
-                },
-            ],
-        },
-        "tokens": [
-            {"label": "本子ID-章节-标题", "value": "JM{Aid}-P{Pindex:03}-{title}"},
-            {"label": "本子ID/章节", "value": "JM{Aid}/P{Pindex:03}"},
-            {"label": "作者/标题", "value": "{Aauthor}/{title}"},
-            {"label": "标题", "value": "{title}"},
-        ],
-    },
+    #  下载路径与目录规则不开放配置：固定为「数据根/plugin_data/<插件>/JMDownload」
+    #  与「JM{Aid}-P{Pindex:03}-{title}」，避免用户改坏后找不到旧文件
     "jm_download_log": {
         "label": "输出下载日志",
         "type": "bool",
@@ -401,8 +291,6 @@ CONFIG_FIELDS = {
 # 下载参数的字段映射：表单字段 → option.yml 的键
 # 这些字段只存 option.yml，不写 config.json；kind 决定表单值与 option 值的转换
 OPTION_FIELDS = {
-    "jm_download_dir": {"path": "dir_rule.base_dir", "kind": "path"},
-    "jm_dir_rule": {"path": "dir_rule.rule", "kind": "rule"},
     "jm_download_log": {"path": "log", "kind": "bool"},
     "jm_normalize_zh": {"path": "dir_rule.normalize_zh", "kind": "zh"},
     "jm_image_threads": {"path": "download.threading.image", "kind": "int"},
@@ -464,48 +352,3 @@ VAR_SAMPLES = {
     "error": "网络连接超时",
     "deps": "jmcomic、Pillow",
 }
-
-
-def validate_dir_rule(rule: str) -> str | None:
-    # 校验目录规则；返回错误文案，None 表示通过
-    # 传入的是补回 Bd/ 之后的完整 DSL
-    text = str(rule or "").strip()
-    if not text:
-        return "目录规则不能为空；留空请填 Bd 或直接删掉内容以外的字段"
-
-    if not text.startswith("Bd"):
-        return "目录规则必须以 Bd 开头（表单里通常省略，保存时会自动补上）"
-
-    parts = [part.strip() for part in text.split("/")]
-    if any(not part for part in parts):
-        return "目录规则里有多余的 /（如 Bd// 或结尾的 /）"
-
-    if len(parts) < 2:
-        return None  # 只有 Bd：图片直接放漫画根目录，合法
-
-    for part in parts[1:]:
-        # 占位符里的 : 是补零语法（{Pindex:03}），先剔除再查非法字符
-        plain = _RULE_TOKEN_RE.sub("", part)
-        bad = set(plain) & set('\\:*?"<>|')
-        if bad:
-            return (
-                f"目录层级「{part}」含 Windows 非法字符："
-                + " ".join(sorted(bad))
-            )
-
-        for token in _RULE_TOKEN_RE.findall(part):
-            name = token.split(":", 1)[0].strip()
-            if name not in RULE_FIELDS:
-                allowed = " ".join("{" + field + "}" for field in sorted(RULE_FIELDS))
-                return f"未知占位符 {{{token}}}；可用：{allowed}"
-            # 格式说明只允许数字补零写法（如 {Pindex:03}）
-            if ":" in token:
-                spec = token.split(":", 1)[1].strip()
-                if not spec.isdigit():
-                    return f"占位符 {{{token}}} 的格式只支持数字补零，如 {{Pindex:03}}"
-
-    # 单个层级里不能出现盘符式冒号等已由上一步拦下，这里检查层级数量上限
-    if len(parts) - 1 > 6:
-        return "目录层级过多（最多 6 层），请精简规则"
-
-    return None

@@ -22,8 +22,9 @@ from pathlib import Path
 from ...common.module_log import module_logger
 from . import option as jm_option
 from .cache import AlbumCache
-from .config import DEFAULT_DIR_RULE, DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
+from .config import DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
 from .models import AlbumInfo, DownloadResult, ProgressCallback
+from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 from .paths import AlbumPaths
 from .pdf import make_pdf
 
@@ -84,9 +85,8 @@ class JMService:
 
     def bind_config(self, config: dict) -> None:
         self._config = config or {}
-        self._download_dir_text = str(
-            self._config.get("jm_download_dir") or DEFAULT_DOWNLOAD_DIR
-        )
+        # 下载根固定为数据根下 plugin_data/<插件>/JMDownload，不再读配置
+        self._download_dir_text = DEFAULT_DOWNLOAD_DIR
         self.paths.set_normalize_zh(self._config.get("jm_normalize_zh"))
 
     def set_download_root(self, path: str | Path) -> None:
@@ -134,6 +134,18 @@ class JMService:
             )
         except ImportError as e:
             logger.warning(f"重置 option 配置失败（缺依赖）：{e}")
+
+    def enforce_fixed_dir(self) -> None:
+        # 下载路径与目录规则不再开放配置：文件里被改过就强制写回固定值
+        try:
+            changed = jm_option.enforce_fixed_dir(
+                self._option_file, self._download_dir_text, DEFAULT_DIR_RULE
+            )
+        except ImportError as e:
+            logger.warning(f"校正目录配置失败（缺依赖）：{e}")
+            return
+        if changed:
+            logger.info(f"目录路径/规则已恢复为固定值：{changed}")
 
     async def ensure_ready(self) -> None:
         # 首次使用时执行一次旧数据迁移（幂等）；文件操作放到线程里，不卡事件循环
@@ -213,17 +225,12 @@ class JMService:
             await client.close()
 
     def _dir_rule(self, album_id: str, info: AlbumInfo) -> str:
-        # 规则来自配置页（对应 option.yml 的 dir_rule.rule）
+        # 固定规则：JM<ID>-P<章节序号:03>-<标题>
         # {title} 由模块解析（优先含中文的 oname + 繁简转换），其余 {Xxx} 交给 jmcomic
-        template = (
-            str(self._config.get("jm_dir_rule") or "").strip() or DEFAULT_DIR_RULE
-        )
-        # 只转义替换进去的标题，模板里的库占位符保持原样
         title = self.paths.display_title(info)
-        rule = template.replace("{title}", title.replace("{", "{{").replace("}", "}}"))
-        if not rule.startswith("Bd"):
-            rule = f"Bd/{rule}"
-        return rule
+        return DEFAULT_DIR_RULE.replace(
+            "{title}", title.replace("{", "{{").replace("}", "}}")
+        )
 
     @staticmethod
     def _to_info(album_id: str, album) -> AlbumInfo:
