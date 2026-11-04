@@ -22,7 +22,7 @@ from pathlib import Path
 from ...common.module_log import module_logger
 from . import option as jm_option
 from .cache import AlbumCache
-from .config import DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
+from .config import DEFAULT_DIR_RULE, DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .paths import AlbumPaths
 from .pdf import make_pdf
@@ -213,10 +213,17 @@ class JMService:
             await client.close()
 
     def _dir_rule(self, album_id: str, info: AlbumInfo) -> str:
-        # 统一为 JM<ID>-P<序号:03>-<标题>；单章节的 Pindex 恒为 1
-        # 标题优先用含中文的 oname，并转义可能被当成 f-string 的花括号
-        title = self.paths.display_title(info).replace("{", "{{").replace("}", "}}")
-        return f"Bd/JM{album_id}-P{{Pindex:03}}-{title}"
+        # 规则来自配置页（对应 option.yml 的 dir_rule.rule）
+        # {title} 由模块解析（优先含中文的 oname + 繁简转换），其余 {Xxx} 交给 jmcomic
+        template = (
+            str(self._config.get("jm_dir_rule") or "").strip() or DEFAULT_DIR_RULE
+        )
+        # 只转义替换进去的标题，模板里的库占位符保持原样
+        title = self.paths.display_title(info)
+        rule = template.replace("{title}", title.replace("{", "{{").replace("}", "}}"))
+        if not rule.startswith("Bd"):
+            rule = f"Bd/{rule}"
+        return rule
 
     @staticmethod
     def _to_info(album_id: str, album) -> AlbumInfo:

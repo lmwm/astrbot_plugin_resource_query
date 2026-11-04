@@ -256,6 +256,12 @@ def _to_form(value, kind: str):
         text = str(value or "").strip()
         return text.replace("\\", "/")
 
+    if kind == "rule":
+        # 目录规则：正斜杠分隔，去掉多余空白
+        text = str(value or "").replace("\\", "/")
+        parts = [part.strip() for part in text.split("/") if part.strip()]
+        return "/".join(parts) or DEFAULT_OPTION["dir_rule"]["rule"]
+
     if kind == "suffix":
         return "" if value in (None, "") else str(value)
 
@@ -289,6 +295,11 @@ def _from_form(raw, kind: str):
     if kind == "path":
         text = str(raw or "").strip().replace("\\", "/")
         return text or DEFAULT_OPTION["dir_rule"]["base_dir"], False
+
+    if kind == "rule":
+        text = str(raw or "").replace("\\", "/")
+        parts = [part.strip() for part in text.split("/") if part.strip()]
+        return "/".join(parts) or DEFAULT_OPTION["dir_rule"]["rule"], False
 
     if kind == "suffix":
         text = str(raw or "").strip()

@@ -3,11 +3,13 @@
 # 只依赖标准库：运行时的 option.py 与 Scripts/gen_option.py 共用这一份默认值，
 # 避免脚本生成的默认文件与插件实际使用的不一致。
 
-# 目录规则：只用库的根规则 Bd，图片直接放进当前漫画的图片目录（扁平，旧版行为）
-# 注意：多章节本子的章节图片同名（00001.webp…）会互相覆盖，这是扁平结构的固有限制
-DIR_RULE = "Bd"
+# 默认目录规则：每本一个 JM<ID> 根，图片按章节分子目录
+# {title} 由模块解析（优先含中文的 oname，并做繁简转换）；也可直接用库字段：
+#   章节 Pid/Pindex/Pname/Ptitle/Psort，本子 Aid/Aname/Aoname/Atitle/Aauthor
+# 注意：多章节本子的首章 Ptitle 常为空，用 {title} 比 {Ptitle} 稳
+DIR_RULE = "Bd/JM{Aid}-P{Pindex:03}-{title}"
 
-# 6.14–6.19 用过的章节子目录规则；加载时自动迁移回 DIR_RULE
+# 6.14–6.19 用过的章节子目录规则；加载时自动迁移到 DIR_RULE
 LEGACY_CHAPTER_RULE = "Bd/JP{Pindex:03}-{Pid}"
 
 # 生成文件时的表头；option.py 与 Scripts/gen_option.py 共用

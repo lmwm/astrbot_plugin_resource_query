@@ -5,6 +5,7 @@
 # 消息模板用 {变量} 占位，每个模板可用的变量写在字段的 variables 里（Views 据此过滤标签）。
 
 from ...common.module_log import PLUGIN_NAME
+from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 
 # 默认下载目录：相对 AstrBot 数据根，保持 6.16.x 的既有位置
 DEFAULT_DOWNLOAD_DIR = f"plugin_data/{PLUGIN_NAME}/JMDownload"
@@ -60,6 +61,17 @@ CONFIG_FIELDS = {
             "默认保持旧位置；对应 option.yml 的 dir_rule.base_dir"
         ),
         "default": DEFAULT_DOWNLOAD_DIR,
+    },
+    "jm_dir_rule": {
+        "label": "目录规则",
+        "type": "text",
+        "group": "option",
+        "hint": (
+            "决定每本漫画的图片目录层级，默认 Bd/JM{Aid}-P{Pindex:03}-{Ptitle}；"
+            "Bd 是下载根，{} 内可用章节 Pid/Pindex/Pname/Ptitle、本子 Aid/Aname/Aoname/Atitle/Aauthor；"
+            "填 Bd 则图片直接放 JM <ID> 根目录；对应 option.yml 的 dir_rule.rule"
+        ),
+        "default": DEFAULT_DIR_RULE,
     },
     "jm_download_log": {
         "label": "输出下载日志",
@@ -299,6 +311,7 @@ CONFIG_FIELDS = {
 # 这些字段只存 option.yml，不写 config.json；kind 决定表单值与 option 值的转换
 OPTION_FIELDS = {
     "jm_download_dir": {"path": "dir_rule.base_dir", "kind": "path"},
+    "jm_dir_rule": {"path": "dir_rule.rule", "kind": "rule"},
     "jm_download_log": {"path": "log", "kind": "bool"},
     "jm_normalize_zh": {"path": "dir_rule.normalize_zh", "kind": "zh"},
     "jm_image_threads": {"path": "download.threading.image", "kind": "int"},

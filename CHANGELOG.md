@@ -1,3 +1,17 @@
+## v6.24.0 (2026-11-04)
+
+### 功能
+
+- **目录规则可在 Views「下载参数」页配置**（`jm_dir_rule` → `dir_rule.rule`，默认 `Bd/JM{Aid}-P{Pindex:03}-{title}`）：
+  - `{title}` 由模块解析（优先含中文的 `oname` + 繁简转换），其余 `{Xxx}` 原样交给 jmcomic（章节 `Pid/Pindex/Pname/Ptitle`，本子 `Aid/Aname/Aoname/Atitle/Aauthor`）
+  - 填 `Bd` 则图片直接放 `JM <ID>` 根；规则缺少 `Bd` 时自动补前缀；反斜杠与多余空白归一
+  - 留空回退默认规则
+
+### 说明
+
+- 默认值从 `Ptitle` 换成 `{title}`：多章节本子首章的 `Ptitle` 常为空（实测 350234 首章标题为空），用 `{title}` 才能得到完整本子标题
+- 实测：默认规则生成 `JM350234-P001-董卓 上+下/`、`JM350234-P002-董卓 上+下/`；规则改成 `Bd/{title}/P{Pindex:03}` 后生成 `董卓 上+下/P001`、`P002`
+
 ## v6.23.0 (2026-11-04)
 
 ### 变更
