@@ -213,11 +213,11 @@ class JMService:
             await client.close()
 
     def _dir_rule(self, album_id: str, info: AlbumInfo) -> str:
-        # 单章节：JM<ID>-<标题>；多章节：JM<ID>-<序号:03>-<标题>
+        # 单章节：JM<ID>-<标题>；多章节：JM<ID>-P<序号:03>-<标题>
         # 标题优先用含中文的 oname，并转义可能被当成 f-string 的花括号
         title = self.paths.display_title(info).replace("{", "{{").replace("}", "}}")
         if int(info.chapter_count or 0) > 1:
-            return f"Bd/JM{album_id}-{{Pindex:03}}-{title}"
+            return f"Bd/JM{album_id}-P{{Pindex:03}}-{title}"
         return f"Bd/JM{album_id}-{title}"
 
     @staticmethod
