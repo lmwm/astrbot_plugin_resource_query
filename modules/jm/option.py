@@ -156,13 +156,22 @@ def migrate_legacy_rule(path: Path) -> bool:
     return True
 
 
+def _chapter_filename(image) -> str:
+    # 图片直接放漫画根目录，用章节序号前缀避免各章 00001.webp 互相覆盖
+    photo = getattr(image, "from_photo", None)
+    index = int(getattr(photo, "index", 0) or 0) if photo is not None else 0
+    return f"P{index:03}-{image.filename_without_suffix}"
+
+
 def load_option(path: Path, image_dir: Path):
-    # 读取 option 文件；每本漫画的图片目录在运行时替换，不写回文件
+    # 读取 option 文件；每本漫画的目录在运行时替换，不写回文件
     import jmcomic
 
     data = _read(path)
     option = jmcomic.JmOption.from_file(str(path))
     option.dir_rule.base_dir = str(image_dir)
+    # 文件名加章节序号前缀（P001-00001），目录仍是扁平
+    option.decide_image_filename = _chapter_filename
 
     # 库只有 disable_jm_log，没有对应的 enable；log 在运行中改成 true 后
     # 需要显式恢复开关，否则会被之前加载的 log: false 永久关掉

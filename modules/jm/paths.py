@@ -99,35 +99,16 @@ class AlbumPaths:
         return f"JM{album_id}-{self.display_title(info)}"
 
     def ensure_image_dir(self, album_id: str, info: AlbumInfo) -> Path:
-        image_dir = self.ensure_album_root(album_id) / self.image_dir_name(
-            album_id, info
-        )
-        image_dir.mkdir(parents=True, exist_ok=True)
-        return image_dir
+        # 图片直接放漫画根目录（JM <ID>），文件名由库的规则决定
+        return self.ensure_album_root(album_id)
 
     def info_file(self, album_id: str) -> Path:
         return self.album_root(album_id) / "info.json"
 
     def current_image_dir(self, album_id: str) -> Path | None:
-        # 该漫画当前使用的图片目录；经历 5.8.0 子项改名时可能有多个，取最近修改的
+        # 当前图片目录就是漫画根目录；不存在时返回 None
         root = self.album_root(album_id)
-        if not root.exists():
-            return None
-
-        prefixes = (f"jm{album_id}-", f"jm {album_id}-")
-        try:
-            candidates = [
-                item
-                for item in root.iterdir()
-                if item.is_dir() and item.name.lower().startswith(prefixes)
-            ]
-        except OSError:
-            return None
-
-        if not candidates:
-            return None
-
-        return max(candidates, key=lambda path: path.stat().st_mtime)
+        return root if root.exists() else None
 
     def list_images(self, album_id: str) -> list[Path]:
         # 当前图片目录里的图片（含章节子目录），按相对路径去重并保留最新的一份
@@ -162,28 +143,10 @@ class AlbumPaths:
 
         return sorted(latest.values(), key=lambda path: str(path).lower())
 
-    def remove_chapter_dirs(self, image_dir: Path) -> None:
-        # 扁平规则下清理旧版留下的章节目录（只删目录，不动图片文件）
-        try:
-            items = list(image_dir.iterdir())
-        except OSError:
-            return
-
-        for item in items:
-            if item.is_dir():
-                shutil.rmtree(item, ignore_errors=True)
-
-    def cleanup_legacy_layout(
-        self, album_id: str, keep_dir: Path | None = None
-    ) -> None:
-        # 清理历史目录：旧版 images/pdf 子目录、改名后残留的其它 JM<ID>- 目录，
-        # 以及章节子目录启用前直接放在图片目录下的扁平图片
+    def cleanup_legacy_layout(self, album_id: str) -> None:
+        # 清理旧结构：images/pdf 子目录、旧版内层图片目录（JM<ID>-<标题>，含章节子目录）
         root = self.album_root(album_id)
         if not root.exists():
-            return
-
-        current = keep_dir or self.current_image_dir(album_id)
-        if current is None:
             return
 
         for name in _LEGACY_SUBDIRS:
@@ -198,30 +161,8 @@ class AlbumPaths:
             subdirs = []
 
         for subdir in subdirs:
-            if subdir == current:
-                continue
             if subdir.name.lower().startswith(prefixes):
                 shutil.rmtree(subdir, ignore_errors=True)
-
-        self._cleanup_flat_images(current)
-
-    @staticmethod
-    def _cleanup_flat_images(image_dir: Path) -> None:
-        # 章节子目录存在时，图片目录下直接的旧扁平图片已被取代，可以删除
-        try:
-            items = list(image_dir.iterdir())
-        except OSError:
-            return
-
-        if not any(item.is_dir() for item in items):
-            return
-
-        for item in items:
-            if item.is_file() and item.suffix.lower() in _IMAGE_SUFFIXES:
-                try:
-                    item.unlink(missing_ok=True)
-                except OSError:
-                    continue
 
     def migrate_legacy_root(self, legacy_dir: str | Path) -> int:
         # 把旧版下载根目录（AstrBot 数据根下的 JMDownload）搬入当前根目录

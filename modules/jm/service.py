@@ -24,7 +24,6 @@ from . import option as jm_option
 from .cache import AlbumCache
 from .config import DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
 from .models import AlbumInfo, DownloadResult, ProgressCallback
-from .option_default import DIR_RULE
 from .paths import AlbumPaths
 from .pdf import make_pdf
 
@@ -337,10 +336,7 @@ class JMService:
             embed_jpeg,
         )
 
-        # 扁平规则下先清掉旧版章节目录，避免 cleanup 的“有子目录就删扁平图”误删新图
-        if self._is_flat_rule():
-            await asyncio.to_thread(self.paths.remove_chapter_dirs, image_dir)
-        await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, image_dir)
+        await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id)
 
         try:
             size_mb = pdf_path.stat().st_size / (1024 * 1024)
@@ -350,13 +346,6 @@ class JMService:
         self.cache.save_info(album_info)
         self.cache.save_pdf_state(album_id, pdf_path)
         return pdf_path, album_info, len(images), size_mb
-
-    def _is_flat_rule(self) -> bool:
-        # 目录规则是否为库根规则 Bd（图片直接放图片目录）
-        try:
-            return jm_option.read_rule(self._option_file) == DIR_RULE
-        except ImportError:
-            return True
 
     @staticmethod
     def _describe_error(error: Exception) -> str:
