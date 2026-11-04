@@ -24,10 +24,13 @@ from . import option as jm_option
 from .config import (
     CONFIG_FIELDS,
     CONFIG_GROUPS,
+    DEFAULT_DIR_RULE,
     DEFAULT_DOWNLOAD_DIR,
     OPTION_FIELDS,
+    PLUGIN_NAME_TOKEN,
     VAR_SAMPLES,
     VARIABLES,
+    validate_dir_rule,
 )
 from .models import AlbumInfo
 from .service import JMService
@@ -108,13 +111,44 @@ class JMModule(ModuleBase):
         if relative != raw and self._service.option_file.is_file():
             self._service.update_option_values({"jm_download_dir": relative})
 
+        # 目录规则：表单只显示 Bd 之后的部分，保存时再补回
+        rule = str(config.get("jm_dir_rule") or "").strip() or DEFAULT_DIR_RULE
+        config["jm_dir_rule"] = self._rule_for_form(rule)
+
         self._service.bind_config(config)
         return config
 
+    def _expand_plugin_token(self, text: str) -> str:
+        # {plugin} → 实际插件目录名，改名后配置无需同步修改
+        return text.replace(PLUGIN_NAME_TOKEN, self._plugin_name)
+
+    def _shrink_plugin_token(self, text: str) -> str:
+        # 实际插件名 → {plugin}，避免把名字写进用户配置
+        return text.replace(self._plugin_name, PLUGIN_NAME_TOKEN)
+
+    @staticmethod
+    def _rule_for_form(rule: str) -> str:
+        # 表单不显示开头的 Bd/（下载根由「下载路径」决定）
+        text = str(rule or "").strip().replace("\\", "/")
+        if text.startswith("Bd/"):
+            return text[len("Bd/") :]
+        return "" if text == "Bd" else text
+
+    @staticmethod
+    def _rule_for_option(rule: str) -> str:
+        # 表单里的规则 → option.yml 的完整 DSL
+        text = str(rule or "").strip().replace("\\", "/")
+        text = "/".join(part.strip() for part in text.split("/") if part.strip())
+        if not text or text == "Bd":
+            return "Bd"
+        return text if text.startswith("Bd") else f"Bd/{text}"
+
     def _resolve_download_dir(self, raw: str) -> tuple[str, Path]:
         # 下载路径相对 AstrBot 数据根；绝对路径在数据根内时转相对，越界回退默认
+        # 配置里用 {plugin} 占位，解析时替换成实际插件名
         data_root = Path(get_astrbot_data_path()).resolve()
-        text = str(raw or "").strip().replace("\\", "/") or DEFAULT_DOWNLOAD_DIR
+        text = self._expand_plugin_token(str(raw or "").strip().replace("\\", "/"))
+        text = text or self._expand_plugin_token(DEFAULT_DOWNLOAD_DIR)
 
         path = Path(text)
         if path.is_absolute():
@@ -122,23 +156,29 @@ class JMModule(ModuleBase):
                 text = path.resolve().relative_to(data_root).as_posix()
             except ValueError:
                 logger.warning(f"下载路径必须位于 AstrBot 数据根内，已回退默认：{path}")
-                text = DEFAULT_DOWNLOAD_DIR
+                text = self._expand_plugin_token(DEFAULT_DOWNLOAD_DIR)
 
         resolved = (data_root / text).resolve()
         try:
             resolved.relative_to(data_root)
         except ValueError:
             logger.warning(f"下载路径越出数据根，已回退默认：{text}")
-            text = DEFAULT_DOWNLOAD_DIR
+            text = self._expand_plugin_token(DEFAULT_DOWNLOAD_DIR)
             resolved = (data_root / text).resolve()
 
-        return text, resolved
+        # 写回配置时恢复占位符
+        return self._shrink_plugin_token(text), resolved
 
     def save_module_config(self, config: dict) -> bool:
         # 下载参数字段写 option.yml，config.json 只存其余字段
         option_values = {
             key: config[key] for key in OPTION_FIELDS if key in config
         }
+        if "jm_dir_rule" in option_values:
+            option_values["jm_dir_rule"] = self._rule_for_option(
+                option_values["jm_dir_rule"]
+            )
+
         plain = {
             key: value for key, value in config.items() if key not in OPTION_FIELDS
         }
@@ -149,12 +189,21 @@ class JMModule(ModuleBase):
             self._service.bind_config(self.load_module_config())
         return saved
 
+    def validate_config_payload(self, payload: dict) -> str | None:
+        # 目录规则校验：补回 Bd 后检查层级与占位符
+        rule = payload.get("jm_dir_rule")
+        if isinstance(rule, str) and rule.strip():
+            problem = validate_dir_rule(self._rule_for_option(rule))
+            if problem:
+                return problem
+        return super().validate_config_payload(payload)
+
     async def api_reset_config(self):
         # 恢复默认：config.json 与 option.yml 一起重置
         from astrbot.api.web import json_response
 
         self._config_store.reset()
-        self._service.reset_option_file(DEFAULT_DOWNLOAD_DIR)
+        self._service.reset_option_file(DEFAULT_DIR_RULE)
         self._service.bind_config(self.load_module_config())
         return json_response(
             {"status": "ok", "config": self.config_payload(self.load_module_config())}

@@ -170,20 +170,22 @@ client:
       cookies: ...
 ```
 
-「下载路径」填相对 AstrBot 数据根（`data/`）的目录，默认保持旧位置；填绝对路径时
-只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。
+「下载路径」填相对 AstrBot 数据根（`data/`）的目录，默认 `plugin_data/{plugin}/JMDownload`——
+`{plugin}` 会自动替换成插件目录名，插件改名后无需改配置；填绝对路径时只有在数据根内
+才会转成相对，越界或含 `..` 会回退默认并记日志。
 
-**目录与命名规则**：`dir_rule.rule` 在 Views「下载参数 → 目录规则」里配置，默认
-`Bd/JM{Aid}-P{Pindex:03}-{title}`：
+**目录与命名规则**：`dir_rule.rule` 在 Views「下载参数 → 目录规则」里配置。**表单里省略
+开头的 `Bd/`**，只填后半段（默认 `JM{Aid}-P{Pindex:03}-{title}`），保存时自动补回：
 
 - 每个章节一个图片目录，单章节也是 `JM<ID>-P001-<标题>/`；
 - 图片文件名保持站点原样（`00001.webp`）；
 - 章节序号来自站点的 `photo_index`，不保证从 1 开始（站点给 81 就是 `P081`）。
 
 可用的占位符：`{title}`（模块解析，优先含中文的 `oname` 并做繁简转换）、章节
-`{Pid}`/`{Pindex}`/`{Pname}`/`{Ptitle}`、本子 `{Aid}`/`{Aname}`/`{Aoname}`/`{Atitle}`/`{Aauthor}`。
-填 `Bd` 则图片直接放 `JM <ID>` 根目录；规则缺少 `Bd` 前缀时自动补上；留空回退默认。
-多章节本子的首章 `Ptitle` 常为空，建议用 `{title}` 而不是 `{Ptitle}`。
+`{Pid}`/`{Pindex}`/`{Pname}`/`{Ptitle}`/`{Psort}`、本子 `{Aid}`/`{Aname}`/`{Aoname}`/`{Atitle}`/`{Aauthor}`。
+输入框下方有快捷按钮，点击可追加常用片段；填 `Bd` 或留空表示图片直接放 `JM <ID>` 根目录。
+保存时会校验：未知占位符、Windows 非法字符、空层级、结尾斜杠、层级过多、非数字补零格式
+都会被拒绝并提示可用字段。多章节本子的首章 `Ptitle` 常为空，建议用 `{title}` 而不是 `{Ptitle}`。
 
 PDF 名固定 `JM<ID>-<标题>.pdf`，放在 `JM <ID>/` 根目录。目录名与 PDF 名里的空格会保留
 （jmcomic 只替换 Windows 非法字符 `\ / : * ? " < > |`，不动空格）。
