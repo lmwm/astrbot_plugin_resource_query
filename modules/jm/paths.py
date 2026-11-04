@@ -95,13 +95,6 @@ class AlbumPaths:
             return text
         return jmcomic.JmcomicText.to_zh(text, self._normalize_zh)
 
-    def image_dir_name(self, album_id: str, info: AlbumInfo) -> str:
-        return f"JM{album_id}-{self.display_title(info)}"
-
-    def ensure_image_dir(self, album_id: str, info: AlbumInfo) -> Path:
-        # 图片直接放漫画根目录（JM <ID>），文件名由库的规则决定
-        return self.ensure_album_root(album_id)
-
     def info_file(self, album_id: str) -> Path:
         return self.album_root(album_id) / "info.json"
 
@@ -143,11 +136,19 @@ class AlbumPaths:
 
         return sorted(latest.values(), key=lambda path: str(path).lower())
 
-    def cleanup_legacy_layout(self, album_id: str) -> None:
-        # 清理旧结构：images/pdf 子目录、旧版内层图片目录（JM<ID>-<标题>，含章节子目录）
+    def cleanup_legacy_layout(self, album_id: str, image_files: list[Path]) -> None:
+        # 清理旧结构：images/pdf 子目录、旧扁平图片、旧内层目录
+        # image_files 是本次下载的图片，保留它们的文件与所在目录
         root = self.album_root(album_id)
         if not root.exists():
             return
+
+        keep_files = {Path(path).resolve() for path in image_files}
+        keep_dirs = {
+            path.resolve().parent
+            for path in image_files
+            if path.resolve().parent != root.resolve()
+        }
 
         for name in _LEGACY_SUBDIRS:
             legacy = root / name
@@ -156,13 +157,29 @@ class AlbumPaths:
 
         prefixes = (f"jm{album_id}-", f"jm {album_id}-")
         try:
-            subdirs = [item for item in root.iterdir() if item.is_dir()]
+            items = list(root.iterdir())
         except OSError:
-            subdirs = []
+            return
 
-        for subdir in subdirs:
-            if subdir.name.lower().startswith(prefixes):
-                shutil.rmtree(subdir, ignore_errors=True)
+        for item in items:
+            if item.is_file():
+                # 旧版直接放根目录的扁平图片
+                if (
+                    item.suffix.lower() in _IMAGE_SUFFIXES
+                    and item.resolve() not in keep_files
+                ):
+                    try:
+                        item.unlink(missing_ok=True)
+                    except OSError:
+                        continue
+                continue
+
+            if (
+                item.is_dir()
+                and item.name.lower().startswith(prefixes)
+                and item.resolve() not in keep_dirs
+            ):
+                shutil.rmtree(item, ignore_errors=True)
 
     def migrate_legacy_root(self, legacy_dir: str | Path) -> int:
         # 把旧版下载根目录（AstrBot 数据根下的 JMDownload）搬入当前根目录

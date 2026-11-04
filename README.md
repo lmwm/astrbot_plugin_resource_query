@@ -122,20 +122,30 @@ plugin_data/astrbot_plugin_resource_query/
 - **模板变量**：变量的中文说明、预览示例值与是否在快捷插入区显示
 - 账号编辑窗内可编辑该账号的**消息模板**并实时预览
 
-JM 下载产物位于插件数据目录（`plugin_data/astrbot_plugin_resource_query/`）下：
+JM 下载产物位于插件数据目录（`plugin_data/astrbot_plugin_resource_query/`）下。
+单章节本子把图片直接放在 `JM<ID>-<标题>/`，多章节本子每章一个目录：
 
 ```
 JMDownload/
-└── JM <ID>/                   # 第一层目录带空格
-    ├── P001-00001.webp        # 图片直接放这里；章节序号-原文件名
-    ├── P002-00001.webp        # 多章节时用不同前缀，互不覆盖
-    ├── JM<ID>-<名称>.pdf      # 生成的 PDF
-    └── info.json              # 漫画信息缓存 + 最近一次 PDF 文件名/大小
+├── JM <ID>/                          # 单章节：第一层目录带空格
+│   ├── JM<ID>-<名称>/                # 图片目录
+│   │   ├── 00001.webp
+│   │   └── 00002.webp …
+│   ├── JM<ID>-<名称>.pdf             # 生成的 PDF
+│   └── info.json                     # 漫画信息缓存 + 最近一次 PDF 文件名/大小
+│
+└── JM <ID>/                          # 多章节：每章一个图片目录
+    ├── JM<ID>-001-<名称>/            # 序号:03 + 本子标题
+    │   └── 00001.webp …
+    ├── JM<ID>-002-<名称>/
+    │   └── 00001.webp …
+    ├── JM<ID>-<名称>.pdf
+    └── info.json
 ```
 
 > 旧版本把下载内容放在 AstrBot 数据根目录的 `JMDownload/` 下（目录名为 `JM<ID>`）；
-> 升级后会自动搬移到新位置并给第一层目录加空格。旧版的内层图片目录
-> `JM<ID>-<名称>/`（含章节子目录）会在重新下载成功后自动清理。
+> 升级后会自动搬移到新位置并给第一层目录加空格。旧版直接堆在根目录的扁平图片
+> （`00001.webp`、`P001-*` 等）会在重新下载成功后自动清理。
 
 ### JM 下载参数（option.yml）
 
@@ -148,7 +158,7 @@ JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全�
 ```yaml
 log: true                     # 输出 jmcomic 下载日志（写入 AstrBot 日志）
 dir_rule:
-  rule: Bd                      # 库根规则：图片直接放当前漫画目录（JM <ID>）
+  rule: Bd                      # 运行时替换为按章节数生成的目录规则
   base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 相对 AstrBot 数据根
   normalize_zh: zh-cn           # 目录名统一为简体（zh-tw 繁体，留空不转换）
 download:
@@ -168,10 +178,14 @@ client:
 「下载路径」填相对 AstrBot 数据根（`data/`）的目录，默认保持旧位置；填绝对路径时
 只有在数据根内才会转成相对，越界或含 `..` 会回退默认并记日志。
 
-**命名规则**：图片直接放在 `JM <ID>/` 下，文件名由模块按
-`P{章节序号:03}-{原文件名}` 生成（如 `P001-00001.webp`），多章节用不同前缀、互不覆盖；
-PDF 名仍为 `JM<ID>-<名称>.pdf`。`dir_rule.rule` 表单不控制，手工改成
-`Bd/JP{Pindex:03}-{Pid}` 等带层级的规则时会恢复章节子目录（文件名前缀仍保留）。
+**目录与命名规则**：`option.yml` 里的 `dir_rule.rule` 只作占位，运行时按本子章节数
+生成实际规则并交给 jmcomic 的 `DirRule`：
+
+- 单章节 → `Bd/JM<ID>-<标题>`，图片直接放该目录，文件名保持站点原样（`00001.webp`）；
+- 多章节 → `Bd/JM<ID>-{Pindex:03}-<标题>`，每章一个目录（如 `JM350234-001-…`）。
+
+标题取含中文的 `oname`，并受「目录繁简转换」影响；PDF 名固定 `JM<ID>-<标题>.pdf`，
+放在 `JM <ID>/` 根目录。
 
 表单没有覆盖的键（`client.domain`、`plugins` 等）仍可手工加进文件并保留；
 可用的全部字段见 jmcomic 的

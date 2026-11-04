@@ -169,12 +169,12 @@ class JMService:
     def _quality(self) -> int:
         return max(1, min(95, self._int("jm_jpeg_quality", 75)))
 
-    def _build_option(self, image_dir: Path):
-        # 从 option 文件读取配置，再把 base_dir 换成当前漫画的图片目录
+    def _build_option(self, image_dir: Path, rule: str | None = None):
+        # 从 option 文件读取配置；rule 给定时用它决定图片子目录
         self.ensure_option_file()
         if not self._option_file.is_file():
             raise RuntimeError(f"下载失败：option 配置文件不存在：{self._option_file}")
-        return jm_option.load_option(self._option_file, image_dir)
+        return jm_option.load_option(self._option_file, image_dir, rule)
 
     #  本地缓存
 
@@ -211,6 +211,14 @@ class JMService:
             return await client.get_album_detail(str(album_id))
         finally:
             await client.close()
+
+    def _dir_rule(self, album_id: str, info: AlbumInfo) -> str:
+        # 单章节：JM<ID>-<标题>；多章节：JM<ID>-<序号:03>-<标题>
+        # 标题优先用含中文的 oname，并转义可能被当成 f-string 的花括号
+        title = self.paths.display_title(info).replace("{", "{{").replace("}", "}}")
+        if int(info.chapter_count or 0) > 1:
+            return f"Bd/JM{album_id}-{{Pindex:03}}-{title}"
+        return f"Bd/JM{album_id}-{title}"
 
     @staticmethod
     def _to_info(album_id: str, album) -> AlbumInfo:
@@ -305,12 +313,12 @@ class JMService:
         quality = self._quality()
         # 默认画质对已是 JPEG 的源图直接嵌入；其它画质统一转码
         embed_jpeg = quality == 75
-        image_dir = self.paths.ensure_image_dir(album_id, info)
+        image_dir = self.paths.ensure_album_root(album_id)
         downloader_cls = _make_progress_downloader(progress, info.page_count)
 
         result = await jmcomic.download_album_async(
             str(album_id),
-            option=self._build_option(image_dir),
+            option=self._build_option(image_dir, self._dir_rule(album_id, info)),
             downloader=downloader_cls,
             check_exception=True,
         )
@@ -336,7 +344,7 @@ class JMService:
             embed_jpeg,
         )
 
-        await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id)
+        await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, images)
 
         try:
             size_mb = pdf_path.stat().st_size / (1024 * 1024)
