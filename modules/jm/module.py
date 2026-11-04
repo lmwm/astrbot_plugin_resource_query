@@ -115,6 +115,12 @@ class JMModule(ModuleBase):
         rule = str(config.get("jm_dir_rule") or "").strip() or DEFAULT_DIR_RULE
         config["jm_dir_rule"] = self._rule_for_form(rule)
 
+        # 文件里的规则与规范形式不一致时（如历史遗留的 %% 或缺失 Bd）回写修正
+        if self._service.option_file.is_file():
+            normalized = self._rule_for_option(config["jm_dir_rule"])
+            if normalized != rule:
+                self._service.update_option_values({"jm_dir_rule": normalized})
+
         self._service.bind_config(config)
         return config
 
