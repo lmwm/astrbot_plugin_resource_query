@@ -153,8 +153,8 @@ JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全�
 ```yaml
 log: true                     # 输出 jmcomic 下载日志（写入 AstrBot 日志）
 dir_rule:
-  rule: Bd                      # 运行时替换为按章节数生成的目录规则
-  base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 相对 AstrBot 数据根
+  rule: Bd/JM{Aid}-P{Pindex:03}-{title}   # 固定值，加载时强制写回
+  base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 固定值，相对 AstrBot 数据根
   normalize_zh: zh-cn           # 目录名统一为简体（zh-tw 繁体，留空不转换）
 download:
   cache: true
@@ -178,8 +178,10 @@ client:
   `photo_index`，不保证从 1 开始（站点给 81 就是 `P081`）。
 
 `option.yml` 里的 `dir_rule.base_dir` / `dir_rule.rule` 若被手工改动，加载时会强制写回固定值
-并记日志，避免改坏后找不到旧文件。`{title}` 由模块解析：优先含中文的 `oname`，并按
-「目录繁简转换」统一简繁（多章节本子首章 `Ptitle` 常为空，所以不用 `{Ptitle}`）。
+并记日志，避免改坏后找不到旧文件。`base_dir` 写的是展开插件名后的实际值
+（`plugin_data/astrbot_plugin_resource_query/JMDownload`）；6.27.0 及更早版本误生成的
+`plugin_data/{plugin}/` 空目录会在加载时自动清理。`{title}` 由模块解析：优先含中文的
+`oname`，并按「目录繁简转换」统一简繁（多章节本子首章 `Ptitle` 常为空，所以不用 `{Ptitle}`）。
 
 PDF 名固定 `JM<ID>-<标题>.pdf`，放在 `JM <ID>/` 根目录。目录名与 PDF 名里的空格会保留
 （jmcomic 只替换 Windows 非法字符 `\ / : * ? " < > |`，不动空格）。

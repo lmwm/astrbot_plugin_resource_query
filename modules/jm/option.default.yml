@@ -5,8 +5,8 @@
 # 默认值可用 Scripts/gen_option.py 重新生成。
 log: true
 dir_rule:
-  rule: Bd
-  base_dir: JMDownload
+  rule: Bd/JM{Aid}-P{Pindex:03}-{title}
+  base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload
   normalize_zh: zh-cn
 download:
   cache: true

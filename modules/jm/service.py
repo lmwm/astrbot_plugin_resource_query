@@ -22,7 +22,7 @@ from pathlib import Path
 from ...common.module_log import module_logger
 from . import option as jm_option
 from .cache import AlbumCache
-from .config import DEFAULT_DOWNLOAD_DIR, OPTION_FIELDS
+from .config import OPTION_FIELDS
 from .models import AlbumInfo, DownloadResult, ProgressCallback
 from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 from .paths import AlbumPaths
@@ -49,6 +49,7 @@ class JMService:
     def __init__(
         self,
         download_dir: str | Path,
+        download_dir_text: str | Path | None = None,
         legacy_dir: str | Path | None = None,
         option_file: str | Path | None = None,
     ):
@@ -60,8 +61,8 @@ class JMService:
             if option_file
             else self.paths.root.parent / "option.yml"
         )
-        # 写入 option.yml 的下载根（相对数据根），bind_config 时更新
-        self._download_dir_text = DEFAULT_DOWNLOAD_DIR
+        # 写进 option.yml 的下载根文案（相对数据根，已展开插件名）；不传时退回绝对路径
+        self._download_dir_text = str(download_dir_text or download_dir)
         self._ready = False
         self._ready_lock: asyncio.Lock | None = None
         self._config: dict = {}
@@ -80,23 +81,13 @@ class JMService:
 
     @property
     def download_root(self) -> Path:
-        # 当前下载根（由 config 的「下载路径」解析而来）
+        # 当前下载根（构造时固定，不由配置决定）
         return self.paths.root
 
     def bind_config(self, config: dict) -> None:
         self._config = config or {}
-        # 下载根固定为数据根下 plugin_data/<插件>/JMDownload，不再读配置
-        self._download_dir_text = DEFAULT_DOWNLOAD_DIR
+        # 下载根在构造时已固定（plugin_data/<插件>/JMDownload），这里只同步繁简设置
         self.paths.set_normalize_zh(self._config.get("jm_normalize_zh"))
-
-    def set_download_root(self, path: str | Path) -> None:
-        # 下载路径变化时重建目录与缓存（路径不变时仍同步繁简设置）
-        target = Path(path)
-        if self.paths.root == target:
-            self.paths.set_normalize_zh(self._config.get("jm_normalize_zh"))
-            return
-        self.paths = AlbumPaths(target, self._config.get("jm_normalize_zh"))
-        self.cache = AlbumCache(self.paths)
 
     #  下载参数（option.yml）
 
@@ -126,12 +117,10 @@ class JMService:
         except ImportError as e:
             logger.warning(f"写入 option 配置失败（缺依赖）：{e}")
 
-    def reset_option_file(self, base_dir_text: str | None = None) -> None:
-        # 恢复默认下载参数（Views 的「恢复默认」）
+    def reset_option_file(self) -> None:
+        # 恢复默认下载参数（Views 的「恢复默认」）；base_dir 固定用构造时的文案
         try:
-            jm_option.reset_file(
-                self._option_file, base_dir_text or self._download_dir_text
-            )
+            jm_option.reset_file(self._option_file, self._download_dir_text)
         except ImportError as e:
             logger.warning(f"重置 option 配置失败（缺依赖）：{e}")
 

@@ -1,3 +1,17 @@
+## v6.27.1 (2026-11-05)
+
+### 修复
+
+- **自动生成字面量 `{plugin}` 目录**：`JMModule` 构造时把未展开的 `plugin_data/{plugin}/JMDownload` 直接交给服务，`AlbumPaths` 又立即建目录，导致每次加载都在 `data/plugin_data/` 下生成 `{plugin}/JMDownload`。现在构造时就展开插件名，`AlbumPaths` 也不再在构造期建目录（下载/迁移时按需创建）
+- **`option.yml` 的 `dir_rule.base_dir` 被写成 `{plugin}` 字面量**：服务保存的下载根文案同样没展开，`ensure_file`/`enforce_fixed_dir`/`reset_file` 都把它当固定值写入文件。现在统一使用展开后的 `plugin_data/<插件目录名>/JMDownload`
+- **「全部恢复默认」把目录规则写进 `base_dir`**：`api_reset_config` 误把 `DIR_RULE` 当 `base_dir` 参数传给 `reset_option_file`。现在 `reset_option_file` 只接受固定下载根，不再允许调用方覆盖
+
+### 变更
+
+- **加载时清理旧版残留**：删除 `plugin_data/{plugin}/` 空目录（含空 `JMDownload`；有文件时保留并提示），并清掉 6.27.0 已删除配置项 `jm_download_dir` / `jm_dir_rule` 的残留键
+- **清理 JM 模块死代码**：移除无调用方的 `paths.list_images` / `current_image_dir`、`option.read_rule`、表单 path/rule 转换分支、`utils.normalize_proxy` / `parse_cookies`，以及已不再使用的 `LEGACY_CHAPTER_RULE` / `LEGACY_FLAT_RULES` 常量；`JMService.set_download_root` 一并删除（下载根已固定）
+- **旧章节目录清理**：重新下载成功后，`JP001-<Pid>` 这类 6.14–6.19 的旧章节子目录会和其他旧布局一起清理
+
 ## v6.27.0 (2026-11-04)
 
 ### 变更

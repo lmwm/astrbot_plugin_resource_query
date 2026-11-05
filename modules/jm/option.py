@@ -15,7 +15,6 @@ from pathlib import Path
 from ...common.module_log import module_logger
 from .option_default import (
     DEFAULT_OPTION,
-    DIR_RULE,
     HEADER,
 )
 
@@ -133,13 +132,6 @@ def update_values(path: Path, specs: dict[str, dict], values: dict) -> None:
     write_file(path, data)
 
 
-def read_rule(path: Path) -> str:
-    # 当前目录规则；缺省按库根规则 Bd 处理
-    data = _read(path)
-    rule = data.get("dir_rule", {}).get("rule") if isinstance(data.get("dir_rule"), dict) else None
-    return str(rule or DIR_RULE).strip()
-
-
 def enforce_fixed_dir(path: Path, base_dir: str, rule: str) -> list[str]:
     # 下载路径与目录规则是固定值：文件里被改成别的就写回，返回被纠正的键
     data = _read(path)
@@ -152,7 +144,8 @@ def enforce_fixed_dir(path: Path, base_dir: str, rule: str) -> list[str]:
         data["dir_rule"] = dir_rule
 
     changed: list[str] = []
-    if str(dir_rule.get("base_dir") or "").strip() != base_dir:
+    current_base = str(dir_rule.get("base_dir") or "").replace("\\", "/").strip()
+    if current_base != base_dir.replace("\\", "/").strip():
         dir_rule["base_dir"] = base_dir
         changed.append("base_dir")
     if str(dir_rule.get("rule") or "").strip() != rule:
@@ -179,13 +172,14 @@ def load_option(path: Path, image_dir: Path, rule: str | None = None):
 
     data = _read(path)
     option = jmcomic.JmOption.from_file(str(path))
-    option.dir_rule.base_dir = str(image_dir)
 
     # 单章节：JM<ID>-<标题>/；多章节：JM<ID>-<序号:03>-<标题>/
     if rule:
         option.dir_rule = _dir_rule_instance(
             jmcomic, rule, image_dir, option.dir_rule.normalize_zh
         )
+    else:
+        option.dir_rule.base_dir = str(image_dir)
 
     # 库只有 disable_jm_log，没有对应的 enable；log 在运行中改成 true 后
     # 需要显式恢复开关，否则会被之前加载的 log: false 永久关掉
@@ -260,16 +254,6 @@ def _to_form(value, kind: str):
     if kind == "bool":
         return bool(value)
 
-    if kind == "path":
-        text = str(value or "").strip()
-        return text.replace("\\", "/")
-
-    if kind == "rule":
-        # 目录规则：正斜杠分隔，去掉多余空白
-        text = str(value or "").replace("\\", "/")
-        parts = [part.strip() for part in text.split("/") if part.strip()]
-        return "/".join(parts) or DEFAULT_OPTION["dir_rule"]["rule"]
-
     if kind == "suffix":
         return "" if value in (None, "") else str(value)
 
@@ -299,15 +283,6 @@ def _from_form(raw, kind: str):
 
     if kind == "bool":
         return bool(raw), False
-
-    if kind == "path":
-        text = str(raw or "").strip().replace("\\", "/")
-        return text or DEFAULT_OPTION["dir_rule"]["base_dir"], False
-
-    if kind == "rule":
-        text = str(raw or "").replace("\\", "/")
-        parts = [part.strip() for part in text.split("/") if part.strip()]
-        return "/".join(parts) or DEFAULT_OPTION["dir_rule"]["rule"], False
 
     if kind == "suffix":
         text = str(raw or "").strip()

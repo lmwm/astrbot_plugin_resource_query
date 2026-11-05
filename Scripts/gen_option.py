@@ -21,6 +21,9 @@ PLUGIN_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = PLUGIN_ROOT / "modules" / "jm" / "option_default.py"
 DEFAULT_OUTPUT = PLUGIN_ROOT / "modules" / "jm" / "option.default.yml"
 
+# 与运行时一致：下载根固定在 plugin_data/<插件目录名>/JMDownload
+DEFAULT_BASE_DIR = f"plugin_data/{PLUGIN_ROOT.name}/JMDownload"
+
 
 def load_defaults():
     # 按文件路径加载 option_default.py（它没有包内相对导入）
@@ -57,8 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--base-dir",
-        default="JMDownload",
-        help="写入 dir_rule.base_dir 的相对路径（相对 AstrBot 数据根），默认 JMDownload",
+        default=DEFAULT_BASE_DIR,
+        help=f"写入 dir_rule.base_dir 的相对路径（相对 AstrBot 数据根），默认 {DEFAULT_BASE_DIR}",
     )
     parser.add_argument(
         "--stdout",

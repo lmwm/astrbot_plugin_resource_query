@@ -4,11 +4,13 @@
 # 这里只提供默认值与界面定义。
 # 消息模板用 {变量} 占位，每个模板可用的变量写在字段的 variables 里（Views 据此过滤标签）。
 
-# 插件名占位符：目录固定为 plugin_data/<插件>/JMDownload，改名后自动跟随
+# 插件名占位符：只在拼「相对数据根」的目录文案时使用；落盘前必须展开，
+# 否则会生成字面量 {plugin} 目录
 PLUGIN_NAME_TOKEN = "{plugin}"
 
-# 默认下载目录：相对 AstrBot 数据根；不作为配置项暴露，仅内部使用
-DEFAULT_DOWNLOAD_DIR = f"plugin_data/{PLUGIN_NAME_TOKEN}/JMDownload"
+# 下载目录模板（相对 AstrBot 数据根）：由 JMModule 展开成
+# plugin_data/<插件目录名>/JMDownload，禁止直接当路径使用
+DEFAULT_DOWNLOAD_DIR_TEMPLATE = f"plugin_data/{PLUGIN_NAME_TOKEN}/JMDownload"
 
 # 消息模板默认内容（按行拼接，便于阅读）
 _INFO_LINES = [

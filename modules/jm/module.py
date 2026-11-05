@@ -23,14 +23,13 @@ from ...core.module import ModuleBase
 from .config import (
     CONFIG_FIELDS,
     CONFIG_GROUPS,
-    DEFAULT_DOWNLOAD_DIR,
+    DEFAULT_DOWNLOAD_DIR_TEMPLATE,
     OPTION_FIELDS,
     PLUGIN_NAME_TOKEN,
     VAR_SAMPLES,
     VARIABLES,
 )
 from .models import AlbumInfo
-from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
@@ -44,6 +43,9 @@ _USAGE_TEXT = (
     "添加 redownload 可强制重新下载"
 )
 _INVALID_ID_TEXT = "无效的漫画 ID\n用法：/jm <漫画ID> [redownload]"
+
+# 6.27.0 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
+_REMOVED_CONFIG_KEYS = ("jm_download_dir", "jm_dir_rule")
 
 
 class JMModule(ModuleBase):
@@ -66,9 +68,10 @@ class JMModule(ModuleBase):
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
-        data_root = Path(get_astrbot_data_path())
+        data_root = Path(get_astrbot_data_path()).resolve()
         self._service = JMService(
-            download_dir=data_root / DEFAULT_DOWNLOAD_DIR,
+            download_dir=self._download_root(),
+            download_dir_text=self._download_dir_text(),
             legacy_dir=data_root / "JMDownload",
             option_file=self.get_config_path() / "option.yml",
         )
@@ -100,26 +103,23 @@ class JMModule(ModuleBase):
         config = super().load_module_config()
         config.update(self._service.read_option_values())
 
-        # 下载根固定：数据根下 plugin_data/<插件>/JMDownload
-        self._service.set_download_root(
-            self._default_download_root()
-        )
-
         # 旧文件里可能残留可配置的规则/路径，统一纠正为固定值
         if self._service.option_file.is_file():
-            self._normalize_option_file()
+            self._service.enforce_fixed_dir()
 
         self._service.bind_config(config)
         return config
 
-    def _default_download_root(self) -> Path:
-        data_root = Path(get_astrbot_data_path()).resolve()
-        text = DEFAULT_DOWNLOAD_DIR.replace(PLUGIN_NAME_TOKEN, self._plugin_name)
-        return (data_root / text).resolve()
+    def _download_dir_text(self) -> str:
+        # 下载根文案（相对数据根）：在这里展开插件名，禁止把 {plugin} 原样落盘
+        return DEFAULT_DOWNLOAD_DIR_TEMPLATE.replace(
+            PLUGIN_NAME_TOKEN, self._plugin_name
+        )
 
-    def _normalize_option_file(self) -> None:
-        # 下载路径与目录规则是固定值，文件里被改过的部分强制写回
-        self._service.enforce_fixed_dir()
+    def _download_root(self) -> Path:
+        # 下载根绝对路径：数据根/plugin_data/<插件>/JMDownload
+        data_root = Path(get_astrbot_data_path()).resolve()
+        return (data_root / self._download_dir_text()).resolve()
 
     def save_module_config(self, config: dict) -> bool:
         # 下载参数字段写 option.yml，config.json 只存其余字段
@@ -142,10 +142,10 @@ class JMModule(ModuleBase):
         from astrbot.api.web import json_response
 
         self._config_store.reset()
-        self._service.reset_option_file(DEFAULT_DIR_RULE)
-        self._service.bind_config(self.load_module_config())
+        self._service.reset_option_file()
+        config = self.load_module_config()
         return json_response(
-            {"status": "ok", "config": self.config_payload(self.load_module_config())}
+            {"status": "ok", "config": self.config_payload(config)}
         )
 
     #  生命周期
@@ -154,6 +154,7 @@ class JMModule(ModuleBase):
         # 插件初始化已统一补装过；这里再复查一次，缺库只记日志，不阻断加载
         await super().on_load()
         self._migrate_option_location()
+        self._cleanup_placeholder_dir()
         self._service.ensure_option_file()
         self._migrate_download_params()
         self._service.bind_config(self.load_module_config())
@@ -182,19 +183,47 @@ class JMModule(ModuleBase):
         except OSError as e:
             logger.warning(f"迁移 option.yml 失败：{type(e).__name__}: {e}")
 
-    def _migrate_download_params(self) -> None:
-        # 旧版把下载参数存在 config.json；搬到 option.yml 后删除旧键
-        legacy = {
-            key: value
-            for key, value in self._config_store.user_values().items()
-            if key in OPTION_FIELDS
-        }
-        if not legacy:
+    def _cleanup_placeholder_dir(self) -> None:
+        # 6.27.0 及更早版本构造服务时没展开 {plugin}，会在 plugin_data 下留
+        # 字面量 {plugin}/JMDownload 空目录；只删空目录，有内容时保留并提示
+        stray = (
+            Path(get_astrbot_data_path()).resolve()
+            / "plugin_data"
+            / PLUGIN_NAME_TOKEN
+        )
+        if not stray.is_dir():
             return
 
-        self._service.update_option_values(legacy)
-        self._config_store.remove_values(list(legacy))
-        logger.info(f"已将 {len(legacy)} 个下载参数迁移到 option.yml")
+        try:
+            entries = list(stray.iterdir())
+            if any(not entry.is_dir() or any(entry.iterdir()) for entry in entries):
+                logger.warning(f"残留目录 {stray} 内有文件，未自动删除，请手动确认")
+                return
+            for entry in entries:
+                entry.rmdir()
+            stray.rmdir()
+        except OSError as e:
+            logger.warning(f"清理残留目录失败：{stray}：{type(e).__name__}: {e}")
+            return
+
+        logger.info("已清理旧版本残留的空目录：plugin_data/{plugin}")
+
+    def _migrate_download_params(self) -> None:
+        # 旧版把下载参数存在 config.json；搬到 option.yml 后删除旧键
+        user_values = self._config_store.user_values()
+        legacy = {
+            key: value for key, value in user_values.items() if key in OPTION_FIELDS
+        }
+        if legacy:
+            self._service.update_option_values(legacy)
+            self._config_store.remove_values(list(legacy))
+            logger.info(f"已将 {len(legacy)} 个下载参数迁移到 option.yml")
+
+        # 6.27.0 已删除的配置项；旧 config.json 里可能还留着，一并清掉
+        removed = [key for key in user_values if key in _REMOVED_CONFIG_KEYS]
+        if removed:
+            self._config_store.remove_values(removed)
+            logger.info(f"已清理过期的 JM 配置项：{'、'.join(removed)}")
 
     #  指令
 

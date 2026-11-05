@@ -3,17 +3,14 @@
 # 只依赖标准库：运行时的 option.py 与 Scripts/gen_option.py 共用这一份默认值，
 # 避免脚本生成的默认文件与插件实际使用的不一致。
 
-# 默认目录规则：每本一个 JM<ID> 根，图片按章节分子目录
+# 默认且固定的目录规则：每本一个 JM<ID> 根，图片按章节分子目录
 # {title} 由模块解析（优先含中文的 oname，并做繁简转换）；也可直接用库字段：
 #   章节 Pid/Pindex/Pname/Ptitle/Psort，本子 Aid/Aname/Aoname/Atitle/Aauthor
 # 注意：多章节本子的首章 Ptitle 常为空，用 {title} 比 {Ptitle} 稳
 DIR_RULE = "Bd/JM{Aid}-P{Pindex:03}-{title}"
 
-# 6.14–6.19 用过的章节子目录规则；加载时自动迁移到 DIR_RULE
-LEGACY_CHAPTER_RULE = "Bd/JP{Pindex:03}-{Pid}"
-
-# 6.20–6.23 的旧默认（裸 Bd，图片直接堆在漫画根）；同样是模块写入的默认值
-LEGACY_FLAT_RULES = ("Bd",)
+# 旧版章节子目录（6.14–6.19 的 Bd/JP{Pindex:03}-{Pid}）由 paths.cleanup_legacy_layout
+# 在重新下载成功后清理，不在这里保留常量
 
 # 生成文件时的表头；option.py 与 Scripts/gen_option.py 共用
 HEADER = """# JMComic 下载参数（jmcomic 原生 option 配置文件）

@@ -26,6 +26,9 @@ _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"}
 _INVALID_FILENAME_CHARS = set('\\/:*?"<>|')
 _LEGACY_SUBDIRS = ("images", "pdf")
 
+# 6.14–6.19 的章节子目录 `JP001-<Pid>`：重新下载成功后一并清理
+_LEGACY_CHAPTER_DIR_RE = re.compile(r"^jp\d{3}-", re.IGNORECASE | re.ASCII)
+
 # 漫画根目录名：`JM 123456`（也匹配无空格的旧命名）
 _ALBUM_DIR_RE = re.compile(r"^JM\s*(\d+)$", re.IGNORECASE | re.ASCII)
 
@@ -34,8 +37,8 @@ class AlbumPaths:
     # 负责漫画目录的解析、创建、清理与旧数据迁移
 
     def __init__(self, download_dir: str | Path, normalize_zh: str | None = None) -> None:
+        # 只记录路径，不在构造时建目录：避免插件加载就产生空目录
         self.root = Path(download_dir)
-        self.root.mkdir(parents=True, exist_ok=True)
         self._normalize_zh = normalize_zh or None
 
     def set_normalize_zh(self, value: str | None) -> None:
@@ -98,44 +101,6 @@ class AlbumPaths:
     def info_file(self, album_id: str) -> Path:
         return self.album_root(album_id) / "info.json"
 
-    def current_image_dir(self, album_id: str) -> Path | None:
-        # 当前图片目录就是漫画根目录；不存在时返回 None
-        root = self.album_root(album_id)
-        return root if root.exists() else None
-
-    def list_images(self, album_id: str) -> list[Path]:
-        # 当前图片目录里的图片（含章节子目录），按相对路径去重并保留最新的一份
-        target = self.current_image_dir(album_id)
-        if target is None:
-            return []
-
-        try:
-            images = [
-                path
-                for path in target.rglob("*")
-                if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES
-            ]
-        except OSError:
-            return []
-
-        latest: dict[str, Path] = {}
-        for path in images:
-            try:
-                key = str(path.relative_to(target).with_suffix("")).lower()
-            except ValueError:
-                continue
-            previous = latest.get(key)
-            if previous is None:
-                latest[key] = path
-                continue
-            try:
-                if path.stat().st_mtime > previous.stat().st_mtime:
-                    latest[key] = path
-            except OSError:
-                continue
-
-        return sorted(latest.values(), key=lambda path: str(path).lower())
-
     def cleanup_legacy_layout(self, album_id: str, image_files: list[Path]) -> None:
         # 清理旧结构：images/pdf 子目录、旧扁平图片、旧内层目录
         # image_files 是本次下载的图片，保留它们的文件与所在目录
@@ -176,8 +141,11 @@ class AlbumPaths:
 
             if (
                 item.is_dir()
-                and item.name.lower().startswith(prefixes)
                 and item.resolve() not in keep_dirs
+                and (
+                    item.name.lower().startswith(prefixes)
+                    or _LEGACY_CHAPTER_DIR_RE.match(item.name)
+                )
             ):
                 shutil.rmtree(item, ignore_errors=True)
 
@@ -191,6 +159,12 @@ class AlbumPaths:
             if legacy.resolve() == self.root.resolve():
                 return 0
             entries = list(legacy.iterdir())
+        except OSError:
+            return 0
+
+        # 迁移目标根目录按需创建（构造时不再建目录）
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
         except OSError:
             return 0
 
