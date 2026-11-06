@@ -1,17 +1,17 @@
 # JM 下载目录布局
 #
-# 每部漫画一个根目录，PDF、info.json 与图片目录同级：
+# 每部漫画一个根目录，PDF、info.json 与章节图片目录同级：
 #   JMDownload/
 #   └── JM 1083382/                     ← 第一层目录带空格
-#       ├── JM1083382-漫画名称/          ← 图片目录
-#       │   ├── JP001-212214/            ← 章节子目录（Pindex-Pid）
-#       │   └── JP002-212215/
+#       ├── JM1083382-P001-漫画名称/     ← 章节图片目录（Pindex-标题）
+#       │   └── 00001.webp
+#       ├── JM1083382-P002-…
 #       ├── JM1083382-漫画名称.pdf
 #       └── info.json
 #
-# 章节子目录解决多章节图片同名（都是 00001.jpg）互相覆盖的问题；
-# 兼容策略：第一层目录允许无空格旧名 `JM<ID>`，图片目录同时认 `JM<ID>-`
-# 与 5.8.0 产生的 `JM <ID>-`，旧版直接放在图片目录下的扁平图片由清理逻辑移除。
+# 章节子目录解决多章节图片同名（都是 00001.webp）互相覆盖的问题；
+# 兼容策略：第一层目录允许无空格的旧名 `JM<ID>`；旧版扁平图片、images/pdf
+# 子目录与 JP<序号>-<Pid> 章节目录会在重新下载成功后清理。
 
 from __future__ import annotations
 
@@ -108,11 +108,10 @@ class AlbumPaths:
         if not root.exists():
             return
 
+        root_resolved = root.resolve()
         keep_files = {Path(path).resolve() for path in image_files}
         keep_dirs = {
-            path.resolve().parent
-            for path in image_files
-            if path.resolve().parent != root.resolve()
+            path.parent for path in keep_files if path.parent != root_resolved
         }
 
         for name in _LEGACY_SUBDIRS:

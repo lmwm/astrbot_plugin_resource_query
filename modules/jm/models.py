@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 # 进度回调：callback(已下载数, 总数（0 表示未知）)
 ProgressCallback = Callable[[int, int], Awaitable[None]]
@@ -17,12 +17,8 @@ class AlbumInfo:
     name: str
     author: str = "未知"
     oname: str = ""
-    description: str = ""
     chapter_count: int = 0
     page_count: int = 0
-    works: list[str] = field(default_factory=list)
-    actors: list[str] = field(default_factory=list)
-    tags: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         # 转换为 info.json 的内容
@@ -31,12 +27,8 @@ class AlbumInfo:
             "name": self.name,
             "oname": self.oname,
             "author": self.author,
-            "description": self.description,
             "chapter_count": self.chapter_count,
             "page_count": self.page_count,
-            "works": self.works,
-            "actors": self.actors,
-            "tags": self.tags,
         }
 
 
@@ -45,33 +37,8 @@ class DownloadResult:
     # 下载结果；成功时带 PDF 路径与大小，失败时 error 为可读原因
 
     success: bool
-    album_id: str = ""
-    album_name: str = ""
     album_info: AlbumInfo | None = None
     pdf_path: str | None = None
     pdf_name: str | None = None
     file_size_mb: float = 0.0
-    image_count: int = 0
-    from_cache: bool = False
     error: str = ""
-
-    def to_dict(self) -> dict:
-        result = {
-            "success": self.success,
-            "album_id": self.album_id,
-            "album_name": self.album_name,
-            "file_size_mb": self.file_size_mb,
-            "image_count": self.image_count,
-            "from_cache": self.from_cache,
-        }
-
-        if self.error:
-            result["error"] = self.error
-        if self.album_info:
-            result["album_info"] = self.album_info.to_dict()
-        if self.pdf_path:
-            result["pdf_path"] = self.pdf_path
-        if self.pdf_name:
-            result["pdf_name"] = self.pdf_name
-
-        return result

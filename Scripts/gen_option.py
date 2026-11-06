@@ -42,7 +42,12 @@ def render(module, base_dir: str) -> str:
     import yaml
 
     payload = copy.deepcopy(module.DEFAULT_OPTION)
-    payload["dir_rule"]["base_dir"] = base_dir
+    dir_rule = payload["dir_rule"]
+    payload["dir_rule"] = {
+        "rule": dir_rule["rule"],
+        "base_dir": base_dir,
+        "normalize_zh": dir_rule["normalize_zh"],
+    }
     return module.HEADER + yaml.safe_dump(
         payload, allow_unicode=True, sort_keys=False, default_flow_style=False
     )

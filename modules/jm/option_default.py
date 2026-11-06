@@ -21,12 +21,12 @@ HEADER = """# JMComic 下载参数（jmcomic 原生 option 配置文件）
 """
 
 # 与 jmcomic 2.7.10 的默认值对齐，只写插件关心的项；
+# dir_rule.base_dir 不在这里写：运行时由 default_payload() 按实际下载根填入
 # client.postman.meta_data 不预置，交给库默认（系统代理）
 DEFAULT_OPTION = {
     "log": True,
     "dir_rule": {
         "rule": DIR_RULE,
-        "base_dir": "JMDownload",
         "normalize_zh": "zh-cn",
     },
     "download": {

@@ -1,3 +1,17 @@
+## v6.27.2 (2026-11-06)
+
+### 变更
+
+- **JM 模块去重与精简**（除 `info.json` 内容变少外无行为变化）：
+  - `config.py` 的 12 个下载参数默认值改为直接引用 `option_default.DEFAULT_OPTION`，消除两处维护同一数字；单行消息模板默认值由「列表 + join」改为直接字符串；模板字段 `hint` 不再重复 `变量 {...}` 列表（Views 已按 `variables` 渲染可插入标签）
+  - 删除未被读取的 `AlbumInfo.description/works/actors/tags` 与 `DownloadResult.album_id/album_name/image_count/from_cache/to_dict`；`info.json` 不再写入这四个未使用字段（旧文件仍可正常读取）
+  - 合并 `info.json` 的两次读盘/写盘：`save_info(info, pdf)` 一次写入漫画信息与 PDF 状态，删除 `save_pdf_state`
+  - 删除 `JMService.download` 中模块永远走不到的缓存命中分支与 `force` / `cached` 参数（缓存判定由模块统一负责）；删除 `download_root` 属性、`_int`、重复的画质 clamp 与重复的 `ensure_album_root` 调用
+  - 缓存命中时的「从 PDF 文件名恢复标题」下沉到 `AlbumCache`，模块不再重复解析
+  - 进度百分比只由节流器计算一次，渲染回调直接接收 `percent`
+  - `pdf.py` 中三次重复的「JPEG 直嵌」判定合并为 `keep_original()`，去掉与 `_convert_images` 重复的全 JPEG 快路径
+  - `paths.py` 清理逻辑不再对同一路径重复 `resolve()`；目录布局注释与当前 `JM<ID>-P<序号>-<标题>` 结构对齐
+
 ## v6.27.1 (2026-11-05)
 
 ### 修复

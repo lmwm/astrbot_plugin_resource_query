@@ -35,8 +35,6 @@ def make_pdf(
 ) -> Path:
     # 生成 PDF 并返回路径；没有可用图片时抛 RuntimeError
     # 依赖在调用时才导入：缺库时让下载返回可读错误，而不是插件加载失败
-    from PIL import Image
-
     quality = max(1, min(95, int(quality)))
     album_root = Path(album_root)
     final_name = Path(str(pdf_name)).name
@@ -45,13 +43,7 @@ def make_pdf(
     tmp_dir = album_root / _TMP_DIR_NAME
 
     try:
-        # 默认画质下 JPEG 源图直接嵌入，不重新编码
-        if embed_jpeg and all(p.suffix.lower() in _JPEG_SUFFIXES for p in images):
-            pages = [str(p) for p in images]
-        else:
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            tmp_dir.mkdir(parents=True, exist_ok=True)
-            pages = _convert_images(images, tmp_dir, quality, embed_jpeg, Image)
+        pages = _convert_images(images, tmp_dir, quality, embed_jpeg)
 
         if not pages:
             raise RuntimeError("没有可用于生成 PDF 的图片")
@@ -71,14 +63,19 @@ def _convert_images(
     tmp_dir: Path,
     quality: int,
     embed_jpeg: bool,
-    image_cls,
 ) -> list[str]:
-    # 把非 JPEG（或需要重编码）的图片并行转成目标质量的 JPEG，按原顺序返回
+    # 把需要重编码的图片并行转成目标质量的 JPEG，按原顺序返回；
+    # 默认画质下 JPEG 源图直接嵌入，不重新编码
+    from PIL import Image
+
+    def keep_original(source: Path) -> bool:
+        return embed_jpeg and source.suffix.lower() in _JPEG_SUFFIXES
+
     def convert_one(item: tuple[int, Path]) -> tuple[str | None, Path | None, Exception | None]:
         index, source = item
         target = tmp_dir / f"{index:05d}.jpg"
         try:
-            with image_cls.open(source) as raw:
+            with Image.open(source) as raw:
                 rgb = raw if raw.mode in ("RGB", "L") else raw.convert("RGB")
                 try:
                     rgb.save(target, format="JPEG", quality=quality)
@@ -92,12 +89,14 @@ def _convert_images(
     work = [
         (index, source)
         for index, source in enumerate(images)
-        if not (embed_jpeg and source.suffix.lower() in _JPEG_SUFFIXES)
+        if not keep_original(source)
     ]
 
     converted: dict[int, str] = {}
     if work:
-        workers = min(_MAX_CONVERT_WORKERS, max(1, os.cpu_count() or 1), len(work))
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        workers = min(_MAX_CONVERT_WORKERS, os.cpu_count() or 1, len(work))
         with ThreadPoolExecutor(max_workers=workers) as executor:
             results = list(executor.map(convert_one, work))
 
@@ -117,7 +116,7 @@ def _convert_images(
 
     pages: list[str] = []
     for index, source in enumerate(images):
-        if embed_jpeg and source.suffix.lower() in _JPEG_SUFFIXES:
+        if keep_original(source):
             pages.append(str(source))
         elif index in converted:
             pages.append(converted[index])

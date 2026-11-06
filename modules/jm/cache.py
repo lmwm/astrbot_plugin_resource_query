@@ -61,14 +61,10 @@ class AlbumCache:
                 name=str(data.get("name", "未知")),
                 author=str(data.get("author", "未知")),
                 oname=str(data.get("oname", "") or ""),
-                description=str(data.get("description", "") or ""),
                 chapter_count=int(data.get("chapter_count", 0) or 0),
                 page_count=int(
                     data.get("page_count", data.get("image_count", 0)) or 0
                 ),
-                works=list(data.get("works", []) or []),
-                actors=list(data.get("actors", []) or []),
-                tags=list(data.get("tags", []) or []),
             )
         except (TypeError, ValueError):
             return None
@@ -82,25 +78,28 @@ class AlbumCache:
 
         return info
 
-    def save_info(self, info: AlbumInfo) -> None:
-        # 写入漫画信息；保留已记录的 PDF 状态，避免先写信息时把它冲掉
-        raw = self._read_raw(info.id) or {}
+    @staticmethod
+    def _info_from_pdf_name(album_id: str, pdf_name: str) -> AlbumInfo:
+        # info.json 无效时至少从 PDF 文件名恢复标题，避免缓存命中还要联网
+        prefix = f"JM{album_id}-"
+        title = ""
+        if pdf_name.lower().startswith(prefix.lower()) and pdf_name.lower().endswith(
+            ".pdf"
+        ):
+            title = pdf_name[len(prefix) : -len(".pdf")]
+        return AlbumInfo(id=str(album_id), name=title or "未知")
+
+    def save_info(self, info: AlbumInfo, pdf: dict | None = None) -> None:
+        # 写入漫画信息；pdf 给定时一并写入最近一次 PDF 状态（一次读盘、一次写盘）
+        # 未给 pdf 时保留已有记录，避免先写信息把它冲掉
         data = info.to_dict()
-        if isinstance(raw.get("pdf"), dict):
-            data["pdf"] = raw["pdf"]
+        if pdf is not None:
+            data["pdf"] = pdf
+        else:
+            raw = self._read_raw(info.id) or {}
+            if isinstance(raw.get("pdf"), dict):
+                data["pdf"] = raw["pdf"]
         self._write_raw(info.id, data)
-
-    #  PDF 状态
-
-    def save_pdf_state(self, album_id: str, pdf_path: Path) -> None:
-        # 记录最近一次成功生成的 PDF，供下次直接命中
-        raw = self._read_raw(album_id) or {}
-        try:
-            size_mb = round(pdf_path.stat().st_size / (1024 * 1024), 2)
-        except OSError:
-            size_mb = 0
-        raw["pdf"] = {"name": pdf_path.name, "size_mb": size_mb}
-        self._write_raw(album_id, raw)
 
     def _pdf_from_state(self, raw: dict | None, album_id: str) -> Path | None:
         # 按 info.json 记录的文件名取 PDF；只接受漫画根目录下的裸文件名
@@ -157,10 +156,9 @@ class AlbumCache:
             return None
 
         return {
-            "has_pdf": True,
             "pdf_path": str(pdf_path),
             "pdf_name": pdf_path.name,
             "pdf_size_mb": size_mb,
-            "album_id": album_id,
-            "info": self._to_info(raw, album_id),
+            "info": self._to_info(raw, album_id)
+            or self._info_from_pdf_name(album_id, pdf_path.name),
         }

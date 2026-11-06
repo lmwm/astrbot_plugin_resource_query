@@ -37,12 +37,13 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
+_USAGE_SHORT = "用法：/jm <漫画ID> [redownload]"
 _USAGE_TEXT = (
-    "用法：/jm <漫画ID> [redownload]\n"
+    f"{_USAGE_SHORT}\n"
     "例如：/jm 123456\n"
     "添加 redownload 可强制重新下载"
 )
-_INVALID_ID_TEXT = "无效的漫画 ID\n用法：/jm <漫画ID> [redownload]"
+_INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
 # 6.27.0 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
 _REMOVED_CONFIG_KEYS = ("jm_download_dir", "jm_dir_rule")
@@ -68,11 +69,12 @@ class JMModule(ModuleBase):
 
     def __init__(self, plugin_dir, plugin_name: str) -> None:
         super().__init__(plugin_dir, plugin_name)
-        data_root = Path(get_astrbot_data_path()).resolve()
+        self._data_root = Path(get_astrbot_data_path()).resolve()
+        download_dir_text = self._download_dir_text()
         self._service = JMService(
-            download_dir=self._download_root(),
-            download_dir_text=self._download_dir_text(),
-            legacy_dir=data_root / "JMDownload",
+            download_dir=(self._data_root / download_dir_text).resolve(),
+            download_dir_text=download_dir_text,
+            legacy_dir=self._data_root / "JMDownload",
             option_file=self.get_config_path() / "option.yml",
         )
         self._semaphore: asyncio.Semaphore | None = None
@@ -115,11 +117,6 @@ class JMModule(ModuleBase):
         return DEFAULT_DOWNLOAD_DIR_TEMPLATE.replace(
             PLUGIN_NAME_TOKEN, self._plugin_name
         )
-
-    def _download_root(self) -> Path:
-        # 下载根绝对路径：数据根/plugin_data/<插件>/JMDownload
-        data_root = Path(get_astrbot_data_path()).resolve()
-        return (data_root / self._download_dir_text()).resolve()
 
     def save_module_config(self, config: dict) -> bool:
         # 下载参数字段写 option.yml，config.json 只存其余字段
@@ -186,11 +183,7 @@ class JMModule(ModuleBase):
     def _cleanup_placeholder_dir(self) -> None:
         # 6.27.0 及更早版本构造服务时没展开 {plugin}，会在 plugin_data 下留
         # 字面量 {plugin}/JMDownload 空目录；只删空目录，有内容时保留并提示
-        stray = (
-            Path(get_astrbot_data_path()).resolve()
-            / "plugin_data"
-            / PLUGIN_NAME_TOKEN
-        )
+        stray = self._data_root / "plugin_data" / PLUGIN_NAME_TOKEN
         if not stray.is_dir():
             return
 
@@ -291,35 +284,26 @@ class JMModule(ModuleBase):
             log_separator(logger, f"JM 下载结束：ID {album_id}")
 
     async def _run_flow(self, album_id: int, event, force: bool, variables: dict):
-        config = self._service.config
-        defaults = self._config_store.default_values()
+        # 配置在加载/保存后已合并默认值；为空时（尚未加载）现读一次
+        config = self._service.config or self.load_module_config()
 
-        send_file = bool(config.get("jm_send_file", defaults.get("jm_send_file")))
-        show_info = bool(config.get("jm_show_info", defaults.get("jm_show_info")))
-        info_after = bool(
-            config.get("jm_info_after_download", defaults.get("jm_info_after_download"))
-        )
-        max_size_mb = parse_int(
-            config.get("jm_max_file_size"),
-            parse_int(defaults.get("jm_max_file_size"), 0),
-        )
+        send_file = bool(config.get("jm_send_file"))
+        show_info = bool(config.get("jm_show_info"))
+        info_after = bool(config.get("jm_info_after_download"))
+        max_size_mb = parse_int(config.get("jm_max_file_size"), 0)
 
-        # 缓存命中时完全不请求站点：用 info.json，缺失则从 PDF 文件名取标题
+        # 缓存命中时完全不请求站点；info.json 无效时缓存层会从 PDF 文件名恢复标题
         cached = self._service.check_local(album_id)
-        if not force and cached and cached.get("has_pdf"):
-            info = cached.get("info") or self._info_from_cached(album_id, cached)
+        if not force and cached:
+            info = cached["info"]
             variables.update(self._info_variables(album_id, info))
+            size_mb = cached["pdf_size_mb"]
+            sized = {**variables, "size_mb": f"{size_mb:.1f}"}
 
             if show_info:
                 yield event.plain_result(self._render_message("message_info", variables))
 
-            size_mb = cached.get("pdf_size_mb", 0)
-            yield event.plain_result(
-                self._render_message(
-                    "message_cached",
-                    {**variables, "size_mb": f"{size_mb:.1f}"},
-                )
-            )
+            yield event.plain_result(self._render_message("message_cached", sized))
 
             async for result in self._send_pdf(
                 event,
@@ -328,7 +312,7 @@ class JMModule(ModuleBase):
                 size_mb,
                 send_file,
                 max_size_mb,
-                {**variables, "size_mb": f"{size_mb:.1f}"},
+                sized,
             ):
                 yield result
             return
@@ -348,8 +332,6 @@ class JMModule(ModuleBase):
             result = await self._service.download(
                 album_id,
                 progress=reporter.report,
-                force=force,
-                cached=cached,
                 info=info,
             )
 
@@ -431,9 +413,9 @@ class JMModule(ModuleBase):
 
     #  进度
 
-    def _progress_text(self, done: int, total: int) -> str:
-        if total > 0:
-            percent = min(100, int(done / total * 100))
+    def _progress_text(self, done: int, total: int, percent: int) -> str:
+        # percent 由节流器算好传入（-1 表示总数未知），避免两处各算一遍
+        if percent >= 0:
             return self._render_message(
                 "message_progress",
                 {"percent": str(percent), "done": str(done), "total": str(total)},
@@ -448,49 +430,26 @@ class JMModule(ModuleBase):
         config = self._service.config or self.load_module_config()
         return render_template(config.get(key), variables)
 
-    def _info_from_cached(self, album_id: int, cached: dict) -> AlbumInfo:
-        # info.json 无效时至少从 PDF 文件名恢复标题，避免缓存命中还要联网
-        pdf_name = str(cached.get("pdf_name") or "")
-        prefix = f"JM{album_id}-"
-        title = ""
-        if (
-            pdf_name.lower().startswith(prefix.lower())
-            and pdf_name.lower().endswith(".pdf")
-        ):
-            title = pdf_name[len(prefix) : -len(".pdf")]
-        return AlbumInfo(id=str(album_id), name=title or "未知")
-
-    def _info_variables(self, album_id: int, info) -> dict:
-        page_count = int(getattr(info, "page_count", 0) or 0)
+    def _info_variables(self, album_id: int, info: AlbumInfo) -> dict:
         return {
             "id": str(album_id),
             "title": self._message_title(info),
-            "author": str(getattr(info, "author", "") or "").strip() or "未知",
-            "pages": str(page_count) if page_count > 0 else "未知",
-            "chapters": str(int(getattr(info, "chapter_count", 0) or 0)),
+            "author": info.author.strip() or "未知",
+            "pages": str(info.page_count) if info.page_count > 0 else "未知",
+            "chapters": str(info.chapter_count),
         }
 
     @staticmethod
-    def _message_title(info) -> str:
+    def _message_title(info: AlbumInfo) -> str:
         # 消息中优先显示含中文的 oname，否则用完整标题
-        title = pick_display_name(
-            getattr(info, "oname", ""),
-            getattr(info, "name", ""),
-        )
+        title = pick_display_name(info.oname, info.name)
         return title or "未知"
 
     #  并发控制
 
     def _get_semaphore(self, config: dict) -> asyncio.Semaphore:
         # 按配置限制同时下载的漫画数；配置变化时重建
-        defaults = self._config_store.default_values()
-        limit = max(
-            1,
-            parse_int(
-                config.get("jm_max_concurrent"),
-                parse_int(defaults.get("jm_max_concurrent"), 2),
-            ),
-        )
+        limit = max(1, parse_int(config.get("jm_max_concurrent"), 2))
 
         if self._semaphore is None or self._semaphore_limit != limit:
             self._semaphore = asyncio.Semaphore(limit)
@@ -533,7 +492,7 @@ class _ProgressReporter:
             if percent is None:
                 return
 
-            text = self._render(done, total)
+            text = self._render(done, total, percent)
             try:
                 await self._event.send(MessageChain().message(text))
             except Exception as e:  # noqa: BLE001

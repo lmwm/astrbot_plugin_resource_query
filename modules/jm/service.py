@@ -20,6 +20,7 @@ import asyncio
 from pathlib import Path
 
 from ...common.module_log import module_logger
+from ...common.utils import parse_int
 from . import option as jm_option
 from .cache import AlbumCache
 from .config import OPTION_FIELDS
@@ -78,11 +79,6 @@ class JMService:
     def option_file(self) -> Path:
         # option.yml 的位置（与 config.json 同目录，由 Views 表单维护）
         return self._option_file
-
-    @property
-    def download_root(self) -> Path:
-        # 当前下载根（构造时固定，不由配置决定）
-        return self.paths.root
 
     def bind_config(self, config: dict) -> None:
         self._config = config or {}
@@ -161,14 +157,9 @@ class JMService:
 
     #  配置构建
 
-    def _int(self, key: str, default: int) -> int:
-        try:
-            return int(self._config.get(key, default))
-        except (TypeError, ValueError):
-            return default
-
     def _quality(self) -> int:
-        return max(1, min(95, self._int("jm_jpeg_quality", 75)))
+        # 取值范围与 clamp 由 PDF 层统一处理
+        return parse_int(self._config.get("jm_jpeg_quality"), 75)
 
     def _build_option(self, image_dir: Path, rule: str | None = None):
         # 从 option 文件读取配置；rule 给定时用它决定图片子目录
@@ -228,12 +219,8 @@ class JMService:
             name=str(getattr(album, "name", "") or "未知"),
             author=str(getattr(album, "author", "") or "未知"),
             oname=str(getattr(album, "oname", "") or ""),
-            description=str(getattr(album, "description", "") or ""),
             chapter_count=len(getattr(album, "episode_list", None) or []),
             page_count=int(getattr(album, "page_count", 0) or 0),
-            works=list(getattr(album, "works", None) or []),
-            actors=list(getattr(album, "actors", None) or []),
-            tags=list(getattr(album, "tags", None) or []),
         )
 
     #  下载
@@ -242,36 +229,19 @@ class JMService:
         self,
         album_id: str,
         progress: ProgressCallback | None = None,
-        force: bool = False,
-        cached: dict | None = None,
         info: AlbumInfo | None = None,
     ) -> DownloadResult:
-        # 下载漫画并生成 PDF；本方法不抛异常，失败原因放在返回值里
+        # 无条件下载并生成 PDF（缓存判定由模块负责）；本方法不抛异常，失败原因放在返回值里
         try:
             import img2pdf  # noqa: F401
             import jmcomic  # noqa: F401
         except ImportError as e:
             logger.error(f"JM{album_id} 依赖导入失败：{e}")
             return DownloadResult(
-                success=False, album_id=album_id, error=f"依赖导入失败：{e}"
+                success=False, error=f"依赖导入失败：{e}"
             )
 
         await self.ensure_ready()
-
-        if not force:
-            if cached is None:
-                cached = self.cache.check_local(album_id)
-            if cached and cached.get("has_pdf"):
-                logger.info(f"JM{album_id} 命中本地缓存：{cached.get('pdf_name')}")
-                return DownloadResult(
-                    success=True,
-                    album_id=album_id,
-                    album_info=cached.get("info"),
-                    pdf_path=cached.get("pdf_path"),
-                    pdf_name=cached.get("pdf_name"),
-                    file_size_mb=cached.get("pdf_size_mb", 0),
-                    from_cache=True,
-                )
 
         if info is None:
             info = await self.get_album_info(album_id)
@@ -283,9 +253,7 @@ class JMService:
         except Exception as e:  # noqa: BLE001
             error = self._describe_error(e)
             logger.error(f"JM{album_id} 下载失败：{error}")
-            return DownloadResult(
-                success=False, album_id=album_id, album_info=info, error=error
-            )
+            return DownloadResult(success=False, album_info=info, error=error)
 
         logger.info(
             f"JM{album_id} 下载完成：{image_count} 张图片，"
@@ -294,13 +262,10 @@ class JMService:
 
         return DownloadResult(
             success=True,
-            album_id=album_id,
-            album_name=album_info.name,
             album_info=album_info,
             pdf_path=str(pdf_path),
             pdf_name=pdf_path.name,
             file_size_mb=round(size_mb, 2),
-            image_count=image_count,
         )
 
     async def _run_download(
@@ -337,12 +302,7 @@ class JMService:
 
         pdf_name = f"JM{album_id}-{self.paths.display_title(album_info)}"
         pdf_path = await asyncio.to_thread(
-            make_pdf,
-            self.paths.ensure_album_root(album_id),
-            pdf_name,
-            images,
-            quality,
-            embed_jpeg,
+            make_pdf, image_dir, pdf_name, images, quality, embed_jpeg
         )
 
         await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, images)
@@ -352,8 +312,11 @@ class JMService:
         except OSError:
             size_mb = 0.0
 
-        self.cache.save_info(album_info)
-        self.cache.save_pdf_state(album_id, pdf_path)
+        # 信息与 PDF 状态一次写入，避免两次读盘、两次写盘
+        self.cache.save_info(
+            album_info,
+            {"name": pdf_path.name, "size_mb": round(size_mb, 2)},
+        )
         return pdf_path, album_info, len(images), size_mb
 
     @staticmethod

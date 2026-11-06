@@ -50,9 +50,14 @@ def _ensure_log_bridge() -> None:
 
 
 def default_payload(base_dir: str | Path) -> dict:
-    # 完整默认配置；base_dir 换成实际的下载根目录
+    # 完整默认配置；base_dir 换成实际的下载根目录（保持 rule → base_dir → normalize_zh 顺序）
     payload = copy.deepcopy(DEFAULT_OPTION)
-    payload["dir_rule"]["base_dir"] = str(base_dir)
+    dir_rule = payload["dir_rule"]
+    payload["dir_rule"] = {
+        "rule": dir_rule["rule"],
+        "base_dir": str(base_dir),
+        "normalize_zh": dir_rule["normalize_zh"],
+    }
     return payload
 
 
