@@ -8,12 +8,13 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DownloadProgress:
-    # 一次下载进度快照；页数/章节总数为 0 表示未知
+    # 一次下载进度快照；页数是「当前/最近章节」的页数，总数为 0 表示未知
 
-    pages_done: int = 0
-    pages_total: int = 0
-    chapters_done: int = 0
+    chapter_index: int = 0
     chapters_total: int = 0
+    chapters_done: int = 0
+    chapter_pages_done: int = 0
+    chapter_pages_total: int = 0
 
 
 # 进度回调：callback(DownloadProgress)

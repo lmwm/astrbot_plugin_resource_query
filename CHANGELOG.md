@@ -1,3 +1,10 @@
+## v6.27.6 (2026-11-06)
+
+### 变更
+
+- **下载进度页数改为按章节统计**：新增 `chapter_index`（当前/最近章节序号）、`chapter_pages_done` / `chapter_pages_total`（本章已下载页数/总页数），不再展示全本累计页数；下载器按 `photo` 分章节计数，章节完成（`after_photo`）时把该章页数记为满
+- `message_progress` / `message_progress_count` 默认文案改为「下载中：第 x/y 章 · 页 m/n」；变量表移除 `pages_done` / `pages_total`，新增章节页数变量，`chapters_done` 保留供自定义模板使用
+
 ## v6.27.5 (2026-11-06)
 
 ### 变更

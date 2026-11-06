@@ -280,7 +280,7 @@ class JMService:
         # 默认画质对已是 JPEG 的源图直接嵌入；其它画质统一转码
         embed_jpeg = quality == 75
         image_dir = self.paths.ensure_album_root(album_id)
-        downloader_cls = _make_progress_downloader(progress, info.page_count)
+        downloader_cls = _make_progress_downloader(progress)
 
         result = await jmcomic.download_album_async(
             str(album_id),
@@ -332,48 +332,64 @@ class JMService:
         return f"{type(error).__name__}: {text}"
 
 
-def _make_progress_downloader(
-    callback: ProgressCallback | None,
-    initial_total_pages: int = 0,
-):
-    # 生成带进度的异步下载器类；回调只报数量，文案与节流由模块负责
+def _make_progress_downloader(callback: ProgressCallback | None):
+    # 生成带进度的异步下载器类；页数按章节统计，文案与节流由模块负责
     import jmcomic
 
     class _ProgressDownloader(jmcomic.JmAsyncDownloader):
         def __init__(self, option):
             super().__init__(option)
-            self._pages_done = 0
-            self._pages_total = max(0, int(initial_total_pages or 0))
+            # 当前/最近章节的序号与页数
+            self._chapter_index = 0
             self._chapters_done = 0
             self._chapters_total = 0
+            self._chapter_pages_done = 0
+            self._chapter_pages_total = 0
+            # 章节 id → 已下载页数
+            self._chapter_pages: dict[str, int] = {}
 
         def _snapshot(self) -> DownloadProgress:
             return DownloadProgress(
-                pages_done=self._pages_done,
-                pages_total=self._pages_total,
-                chapters_done=self._chapters_done,
+                chapter_index=self._chapter_index,
                 chapters_total=self._chapters_total,
+                chapters_done=self._chapters_done,
+                chapter_pages_done=self._chapter_pages_done,
+                chapter_pages_total=self._chapter_pages_total,
             )
+
+        def _select_chapter(self, photo) -> None:
+            # 切换进度到这张图所属章节，并读取该章节的页数
+            index = int(getattr(photo, "album_index", 0) or 0)
+            if index > 0:
+                self._chapter_index = index
+            self._chapter_pages_total = len(getattr(photo, "page_arr", None) or [])
+            photo_id = str(getattr(photo, "photo_id", "") or "")
+            self._chapter_pages_done = self._chapter_pages.get(photo_id, 0)
 
         async def before_album(self, album):
             await super().before_album(album)
-            # 总数以实际拿到的 album 为准；接口没给页数时用 album.page_count 补
+            # 总数以实际拿到的 album 为准
             episodes = getattr(album, "episode_list", None) or []
             if episodes:
                 self._chapters_total = len(episodes)
-            if not self._pages_total:
-                self._pages_total = max(
-                    0, int(getattr(album, "page_count", 0) or 0)
-                )
 
         async def after_photo(self, photo):
             await super().after_photo(photo)
             self._chapters_done += 1
+            self._select_chapter(photo)
+            # 章节完成时该章所有图片都已落盘，页数直接记为满
+            self._chapter_pages_done = self._chapter_pages_total
             await self._notify()
 
         async def after_image(self, image, img_save_path):
             await super().after_image(image, img_save_path)
-            self._pages_done += 1
+            photo = getattr(image, "from_photo", None)
+            if photo is not None:
+                photo_id = str(getattr(photo, "photo_id", "") or "")
+                self._chapter_pages[photo_id] = (
+                    self._chapter_pages.get(photo_id, 0) + 1
+                )
+                self._select_chapter(photo)
             await self._notify()
 
         async def _notify(self) -> None:

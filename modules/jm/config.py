@@ -214,28 +214,34 @@ CONFIG_FIELDS = {
         "label": "下载进度",
         "type": "template",
         "group": "messages",
-        "hint": "总页数已知时使用（显示页数与章节数）",
+        "hint": "章节页数已知时使用（页数按章节统计）",
         "default": (
-            "下载中：页 {pages_done}/{pages_total} · "
-            "章节 {chapters_done}/{chapters_total}"
+            "下载中：第 {chapter_index}/{chapters_total} 章 · "
+            "页 {chapter_pages_done}/{chapter_pages_total}"
         ),
         "variables": [
-            "pages_done",
-            "pages_total",
-            "chapters_done",
+            "chapter_index",
             "chapters_total",
+            "chapters_done",
+            "chapter_pages_done",
+            "chapter_pages_total",
         ],
     },
     "message_progress_count": {
-        "label": "下载进度（总页数未知）",
+        "label": "下载进度（章节页数未知）",
         "type": "template",
         "group": "messages",
-        "hint": "总页数未知时使用（显示已下载页数与章节数）",
+        "hint": "章节页数未知时使用（只报本章已下载页数）",
         "default": (
-            "下载中：已下载 {pages_done} 页 · "
-            "章节 {chapters_done}/{chapters_total}"
+            "下载中：第 {chapter_index}/{chapters_total} 章 · "
+            "已下载 {chapter_pages_done} 页"
         ),
-        "variables": ["pages_done", "chapters_done", "chapters_total"],
+        "variables": [
+            "chapter_index",
+            "chapters_total",
+            "chapters_done",
+            "chapter_pages_done",
+        ],
     },
     "message_done": {
         "label": "下载完成",
@@ -329,10 +335,11 @@ VARIABLES = {
     "chapters": "章节数",
     "size_mb": "PDF 大小（MB）",
     "max_size_mb": "文件大小上限（MB）",
-    "pages_done": "已下载页数",
-    "pages_total": "总页数",
-    "chapters_done": "已完成章节数",
+    "chapter_index": "当前章节序号",
     "chapters_total": "总章节数",
+    "chapters_done": "已完成章节数",
+    "chapter_pages_done": "本章已下载页数",
+    "chapter_pages_total": "本章总页数",
     "error": "错误信息",
     "deps": "缺失的依赖",
 }
@@ -346,10 +353,11 @@ VAR_SAMPLES = {
     "chapters": "3",
     "size_mb": "7.7",
     "max_size_mb": "10",
-    "pages_done": "12",
-    "pages_total": "26",
-    "chapters_done": "1",
-    "chapters_total": "3",
+    "chapter_index": "1",
+    "chapters_total": "2",
+    "chapters_done": "0",
+    "chapter_pages_done": "12",
+    "chapter_pages_total": "25",
     "error": "网络连接超时",
     "deps": "jmcomic、Pillow",
 }

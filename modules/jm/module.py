@@ -417,15 +417,18 @@ class JMModule(ModuleBase):
     #  进度
 
     def _progress_text(self, progress: DownloadProgress) -> str:
-        # 总页数未知时换用另一条模板；章节总数未知时显示 ?
-        total = progress.pages_total
+        # 页数按章节统计；章节/页数总数未知时显示 ?
+        total = progress.chapter_pages_total
         variables = {
-            "pages_done": str(progress.pages_done),
-            "pages_total": str(total) if total > 0 else "?",
-            "chapters_done": str(progress.chapters_done),
+            "chapter_index": (
+                str(progress.chapter_index) if progress.chapter_index > 0 else "?"
+            ),
             "chapters_total": (
                 str(progress.chapters_total) if progress.chapters_total > 0 else "?"
             ),
+            "chapters_done": str(progress.chapters_done),
+            "chapter_pages_done": str(progress.chapter_pages_done),
+            "chapter_pages_total": str(total) if total > 0 else "?",
         }
         key = "message_progress" if total > 0 else "message_progress_count"
         return self._render_message(key, variables)
