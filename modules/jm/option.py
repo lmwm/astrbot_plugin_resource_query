@@ -171,7 +171,7 @@ def _dir_rule_instance(jmcomic, rule: str, image_dir: Path, normalize_zh):
     )
 
 
-def load_option(path: Path, image_dir: Path, rule: str | None = None):
+def load_option(path: Path, image_dir: Path, rule: str | None = None, force: bool = False):
     # 读取 option 文件；每本漫画的目录在运行时替换，不写回文件
     import jmcomic
 
@@ -185,6 +185,10 @@ def load_option(path: Path, image_dir: Path, rule: str | None = None):
         )
     else:
         option.dir_rule.base_dir = str(image_dir)
+
+    # 强制全量重下：忽略库的「图片已存在」缓存（PDF 由调用方重新生成）
+    if force:
+        option.download.cache = False
 
     # 库只有 disable_jm_log，没有对应的 enable；log 在运行中改成 true 后
     # 需要显式恢复开关，否则会被之前加载的 log: false 永久关掉

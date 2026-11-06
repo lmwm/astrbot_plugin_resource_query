@@ -37,11 +37,11 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
-_USAGE_SHORT = "用法：/jm <漫画ID> [redownload]"
+_USAGE_SHORT = "用法：/jm [-F] <漫画ID>"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
-    "例如：/jm 123456\n"
-    "添加 redownload 可强制重新下载"
+    "例如：/jm 123456、/jm -F 123456\n"
+    "-F（不区分大小写）表示忽略本地图片与 PDF，全部重新下载"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
@@ -221,7 +221,7 @@ class JMModule(ModuleBase):
     #  指令
 
     def get_commands(self) -> list[dict]:
-        return [{"name": "jm", "desc": "下载 JMComic 漫画：/jm <ID> [redownload]"}]
+        return [{"name": "jm", "desc": "下载 JMComic 漫画：/jm [-F] <ID>"}]
 
     async def handle_command(self, command: str, args: list[str], event):
         if command != "jm":
@@ -235,7 +235,12 @@ class JMModule(ModuleBase):
             yield event.plain_result(_USAGE_TEXT)
             return
 
-        album_id = normalize_album_id(args[0])
+        album_text, force = self._split_force(args)
+        if not album_text:
+            yield event.plain_result(_USAGE_TEXT)
+            return
+
+        album_id = normalize_album_id(album_text)
         if album_id is None:
             yield event.plain_result(_INVALID_ID_TEXT)
             return
@@ -255,12 +260,17 @@ class JMModule(ModuleBase):
             )
             return
 
-        force = len(args) > 1 and args[1].lower() == "redownload"
-
         await self._service.ensure_ready()
 
         async for r in self._download_and_send(album_id, event, force):
             yield r
+
+    @staticmethod
+    def _split_force(args: list[str]) -> tuple[str, bool]:
+        # -F（不区分大小写）写在 ID 前；返回（ID 文本, 是否强制全量重下）
+        if args and args[0].lower() == "-f":
+            return (args[1] if len(args) > 1 else ""), True
+        return (args[0] if args else ""), False
 
     #  流程编排
 
@@ -332,6 +342,7 @@ class JMModule(ModuleBase):
             result = await self._service.download(
                 album_id,
                 progress=reporter.report,
+                force=force,
                 info=info,
             )
 

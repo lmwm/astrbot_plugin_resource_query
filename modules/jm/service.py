@@ -161,12 +161,13 @@ class JMService:
         # 取值范围与 clamp 由 PDF 层统一处理
         return parse_int(self._config.get("jm_jpeg_quality"), 75)
 
-    def _build_option(self, image_dir: Path, rule: str | None = None):
+    def _build_option(self, image_dir: Path, rule: str | None = None, force: bool = False):
         # 从 option 文件读取配置；rule 给定时用它决定图片子目录
+        # force 时忽略图片缓存，全部重新下载
         self.ensure_option_file()
         if not self._option_file.is_file():
             raise RuntimeError(f"下载失败：option 配置文件不存在：{self._option_file}")
-        return jm_option.load_option(self._option_file, image_dir, rule)
+        return jm_option.load_option(self._option_file, image_dir, rule, force)
 
     #  本地缓存
 
@@ -229,9 +230,11 @@ class JMService:
         self,
         album_id: str,
         progress: ProgressCallback | None = None,
+        force: bool = False,
         info: AlbumInfo | None = None,
     ) -> DownloadResult:
-        # 无条件下载并生成 PDF（缓存判定由模块负责）；本方法不抛异常，失败原因放在返回值里
+        # 无条件下载并生成 PDF（缓存判定由模块负责）；force 时图片与 PDF 全部重下
+        # 本方法不抛异常，失败原因放在返回值里
         try:
             import img2pdf  # noqa: F401
             import jmcomic  # noqa: F401
@@ -248,7 +251,7 @@ class JMService:
 
         try:
             pdf_path, album_info, image_count, size_mb = await self._run_download(
-                album_id, info, progress
+                album_id, info, progress, force
             )
         except Exception as e:  # noqa: BLE001
             error = self._describe_error(e)
@@ -273,6 +276,7 @@ class JMService:
         album_id: str,
         info: AlbumInfo,
         progress: ProgressCallback | None,
+        force: bool = False,
     ) -> tuple[Path, AlbumInfo, int, float]:
         import jmcomic
 
@@ -284,7 +288,7 @@ class JMService:
 
         result = await jmcomic.download_album_async(
             str(album_id),
-            option=self._build_option(image_dir, self._dir_rule(album_id, info)),
+            option=self._build_option(image_dir, self._dir_rule(album_id, info), force),
             downloader=downloader_cls,
             check_exception=True,
         )
