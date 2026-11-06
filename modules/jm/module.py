@@ -344,6 +344,9 @@ class JMModule(ModuleBase):
             )
             return
 
+        # 补发最终进度：页数/章节数能看到 50/50、2/2 这类完成状态
+        await reporter.flush()
+
         # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
             variables.update(self._info_variables(album_id, result.album_info))
@@ -463,7 +466,7 @@ class JMModule(ModuleBase):
 
 
 class _ProgressReporter:
-    # 下载进度节流：从下载开始计时，固定每 5 秒最多发一条
+    # 下载进度节流：从下载开始计时，固定每 5 秒最多发一条；下载成功后补发最终进度
     # 用 event.send 直接发送，避免把 MessageEventResult 塞回指令生成器
 
     _MIN_INTERVAL = 5.0
@@ -472,10 +475,13 @@ class _ProgressReporter:
         self._event = event
         self._render = render
         self._last_at = asyncio.get_running_loop().time()
+        self._latest: DownloadProgress | None = None
+        self._last_sent: DownloadProgress | None = None
         self._disabled = False
         self._lock = asyncio.Lock()
 
     async def report(self, progress: DownloadProgress) -> None:
+        self._latest = progress
         if self._disabled:
             return
 
@@ -486,16 +492,31 @@ class _ProgressReporter:
             now = asyncio.get_running_loop().time()
             if now - self._last_at < self._MIN_INTERVAL:
                 return
+            await self._send(progress, now)
 
-            text = self._render(progress)
-            try:
-                await self._event.send(MessageChain().message(text))
-            except Exception as e:  # noqa: BLE001
-                self._disabled = True
-                logger.warning(
-                    f"发送进度消息失败，后续进度不再发送："
-                    f"{type(e).__name__}: {e}"
-                )
+    async def flush(self) -> None:
+        # 下载结束后补发最终快照，确保页数/章节数能看到 完成状态；
+        # 本次下载一条进度都没发过时不补，避免短下载多一条消息
+        async with self._lock:
+            if self._disabled or self._last_sent is None or self._latest is None:
                 return
+            if self._latest == self._last_sent:
+                return
+            await self._send(
+                self._latest, asyncio.get_running_loop().time()
+            )
 
-            self._last_at = now
+    async def _send(self, progress: DownloadProgress, now: float) -> None:
+        text = self._render(progress)
+        try:
+            await self._event.send(MessageChain().message(text))
+        except Exception as e:  # noqa: BLE001
+            self._disabled = True
+            logger.warning(
+                f"发送进度消息失败，后续进度不再发送："
+                f"{type(e).__name__}: {e}"
+            )
+            return
+
+        self._last_at = now
+        self._last_sent = progress
