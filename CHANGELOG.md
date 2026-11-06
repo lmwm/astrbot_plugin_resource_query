@@ -1,3 +1,12 @@
+## v6.27.3 (2026-11-06)
+
+### 变更
+
+- **JM 下载进度改为页数与章节数**：`message_progress` 默认显示「下载中：页 {pages_done}/{pages_total} · 章节 {chapters_done}/{chapters_total}」；总页数未知时改用 `message_progress_count`，显示已下载页数与章节数。变量表移除 `percent` / `done` / `total`，新增 `pages_done` / `pages_total` / `chapters_done` / `chapters_total`
+- **进度发送固定每 5 秒最多一条**（此前是 2 秒 + 10% 步长）：首个图片/章节回调只记时间、不立即发送，后续回调按 5 秒间隔；章节完成（`after_photo`）与图片完成（`after_image`）共用同一节流
+- 进度数据改为 `DownloadProgress` 快照（页数、章节数各自的已完成/总数）；下载器在 `before_album` 用实际 album 校正总数，`after_photo` 统计已完成章节
+- **旧自定义进度模板需手动更新**：若曾在 Views 保存过使用 `{percent}` / `{done}` / `{total}` 的进度模板，升级后这些变量不再提供，请在「消息模板」里按新变量重写；未保存过自定义模板时默认值直接生效
+
 ## v6.27.2 (2026-11-06)
 
 ### 变更

@@ -5,8 +5,19 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
-# 进度回调：callback(已下载数, 总数（0 表示未知）)
-ProgressCallback = Callable[[int, int], Awaitable[None]]
+
+@dataclass(frozen=True)
+class DownloadProgress:
+    # 一次下载进度快照；页数/章节总数为 0 表示未知
+
+    pages_done: int = 0
+    pages_total: int = 0
+    chapters_done: int = 0
+    chapters_total: int = 0
+
+
+# 进度回调：callback(DownloadProgress)
+ProgressCallback = Callable[[DownloadProgress], Awaitable[None]]
 
 
 @dataclass

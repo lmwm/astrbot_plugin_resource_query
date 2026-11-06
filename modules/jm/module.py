@@ -29,7 +29,7 @@ from .config import (
     VAR_SAMPLES,
     VARIABLES,
 )
-from .models import AlbumInfo
+from .models import AlbumInfo, DownloadProgress
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
@@ -413,15 +413,19 @@ class JMModule(ModuleBase):
 
     #  进度
 
-    def _progress_text(self, done: int, total: int, percent: int) -> str:
-        # percent 由节流器算好传入（-1 表示总数未知），避免两处各算一遍
-        if percent >= 0:
-            return self._render_message(
-                "message_progress",
-                {"percent": str(percent), "done": str(done), "total": str(total)},
-            )
-
-        return self._render_message("message_progress_count", {"done": str(done)})
+    def _progress_text(self, progress: DownloadProgress) -> str:
+        # 总页数未知时换用另一条模板；章节总数未知时显示 ?
+        total = progress.pages_total
+        variables = {
+            "pages_done": str(progress.pages_done),
+            "pages_total": str(total) if total > 0 else "?",
+            "chapters_done": str(progress.chapters_done),
+            "chapters_total": (
+                str(progress.chapters_total) if progress.chapters_total > 0 else "?"
+            ),
+        }
+        key = "message_progress" if total > 0 else "message_progress_count"
+        return self._render_message(key, variables)
 
     #  模板与变量
 
@@ -459,40 +463,35 @@ class JMModule(ModuleBase):
 
 
 class _ProgressReporter:
-    # 下载进度节流：按百分比/张数步长与最小时间间隔发送，失败后不再重试
+    # 下载进度节流：固定每 5 秒最多发一条；首个回调只记时间，避免刚下载就刷屏
     # 用 event.send 直接发送，避免把 MessageEventResult 塞回指令生成器
 
-    _MIN_STEP = 10
-    _MIN_INTERVAL = 2.0
+    _MIN_INTERVAL = 5.0
 
     def __init__(self, event, render) -> None:
         self._event = event
         self._render = render
-        self._last_percent = -1
-        self._last_count = 0
         self._last_at = 0.0
         self._disabled = False
         self._lock = asyncio.Lock()
 
-    async def report(self, done: int, total: int) -> None:
-        if self._disabled or done <= 0:
-            return
-
-        loop = asyncio.get_running_loop()
-        percent = self._due(done, total, loop.time())
-        if percent is None:
+    async def report(self, progress: DownloadProgress) -> None:
+        if self._disabled:
             return
 
         async with self._lock:
             if self._disabled:
                 return
-            # 等锁期间可能已被其它回调推进
-            now = loop.time()
-            percent = self._due(done, total, now)
-            if percent is None:
+
+            now = asyncio.get_running_loop().time()
+            if self._last_at == 0.0:
+                # 刚开始下载不发送，下一次回调起按 5 秒间隔
+                self._last_at = now
+                return
+            if now - self._last_at < self._MIN_INTERVAL:
                 return
 
-            text = self._render(done, total, percent)
+            text = self._render(progress)
             try:
                 await self._event.send(MessageChain().message(text))
             except Exception as e:  # noqa: BLE001
@@ -504,24 +503,3 @@ class _ProgressReporter:
                 return
 
             self._last_at = now
-            if total > 0:
-                self._last_percent = percent
-            else:
-                self._last_count = done
-
-    def _due(self, done: int, total: int, now: float) -> int | None:
-        # 返回本次应发送的百分比；未知总数时返回 -1，None 表示不发送
-        if total > 0:
-            percent = min(100, int(done * 100 / total))
-            final = percent >= 100 and self._last_percent < 100
-            if percent < self._last_percent + self._MIN_STEP and not final:
-                return None
-            if now - self._last_at < self._MIN_INTERVAL and not final:
-                return None
-            return percent
-
-        if done < self._last_count + self._MIN_STEP:
-            return None
-        if now - self._last_at < self._MIN_INTERVAL:
-            return None
-        return -1

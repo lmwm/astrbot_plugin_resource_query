@@ -214,17 +214,28 @@ CONFIG_FIELDS = {
         "label": "下载进度",
         "type": "template",
         "group": "messages",
-        "hint": "总页数已知时使用（百分比）",
-        "default": "下载中 {percent}%",
-        "variables": ["percent", "done", "total"],
+        "hint": "总页数已知时使用（显示页数与章节数）",
+        "default": (
+            "下载中：页 {pages_done}/{pages_total} · "
+            "章节 {chapters_done}/{chapters_total}"
+        ),
+        "variables": [
+            "pages_done",
+            "pages_total",
+            "chapters_done",
+            "chapters_total",
+        ],
     },
     "message_progress_count": {
         "label": "下载进度（总页数未知）",
         "type": "template",
         "group": "messages",
-        "hint": "总页数未知时使用（只报已下载张数）",
-        "default": "已下载 {done} 张",
-        "variables": ["done"],
+        "hint": "总页数未知时使用（显示已下载页数与章节数）",
+        "default": (
+            "下载中：已下载 {pages_done} 页 · "
+            "章节 {chapters_done}/{chapters_total}"
+        ),
+        "variables": ["pages_done", "chapters_done", "chapters_total"],
     },
     "message_done": {
         "label": "下载完成",
@@ -318,9 +329,10 @@ VARIABLES = {
     "chapters": "章节数",
     "size_mb": "PDF 大小（MB）",
     "max_size_mb": "文件大小上限（MB）",
-    "percent": "下载进度（%）",
-    "done": "已下载张数",
-    "total": "总张数",
+    "pages_done": "已下载页数",
+    "pages_total": "总页数",
+    "chapters_done": "已完成章节数",
+    "chapters_total": "总章节数",
     "error": "错误信息",
     "deps": "缺失的依赖",
 }
@@ -334,9 +346,10 @@ VAR_SAMPLES = {
     "chapters": "3",
     "size_mb": "7.7",
     "max_size_mb": "10",
-    "percent": "42",
-    "done": "12",
-    "total": "26",
+    "pages_done": "12",
+    "pages_total": "26",
+    "chapters_done": "1",
+    "chapters_total": "3",
     "error": "网络连接超时",
     "deps": "jmcomic、Pillow",
 }

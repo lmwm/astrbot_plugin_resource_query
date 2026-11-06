@@ -24,7 +24,7 @@ from ...common.utils import parse_int
 from . import option as jm_option
 from .cache import AlbumCache
 from .config import OPTION_FIELDS
-from .models import AlbumInfo, DownloadResult, ProgressCallback
+from .models import AlbumInfo, DownloadProgress, DownloadResult, ProgressCallback
 from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 from .paths import AlbumPaths
 from .pdf import make_pdf
@@ -334,7 +334,7 @@ class JMService:
 
 def _make_progress_downloader(
     callback: ProgressCallback | None,
-    initial_total: int = 0,
+    initial_total_pages: int = 0,
 ):
     # 生成带进度的异步下载器类；回调只报数量，文案与节流由模块负责
     import jmcomic
@@ -342,15 +342,42 @@ def _make_progress_downloader(
     class _ProgressDownloader(jmcomic.JmAsyncDownloader):
         def __init__(self, option):
             super().__init__(option)
-            self._done = 0
-            # 总数未知时只报已下载张数，不在章节开始时逐章累加，
-            # 避免多章节尚未全部开始时误报 100%
-            self._total = max(0, int(initial_total or 0))
+            self._pages_done = 0
+            self._pages_total = max(0, int(initial_total_pages or 0))
+            self._chapters_done = 0
+            self._chapters_total = 0
+
+        def _snapshot(self) -> DownloadProgress:
+            return DownloadProgress(
+                pages_done=self._pages_done,
+                pages_total=self._pages_total,
+                chapters_done=self._chapters_done,
+                chapters_total=self._chapters_total,
+            )
+
+        async def before_album(self, album):
+            await super().before_album(album)
+            # 总数以实际拿到的 album 为准；接口没给页数时用 album.page_count 补
+            episodes = getattr(album, "episode_list", None) or []
+            if episodes:
+                self._chapters_total = len(episodes)
+            if not self._pages_total:
+                self._pages_total = max(
+                    0, int(getattr(album, "page_count", 0) or 0)
+                )
+
+        async def after_photo(self, photo):
+            await super().after_photo(photo)
+            self._chapters_done += 1
+            await self._notify()
 
         async def after_image(self, image, img_save_path):
             await super().after_image(image, img_save_path)
-            self._done += 1
+            self._pages_done += 1
+            await self._notify()
+
+        async def _notify(self) -> None:
             if callback is not None:
-                await callback(self._done, self._total)
+                await callback(self._snapshot())
 
     return _ProgressDownloader
