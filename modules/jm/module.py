@@ -463,7 +463,7 @@ class JMModule(ModuleBase):
 
 
 class _ProgressReporter:
-    # 下载进度节流：固定每 5 秒最多发一条；首个回调只记时间，避免刚下载就刷屏
+    # 下载进度节流：从下载开始计时，固定每 5 秒最多发一条
     # 用 event.send 直接发送，避免把 MessageEventResult 塞回指令生成器
 
     _MIN_INTERVAL = 5.0
@@ -471,7 +471,7 @@ class _ProgressReporter:
     def __init__(self, event, render) -> None:
         self._event = event
         self._render = render
-        self._last_at = 0.0
+        self._last_at = asyncio.get_running_loop().time()
         self._disabled = False
         self._lock = asyncio.Lock()
 
@@ -484,10 +484,6 @@ class _ProgressReporter:
                 return
 
             now = asyncio.get_running_loop().time()
-            if self._last_at == 0.0:
-                # 刚开始下载不发送，下一次回调起按 5 秒间隔
-                self._last_at = now
-                return
             if now - self._last_at < self._MIN_INTERVAL:
                 return
 
