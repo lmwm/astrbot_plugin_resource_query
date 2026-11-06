@@ -26,11 +26,6 @@ def _option_default(*keys: str):
 
 
 # 多行模板默认内容（单行模板直接写在字段里）
-_INFO_LINES = [
-    "I  D：{id}",
-    "标题：{title}",
-    "作者：{author}",
-]
 _MISSING_DEPS_LINES = [
     "× 缺少运行依赖：{deps}",
     "插件初始化时已尝试自动补装但未成功，请在 AstrBot 插件管理中重装插件；",
@@ -172,10 +167,10 @@ CONFIG_FIELDS = {
         "default": 10,
     },
     "jm_show_info": {
-        "label": "发送漫画信息",
+        "label": "发送漫画详情",
         "type": "bool",
         "group": "output",
-        "hint": "是否单独发送一条漫画详情（ID、标题、作者）；使用本地缓存时同样会发送",
+        "hint": "开启后在下载流程中单独发送完整漫画详情，并附封面图；使用本地缓存时同样发送",
         "default": False,
     },
     "jm_info_after_download": {
@@ -187,12 +182,45 @@ CONFIG_FIELDS = {
     },
     #  消息模板
     "message_info": {
-        "label": "漫画信息",
+        "label": "漫画详情",
         "type": "template",
         "group": "messages",
-        "hint": "单独发送的漫画详情；使用本地缓存时同样会发送",
-        "default": "\n".join(_INFO_LINES),
-        "variables": ["id", "title", "author", "pages", "chapters"],
+        "hint": "开启「发送漫画详情」后发送；封面图会单独发送",
+        "default": (
+            "📖 {title}\n"
+            "🆔 JM{id}\n"
+            "🔗 {url}\n"
+            "✍️ 作者：{authors}\n"
+            "📅 发布：{pub_date} · 更新：{update_date}\n"
+            "📄 页数：{pages} · 章节：{chapters}\n"
+            "👀 观看：{views} · ❤️ 点赞：{likes} · 💬 评论：{comments}\n"
+            "🏷️ 标签：{tags}\n"
+            "🎭 人物：{actors}\n"
+            "📚 作品：{works}\n"
+            "📝 简介：{description}\n"
+            "📑 章节：\n"
+            "{chapter_list}"
+        ),
+        "variables": [
+            "id",
+            "title",
+            "author",
+            "authors",
+            "pages",
+            "chapters",
+            "url",
+            "cover",
+            "pub_date",
+            "update_date",
+            "views",
+            "likes",
+            "comments",
+            "tags",
+            "actors",
+            "works",
+            "description",
+            "chapter_list",
+        ],
     },
     "message_start": {
         "label": "开始下载",
@@ -331,8 +359,21 @@ VARIABLES = {
     "id": "漫画 ID",
     "title": "标题",
     "author": "作者",
+    "authors": "全部作者",
     "pages": "页数",
     "chapters": "章节数",
+    "url": "作品链接",
+    "cover": "封面图 URL（实际封面单独发送，仅模板展示用）",
+    "pub_date": "发布日期",
+    "update_date": "更新日期",
+    "views": "观看数",
+    "likes": "点赞数",
+    "comments": "评论数",
+    "tags": "标签",
+    "actors": "登场人物",
+    "works": "作品系列",
+    "description": "简介",
+    "chapter_list": "章节列表（多行）",
     "size_mb": "PDF 大小（MB）",
     "max_size_mb": "文件大小上限（MB）",
     "chapter_index": "当前章节序号",
@@ -349,8 +390,21 @@ VAR_SAMPLES = {
     "id": "181251",
     "title": "示例漫画",
     "author": "示例作者",
+    "authors": "作者A、作者B",
     "pages": "26",
     "chapters": "3",
+    "url": "https://18comic.vip/album/181251/",
+    "cover": "https://cdn.example.com/cover.jpg",
+    "pub_date": "2024-01-01",
+    "update_date": "2024-02-01",
+    "views": "12000",
+    "likes": "345",
+    "comments": "12",
+    "tags": "标签A、标签B",
+    "actors": "人物A、人物B",
+    "works": "作品A",
+    "description": "示例简介",
+    "chapter_list": "第1话 上（id: 181251）\n第2话 下（id: 181252）",
     "size_mb": "7.7",
     "max_size_mb": "10",
     "chapter_index": "1",

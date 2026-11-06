@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(frozen=True)
@@ -31,6 +31,19 @@ class AlbumInfo:
     oname: str = ""
     chapter_count: int = 0
     page_count: int = 0
+    authors: list[str] = field(default_factory=list)
+    description: str = ""
+    pub_date: str = ""
+    update_date: str = ""
+    views: str = ""
+    likes: str = ""
+    comments: int = 0
+    tags: list[str] = field(default_factory=list)
+    actors: list[str] = field(default_factory=list)
+    works: list[str] = field(default_factory=list)
+    url: str = ""
+    cover: str = ""
+    chapter_lines: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         # 转换为 info.json 的内容
@@ -41,6 +54,19 @@ class AlbumInfo:
             "author": self.author,
             "chapter_count": self.chapter_count,
             "page_count": self.page_count,
+            "authors": self.authors,
+            "description": self.description,
+            "pub_date": self.pub_date,
+            "update_date": self.update_date,
+            "views": self.views,
+            "likes": self.likes,
+            "comments": self.comments,
+            "tags": self.tags,
+            "actors": self.actors,
+            "works": self.works,
+            "url": self.url,
+            "cover": self.cover,
+            "chapter_lines": self.chapter_lines,
         }
 
 

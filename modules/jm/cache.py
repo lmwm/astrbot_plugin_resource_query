@@ -51,6 +51,13 @@ class AlbumCache:
         return self._to_info(self._read_raw(album_id), album_id)
 
     @staticmethod
+    def _str_list(value) -> list[str]:
+        # info.json 里的列表字段可能缺失或类型不对，统一成字符串列表
+        if not isinstance(value, (list, tuple)):
+            return []
+        return [str(item) for item in value]
+
+    @staticmethod
     def _to_info(data: dict | None, album_id: str) -> AlbumInfo | None:
         if not data:
             return None
@@ -65,6 +72,21 @@ class AlbumCache:
                 page_count=int(
                     data.get("page_count", data.get("image_count", 0)) or 0
                 ),
+                authors=AlbumCache._str_list(data.get("authors")),
+                description=str(data.get("description", "") or ""),
+                pub_date=str(data.get("pub_date", "") or ""),
+                update_date=str(data.get("update_date", "") or ""),
+                views=str(data.get("views", "") or ""),
+                likes=str(data.get("likes", "") or ""),
+                comments=int(
+                    data.get("comments", data.get("comment_count", 0)) or 0
+                ),
+                tags=AlbumCache._str_list(data.get("tags")),
+                actors=AlbumCache._str_list(data.get("actors")),
+                works=AlbumCache._str_list(data.get("works")),
+                url=str(data.get("url", "") or ""),
+                cover=str(data.get("cover", "") or ""),
+                chapter_lines=AlbumCache._str_list(data.get("chapter_lines")),
             )
         except (TypeError, ValueError):
             return None

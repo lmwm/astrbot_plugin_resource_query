@@ -1,3 +1,12 @@
+## v6.29.0 (2026-11-07)
+
+### 变更
+
+- **「发送漫画信息」升级为「发送漫画详情」**：`jm_show_info` 开启后按 `message_info` 模板发送与 `jmv` 同源的完整详情（链接、全部作者、发布/更新日期、页数、章节数、观看/点赞/评论、标签、人物、作品、简介、章节列表），并在文本后单独发送封面图
+- `AlbumInfo` 与 `info.json` 增加详情字段（`authors` / `description` / `pub_date` / `update_date` / `views` / `likes` / `comments` / `tags` / `actors` / `works` / `url` / `cover` / `chapter_lines`），缓存命中时也能发送详情
+- `message_info` 新增模板变量：`authors`、`url`、`cover`、`pub_date`、`update_date`、`views`、`likes`、`comments`、`tags`、`actors`、`works`、`description`、`chapter_list`；原有 `id/title/author/pages/chapters` 保留
+- 封面发送失败只记日志，不影响下载；旧 `info.json` 缺少新字段时对应位置显示「未知/无」，重新下载后自动补全
+
 ## v6.28.0 (2026-11-06)
 
 ### 变更

@@ -311,7 +311,8 @@ class JMModule(ModuleBase):
             sized = {**variables, "size_mb": f"{size_mb:.1f}"}
 
             if show_info:
-                yield event.plain_result(self._render_message("message_info", variables))
+                async for item in self._send_info(event, variables):
+                    yield item
 
             yield event.plain_result(self._render_message("message_cached", sized))
 
@@ -327,12 +328,13 @@ class JMModule(ModuleBase):
                 yield result
             return
 
-        info = await self._service.get_album_info(album_id)
+        info = await self._service.get_album_info(album_id, force=force)
         variables.update(self._info_variables(album_id, info))
 
         # 详情在下载前发送
         if show_info and not info_after:
-            yield event.plain_result(self._render_message("message_info", variables))
+            async for item in self._send_info(event, variables):
+                yield item
 
         yield event.plain_result(self._render_message("message_start", variables))
 
@@ -363,7 +365,8 @@ class JMModule(ModuleBase):
             variables.update(self._info_variables(album_id, result.album_info))
 
         if show_info and info_after:
-            yield event.plain_result(self._render_message("message_info", variables))
+            async for item in self._send_info(event, variables):
+                yield item
 
         if not result.pdf_path:
             yield event.plain_result(self._render_message("message_no_pdf", variables))
@@ -425,6 +428,18 @@ class JMModule(ModuleBase):
                 )
             )
 
+    async def _send_info(self, event, variables: dict):
+        # 先发详情文本，再按需附封面图；封面发送失败只记日志，不影响下载流程
+        yield event.plain_result(self._render_message("message_info", variables))
+
+        cover = str(variables.get("cover") or "").strip()
+        if not cover.startswith("http"):
+            return
+        try:
+            await event.send(MessageChain().url_image(cover))
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"发送封面失败：{type(e).__name__}: {e}")
+
     #  进度
 
     def _progress_text(self, progress: DownloadProgress) -> str:
@@ -452,12 +467,49 @@ class JMModule(ModuleBase):
         return render_template(config.get(key), variables)
 
     def _info_variables(self, album_id: int, info: AlbumInfo) -> dict:
+        def text(value, default: str = "未知") -> str:
+            raw = str(value or "").strip()
+            return raw or default
+
+        def date_text(value) -> str:
+            raw = text(value)
+            return "未知" if raw == "0" else raw
+
+        def join_list(values, default: str = "无", limit: int = 10) -> str:
+            items = [str(item).strip() for item in (values or []) if str(item).strip()]
+            if not items:
+                return default
+            if len(items) > limit:
+                return "、".join(items[:limit]) + f" …等{len(items)}个"
+            return "、".join(items)
+
+        authors = list(info.authors) or (
+            [info.author] if info.author.strip() and info.author != "未知" else []
+        )
+        chapters = [
+            str(item).strip()
+            for item in (info.chapter_lines or [])
+            if str(item).strip()
+        ]
         return {
             "id": str(album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
+            "authors": join_list(authors),
             "pages": str(info.page_count) if info.page_count > 0 else "未知",
             "chapters": str(info.chapter_count),
+            "url": text(info.url),
+            "cover": text(info.cover, ""),
+            "pub_date": date_text(info.pub_date),
+            "update_date": date_text(info.update_date),
+            "views": text(info.views),
+            "likes": text(info.likes),
+            "comments": str(info.comments),
+            "tags": join_list(info.tags),
+            "actors": join_list(info.actors),
+            "works": join_list(info.works),
+            "description": text(info.description, "无"),
+            "chapter_list": "\n".join(chapters) or "无",
         }
 
     @staticmethod

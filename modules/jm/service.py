@@ -177,11 +177,12 @@ class JMService:
 
     #  漫画信息
 
-    async def get_album_info(self, album_id: str) -> AlbumInfo:
-        # 优先读 info.json 缓存，未命中时请求站点并写回
-        cached = self.cache.load_info(album_id)
-        if cached:
-            return cached
+    async def get_album_info(self, album_id: str, force: bool = False) -> AlbumInfo:
+        # 优先读 info.json 缓存；force 时跳过缓存，重新请求站点（-F 全量重下用）
+        if not force:
+            cached = self.cache.load_info(album_id)
+            if cached:
+                return cached
 
         try:
             album = await self._fetch_album(album_id)
@@ -215,13 +216,58 @@ class JMService:
 
     @staticmethod
     def _to_info(album_id: str, album) -> AlbumInfo:
+        authors = [
+            str(item) for item in (getattr(album, "authors", None) or [])
+        ]
+        episodes = list(getattr(album, "episode_list", None) or [])
+        chapter_lines: list[str] = []
+        for entry in episodes:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+                continue
+            pid, pindex = entry[0], entry[1]
+            pname = str(entry[2] if len(entry) > 2 else "").strip()
+            line = f"第{pindex}话 {pname}（id: {pid}）" if pname else (
+                f"第{pindex}话（id: {pid}）"
+            )
+            chapter_lines.append(line)
+
+        try:
+            from jmcomic import JmcomicText
+
+            url = JmcomicText.format_album_url(str(album_id))
+            cover = JmcomicText.get_album_cover_url(str(album_id))
+        except Exception:  # noqa: BLE001
+            url = cover = ""
+
+        author = authors[0] if authors else str(
+            getattr(album, "author", "") or "未知"
+        )
         return AlbumInfo(
             id=str(album_id),
             name=str(getattr(album, "name", "") or "未知"),
-            author=str(getattr(album, "author", "") or "未知"),
+            author=author,
             oname=str(getattr(album, "oname", "") or ""),
-            chapter_count=len(getattr(album, "episode_list", None) or []),
+            chapter_count=len(episodes),
             page_count=int(getattr(album, "page_count", 0) or 0),
+            authors=authors,
+            description=str(getattr(album, "description", "") or ""),
+            pub_date=str(getattr(album, "pub_date", "") or ""),
+            update_date=str(getattr(album, "update_date", "") or ""),
+            views=str(getattr(album, "views", "") or ""),
+            likes=str(getattr(album, "likes", "") or ""),
+            comments=int(getattr(album, "comment_count", 0) or 0),
+            tags=[
+                str(item) for item in (getattr(album, "tags", None) or [])
+            ],
+            actors=[
+                str(item) for item in (getattr(album, "actors", None) or [])
+            ],
+            works=[
+                str(item) for item in (getattr(album, "works", None) or [])
+            ],
+            url=url,
+            cover=cover,
+            chapter_lines=chapter_lines,
         )
 
     #  下载
@@ -247,7 +293,7 @@ class JMService:
         await self.ensure_ready()
 
         if info is None:
-            info = await self.get_album_info(album_id)
+            info = await self.get_album_info(album_id, force=force)
 
         try:
             pdf_path, album_info, image_count, size_mb = await self._run_download(
