@@ -58,6 +58,26 @@ class AlbumCache:
         return [str(item) for item in value]
 
     @staticmethod
+    def _chapter_pages(value) -> list[dict]:
+        # info.json 的 chapter_pages：只接受 [{index, pages}] 结构
+        if not isinstance(value, (list, tuple)):
+            return []
+        result = []
+        for item in value:
+            if not isinstance(item, dict):
+                continue
+            try:
+                result.append(
+                    {
+                        "index": str(item.get("index") or ""),
+                        "pages": int(item.get("pages", 0) or 0),
+                    }
+                )
+            except (TypeError, ValueError):
+                continue
+        return result
+
+    @staticmethod
     def _to_info(data: dict | None, album_id: str) -> AlbumInfo | None:
         if not data:
             return None
@@ -87,6 +107,7 @@ class AlbumCache:
                 url=str(data.get("url", "") or ""),
                 cover=str(data.get("cover", "") or ""),
                 chapter_lines=AlbumCache._str_list(data.get("chapter_lines")),
+                chapter_pages=AlbumCache._chapter_pages(data.get("chapter_pages")),
             )
         except (TypeError, ValueError):
             return None

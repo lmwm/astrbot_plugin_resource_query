@@ -71,6 +71,11 @@ _LEGACY_FULL_INFO_TEMPLATE = (
     "{chapter_list}"
 )
 
+# 6.32.0 的三行简短模板；6.33.0 起迁移为分章页数格式
+_LEGACY_SHORT_INFO_TEMPLATE = (
+    "📖 {title}\n🆔 JM{id}\n📄 {pages} 页 · {chapters} 章"
+)
+
 
 class JMModule(ModuleBase):
     # JMComic 漫画下载模块
@@ -275,16 +280,20 @@ class JMModule(ModuleBase):
             logger.info(f"已清理过期的 JM 配置项：{'、'.join(removed)}")
 
     def _migrate_info_template(self) -> None:
-        # 旧默认完整模板自动换成简短格式；用户自定义模板不改
+        # 旧默认模板自动换成当前格式；用户自定义模板不改
         saved = self._config_store.user_values().get("message_info")
         if not isinstance(saved, str):
             return
-        if saved.strip() != _LEGACY_FULL_INFO_TEMPLATE.strip():
+        legacy_templates = (
+            _LEGACY_FULL_INFO_TEMPLATE,
+            _LEGACY_SHORT_INFO_TEMPLATE,
+        )
+        if saved.strip() not in {item.strip() for item in legacy_templates}:
             return
         self._config_store.save_values(
             {"message_info": CONFIG_FIELDS["message_info"]["default"]}
         )
-        logger.info("已将旧的完整漫画信息模板迁移为简短格式")
+        logger.info("已将旧的漫画信息模板迁移为分章页数格式")
 
     #  指令
 
@@ -633,13 +642,31 @@ class JMModule(ModuleBase):
             for item in (info.chapter_lines or [])
             if str(item).strip()
         ]
+        page_lines: list[str] = []
+        for item in info.chapter_pages or []:
+            if not isinstance(item, dict):
+                continue
+            index = str(item.get("index") or "").strip()
+            pages = int(item.get("pages", 0) or 0)
+            page_text = f"{pages}页" if pages > 0 else "页数未知"
+            page_lines.append(f"第{index}章 - {page_text}")
+        if not page_lines:
+            if info.chapter_count == 1 and info.page_count > 0:
+                page_lines = [f"第001章 - {info.page_count}页"]
+            else:
+                page_lines = ["章节页数未知"]
+        if info.chapter_count > 5:
+            page_lines.append("…")
+        total_pages = str(info.page_count) if info.page_count > 0 else "未知"
         return {
             "id": str(info.id or album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
             "authors": join_list(authors),
-            "pages": str(info.page_count) if info.page_count > 0 else "未知",
+            "pages": total_pages,
             "chapters": str(info.chapter_count),
+            "chapter_pages": "\n".join(page_lines),
+            "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
             "url": text(info.url),
             "cover": text(info.cover, ""),
             "pub_date": date_text(info.pub_date),

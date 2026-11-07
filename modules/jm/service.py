@@ -185,7 +185,7 @@ class JMService:
                 return cached
 
         try:
-            album = await self._fetch_album(album_id)
+            album, chapter_pages = await self._fetch_album(album_id)
         except ImportError:
             return AlbumInfo(id=str(album_id), name="未知（jmcomic 未安装）")
         except Exception as e:  # noqa: BLE001
@@ -197,6 +197,7 @@ class JMService:
             logger.info(f"JM{album_id} 实为章节，已定位到本子 JM{actual_id}")
 
         info = self._to_info(album_id, album)
+        info.chapter_pages = chapter_pages
         self.cache.save_info(info)
         return info
 
@@ -206,9 +207,49 @@ class JMService:
         client = option.new_jm_async_client()
         try:
             await client.setup()
-            return await client.get_album_detail(str(album_id))
+            album = await client.get_album_detail(str(album_id))
+            chapter_pages = await self._first_chapter_pages(client, album)
+            return album, chapter_pages
         finally:
             await client.close()
+
+    @staticmethod
+    async def _first_chapter_pages(client, album) -> list[dict]:
+        # 只取前 5 章每章页数；单章节直接用本子总页数，避免额外请求
+        episodes = list(getattr(album, "episode_list", None) or [])
+        if not episodes:
+            return []
+        total = len(episodes)
+        if total == 1:
+            return [
+                {
+                    "index": "001",
+                    "pages": int(getattr(album, "page_count", 0) or 0),
+                }
+            ]
+
+        result: list[dict] = []
+        for entry in episodes[: min(5, total)]:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+                continue
+            pid, pindex = entry[0], entry[1]
+            pages = 0
+            try:
+                photo = await client.get_photo_detail(
+                    str(pid), fetch_album=False, fetch_scramble_id=False
+                )
+                pages = len(getattr(photo, "page_arr", None) or [])
+            except Exception as e:  # noqa: BLE001
+                logger.warning(
+                    f"JM{pid} 章节页数获取失败：{type(e).__name__}: {e}"
+                )
+            index_text = str(pindex).strip()
+            if index_text.isdigit():
+                index_text = f"{int(index_text):03d}"
+            else:
+                index_text = index_text.zfill(3)
+            result.append({"index": index_text, "pages": pages})
+        return result
 
     def _dir_rule(self, album_id: str, info: AlbumInfo) -> str:
         # 固定规则：JM<ID>-P<章节序号:03>-<标题>
@@ -360,6 +401,8 @@ class JMService:
         album_info = self._to_info(album_id, album) if album is not None else info
         # 接口未提供总页数时用实际下载数修正（HTML 端有值，API 端常为 0）
         album_info.page_count = len(images)
+        if not album_info.chapter_pages and info.chapter_pages:
+            album_info.chapter_pages = list(info.chapter_pages)
 
         pdf_name = f"JM{album_id}-{self.paths.display_title(album_info)}"
         pdf_path: Path | None = None

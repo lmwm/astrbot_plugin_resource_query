@@ -44,6 +44,7 @@ class AlbumInfo:
     url: str = ""
     cover: str = ""
     chapter_lines: list[str] = field(default_factory=list)
+    chapter_pages: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         # 转换为 info.json 的内容
@@ -67,6 +68,7 @@ class AlbumInfo:
             "url": self.url,
             "cover": self.cover,
             "chapter_lines": self.chapter_lines,
+            "chapter_pages": self.chapter_pages,
         }
 
 
