@@ -174,10 +174,10 @@ CONFIG_FIELDS = {
         "default": 10,
     },
     "jm_show_info": {
-        "label": "发送漫画详情",
+        "label": "发送漫画信息",
         "type": "bool",
         "group": "output",
-        "hint": "开启后在下载流程中单独发送完整漫画详情，并附封面图；使用本地缓存时同样发送",
+        "hint": "开启后在下载流程中单独发送简短信息（标题、ID、页数、章节数）；使用本地缓存时同样发送",
         "default": False,
     },
     "jm_info_after_download": {
@@ -189,25 +189,11 @@ CONFIG_FIELDS = {
     },
     #  消息模板
     "message_info": {
-        "label": "漫画详情",
+        "label": "漫画信息",
         "type": "template",
         "group": "messages",
-        "hint": "开启「发送漫画详情」后发送；封面图会单独发送",
-        "default": (
-            "📖 {title}\n"
-            "🆔 JM{id}\n"
-            "🔗 {url}\n"
-            "✍️ 作者：{authors}\n"
-            "📅 发布：{pub_date} · 更新：{update_date}\n"
-            "📄 页数：{pages} · 章节：{chapters}\n"
-            "👀 观看：{views} · ❤️ 点赞：{likes} · 💬 评论：{comments}\n"
-            "🏷️ 标签：{tags}\n"
-            "🎭 人物：{actors}\n"
-            "📚 作品：{works}\n"
-            "📝 简介：{description}\n"
-            "📑 章节：\n"
-            "{chapter_list}"
-        ),
+        "hint": "简短信息：标题、ID、页数、章节数；可自行添加详情变量",
+        "default": "📖 {title}\n🆔 JM{id}\n📄 {pages} 页 · {chapters} 章",
         "variables": [
             "id",
             "title",
@@ -337,7 +323,7 @@ VARIABLES = {
     "pages": "页数",
     "chapters": "章节数",
     "url": "作品链接",
-    "cover": "封面图 URL（实际封面单独发送，仅模板展示用）",
+    "cover": "封面图 URL（仅模板展示用，不会自动发图）",
     "pub_date": "发布日期",
     "update_date": "更新日期",
     "views": "观看数",

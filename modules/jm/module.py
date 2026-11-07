@@ -13,7 +13,6 @@ import time
 from pathlib import Path
 from typing import ClassVar
 
-from astrbot.api.event import MessageChain
 from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
@@ -53,6 +52,23 @@ _REMOVED_CONFIG_KEYS = (
     "jm_dir_rule",
     "message_progress",
     "message_progress_count",
+)
+
+# 6.29.0–6.31.1 的完整漫画信息默认模板；6.32.0 起自动迁移为简短格式
+_LEGACY_FULL_INFO_TEMPLATE = (
+    "📖 {title}\n"
+    "🆔 JM{id}\n"
+    "🔗 {url}\n"
+    "✍️ 作者：{authors}\n"
+    "📅 发布：{pub_date} · 更新：{update_date}\n"
+    "📄 页数：{pages} · 章节：{chapters}\n"
+    "👀 观看：{views} · ❤️ 点赞：{likes} · 💬 评论：{comments}\n"
+    "🏷️ 标签：{tags}\n"
+    "🎭 人物：{actors}\n"
+    "📚 作品：{works}\n"
+    "📝 简介：{description}\n"
+    "📑 章节：\n"
+    "{chapter_list}"
 )
 
 
@@ -189,6 +205,7 @@ class JMModule(ModuleBase):
         self._cleanup_placeholder_dir()
         self._service.ensure_option_file()
         self._migrate_download_params()
+        self._migrate_info_template()
         self._service.bind_config(self.load_module_config())
         missing = dependencies.missing(self.required_packages)
         if missing:
@@ -256,6 +273,18 @@ class JMModule(ModuleBase):
         if removed:
             self._config_store.remove_values(removed)
             logger.info(f"已清理过期的 JM 配置项：{'、'.join(removed)}")
+
+    def _migrate_info_template(self) -> None:
+        # 旧默认完整模板自动换成简短格式；用户自定义模板不改
+        saved = self._config_store.user_values().get("message_info")
+        if not isinstance(saved, str):
+            return
+        if saved.strip() != _LEGACY_FULL_INFO_TEMPLATE.strip():
+            return
+        self._config_store.save_values(
+            {"message_info": CONFIG_FIELDS["message_info"]["default"]}
+        )
+        logger.info("已将旧的完整漫画信息模板迁移为简短格式")
 
     #  指令
 
@@ -517,16 +546,8 @@ class JMModule(ModuleBase):
             )
 
     async def _send_info(self, event, variables: dict):
-        # 先发详情文本，再按需附封面图；封面发送失败只记日志，不影响下载流程
+        # 只发简短信息；封面等其它字段仍可通过模板变量自行添加
         yield event.plain_result(self._render_message("message_info", variables))
-
-        cover = str(variables.get("cover") or "").strip()
-        if not cover.startswith("http"):
-            return
-        try:
-            await event.send(MessageChain().url_image(cover))
-        except Exception as e:  # noqa: BLE001
-            logger.warning(f"发送封面失败：{type(e).__name__}: {e}")
 
     #  任务查询（/jm LS）
 
