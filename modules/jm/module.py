@@ -247,8 +247,12 @@ class JMModule(ModuleBase):
             self._config_store.remove_values(list(legacy))
             logger.info(f"已将 {len(legacy)} 个下载参数迁移到 option.yml")
 
-        # 6.27.0 已删除的配置项；旧 config.json 里可能还留着，一并清掉
-        removed = [key for key in user_values if key in _REMOVED_CONFIG_KEYS]
+        # 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
+        removed = [
+            key
+            for key in _REMOVED_CONFIG_KEYS
+            if key in self._config_store.user_keys()
+        ]
         if removed:
             self._config_store.remove_values(removed)
             logger.info(f"已清理过期的 JM 配置项：{'、'.join(removed)}")

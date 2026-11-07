@@ -1,3 +1,9 @@
+## v6.31.1 (2026-11-07)
+
+### 修复
+
+- **过期配置键未被清理**：`ConfigStore.user_values()` 只返回仍在字段定义里的键，导致 `_REMOVED_CONFIG_KEYS` 中的 `message_progress` / `message_progress_count`（以及更早的 `jm_download_dir` / `jm_dir_rule`）无法被移除。新增 `ConfigStore.user_keys()` 返回配置文件里的全部实际键，加载时按它清理
+
 ## v6.31.0 (2026-11-07)
 
 ### 变更

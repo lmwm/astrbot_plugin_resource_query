@@ -212,6 +212,10 @@ class ConfigStore:
             key: copy.deepcopy(data[key]) for key in self._fields if key in data
         }
 
+    def user_keys(self) -> set[str]:
+        # 用户配置里实际存在的全部键（含已删除字段），用于清理过期配置
+        return set(self._read())
+
     #  写入
 
     def _write(self, data: dict) -> bool:
