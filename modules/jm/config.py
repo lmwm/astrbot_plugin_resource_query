@@ -245,39 +245,6 @@ CONFIG_FIELDS = {
         "default": "JM{id} 使用本地缓存…",
         "variables": ["id", "title", "size_mb"],
     },
-    "message_progress": {
-        "label": "下载进度",
-        "type": "template",
-        "group": "messages",
-        "hint": "章节页数已知时使用（页数按章节统计）",
-        "default": (
-            "下载中：第 {chapter_index}/{chapters_total} 章 · "
-            "页 {chapter_pages_done}/{chapter_pages_total}"
-        ),
-        "variables": [
-            "chapter_index",
-            "chapters_total",
-            "chapters_done",
-            "chapter_pages_done",
-            "chapter_pages_total",
-        ],
-    },
-    "message_progress_count": {
-        "label": "下载进度（章节页数未知）",
-        "type": "template",
-        "group": "messages",
-        "hint": "章节页数未知时使用（只报本章已下载页数）",
-        "default": (
-            "下载中：第 {chapter_index}/{chapters_total} 章 · "
-            "已下载 {chapter_pages_done} 页"
-        ),
-        "variables": [
-            "chapter_index",
-            "chapters_total",
-            "chapters_done",
-            "chapter_pages_done",
-        ],
-    },
     "message_done": {
         "label": "下载完成",
         "type": "template",
@@ -383,11 +350,6 @@ VARIABLES = {
     "chapter_list": "章节列表（多行）",
     "size_mb": "PDF 大小（MB）",
     "max_size_mb": "文件大小上限（MB）",
-    "chapter_index": "当前章节序号",
-    "chapters_total": "总章节数",
-    "chapters_done": "已完成章节数",
-    "chapter_pages_done": "本章已下载页数",
-    "chapter_pages_total": "本章总页数",
     "error": "错误信息",
     "deps": "缺失的依赖",
 }
@@ -414,11 +376,6 @@ VAR_SAMPLES = {
     "chapter_list": "第1话 上（id: 181251）\n第2话 下（id: 181252）",
     "size_mb": "7.7",
     "max_size_mb": "10",
-    "chapter_index": "1",
-    "chapters_total": "2",
-    "chapters_done": "0",
-    "chapter_pages_done": "12",
-    "chapter_pages_total": "25",
     "error": "网络连接超时",
     "deps": "jmcomic、Pillow",
 }

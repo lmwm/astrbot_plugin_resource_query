@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import time
 from pathlib import Path
 from typing import ClassVar
 
@@ -37,16 +38,22 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
-_USAGE_SHORT = "用法：/jm [-F] <漫画ID>"
+_USAGE_SHORT = "用法：/jm [-F] <漫画ID>；/jm LS 查看当前任务"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
-    "例如：/jm 123456、/jm -F 123456\n"
-    "-F（不区分大小写）表示忽略本地图片与 PDF，全部重新下载"
+    "例如：/jm 123456、/jm -F 123456、/jm LS\n"
+    "-F（不区分大小写）表示忽略本地图片与 PDF，全部重新下载\n"
+    "LS（不区分大小写）列出当前下载任务与进度"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
-# 6.27.0 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
-_REMOVED_CONFIG_KEYS = ("jm_download_dir", "jm_dir_rule")
+# 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
+_REMOVED_CONFIG_KEYS = (
+    "jm_download_dir",
+    "jm_dir_rule",
+    "message_progress",
+    "message_progress_count",
+)
 
 
 class JMModule(ModuleBase):
@@ -79,6 +86,8 @@ class JMModule(ModuleBase):
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
+        # 正在进行的下载任务；供 /jm LS 查询，任务结束后移除
+        self._tasks: list[dict] = []
 
     #  元信息
 
@@ -247,7 +256,12 @@ class JMModule(ModuleBase):
     #  指令
 
     def get_commands(self) -> list[dict]:
-        return [{"name": "jm", "desc": "下载 JMComic 漫画：/jm [-F] <ID>"}]
+        return [
+            {
+                "name": "jm",
+                "desc": "下载 JMComic 漫画：/jm [-F] <ID>；/jm LS 查看当前任务",
+            }
+        ]
 
     async def handle_command(self, command: str, args: list[str], event):
         if command != "jm":
@@ -259,6 +273,10 @@ class JMModule(ModuleBase):
 
         if not args:
             yield event.plain_result(_USAGE_TEXT)
+            return
+
+        if args[0].lower() == "ls":
+            yield event.plain_result(self._format_tasks())
             return
 
         album_text, force = self._split_force(args)
@@ -306,9 +324,20 @@ class JMModule(ModuleBase):
         log_separator(logger, f"JM 下载开始：ID {album_id}（{label}）")
 
         variables = {"id": str(album_id), "title": "未知"}
+        task = {
+            "id": album_id,
+            "title": "未知",
+            "force": force,
+            "status": "准备中",
+            "progress": None,
+            "started": time.monotonic(),
+        }
+        self._tasks.append(task)
 
         try:
-            async for result in self._run_flow(album_id, event, force, variables):
+            async for result in self._run_flow(
+                album_id, event, force, variables, task
+            ):
                 yield result
         except Exception as e:  # noqa: BLE001
             error = f"{type(e).__name__}: {e}"
@@ -317,9 +346,20 @@ class JMModule(ModuleBase):
                 self._render_message("message_error", {**variables, "error": error})
             )
         finally:
+            try:
+                self._tasks.remove(task)
+            except ValueError:
+                pass
             log_separator(logger, f"JM 下载结束：ID {album_id}")
 
-    async def _run_flow(self, album_id: int, event, force: bool, variables: dict):
+    async def _run_flow(
+        self,
+        album_id: int,
+        event,
+        force: bool,
+        variables: dict,
+        task: dict,
+    ):
         # 配置在加载/保存后已合并默认值；为空时（尚未加载）现读一次
         config = self._service.config or self.load_module_config()
 
@@ -333,6 +373,8 @@ class JMModule(ModuleBase):
         cached = self._service.check_local(album_id)
         if not force and cached:
             info = cached["info"]
+            task["status"] = "缓存命中"
+            task["title"] = self._message_title(info)
             variables.update(self._info_variables(album_id, info))
             size_mb = cached["pdf_size_mb"]
             sized = {**variables, "size_mb": f"{size_mb:.1f}"}
@@ -359,6 +401,8 @@ class JMModule(ModuleBase):
         # 章节 ID 会被 jmcomic 重定向到所属本子；后续下载与目录统一用实际本子 ID
         if str(info.id).isdigit() and int(info.id) != album_id:
             album_id = int(info.id)
+        task["id"] = album_id
+        task["title"] = self._message_title(info)
         variables.update(self._info_variables(album_id, info))
 
         # 详情在下载前发送
@@ -368,19 +412,19 @@ class JMModule(ModuleBase):
 
         yield event.plain_result(self._render_message("message_start", variables))
 
-        reporter = _ProgressReporter(
-            event,
-            self._progress_text,
-            self._progress_interval(info.chapter_count),
-        )
+        async def record(progress: DownloadProgress) -> None:
+            task["progress"] = progress
 
+        task["status"] = "等待下载槽"
         async with self._get_semaphore(config):
+            task["status"] = "下载中"
             result = await self._service.download(
                 album_id,
-                progress=reporter.report,
+                progress=record,
                 force=force,
                 info=info,
             )
+        task["status"] = "收尾中"
 
         if not result.success:
             yield event.plain_result(
@@ -390,9 +434,6 @@ class JMModule(ModuleBase):
                 )
             )
             return
-
-        # 补发最终进度：页数/章节数能看到 50/50、2/2 这类完成状态
-        await reporter.flush()
 
         # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
@@ -483,36 +524,47 @@ class JMModule(ModuleBase):
         except Exception as e:  # noqa: BLE001
             logger.warning(f"发送封面失败：{type(e).__name__}: {e}")
 
-    #  进度
+    #  任务查询（/jm LS）
+
+    def _format_tasks(self) -> str:
+        if not self._tasks:
+            return "当前没有下载任务"
+        lines = [f"当前下载任务（{len(self._tasks)}）："]
+        now = time.monotonic()
+        for index, task in enumerate(self._tasks, start=1):
+            title = str(task.get("title") or "未知")
+            force = "（强制重下）" if task.get("force") else ""
+            progress = task.get("progress")
+            if progress is None:
+                detail = str(task.get("status") or "准备中")
+            else:
+                detail = self._task_progress_text(progress)
+                if task.get("status") == "收尾中":
+                    detail += "（收尾中）"
+            elapsed = max(0, int(now - float(task.get("started") or now)))
+            time_text = (
+                f"{elapsed // 60} 分 {elapsed % 60} 秒"
+                if elapsed >= 60
+                else f"{elapsed} 秒"
+            )
+            lines.append(
+                f"{index}. JM{task.get('id')} {title}{force} — {detail}"
+                f"（{time_text}）"
+            )
+        return "\n".join(lines)
 
     @staticmethod
-    def _progress_interval(chapter_total: int) -> float:
-        # 章节越多，进度消息越稀，避免大本子长下载刷屏
-        total = max(0, int(chapter_total or 0))
-        if total <= 10:
-            return 5.0
-        if total <= 30:
-            return 15.0
-        if total <= 60:
-            return 30.0
-        return 60.0
-
-    def _progress_text(self, progress: DownloadProgress) -> str:
-        # 页数按章节统计；章节/页数总数未知时显示 ?
-        total = progress.chapter_pages_total
-        variables = {
-            "chapter_index": (
-                str(progress.chapter_index) if progress.chapter_index > 0 else "?"
-            ),
-            "chapters_total": (
-                str(progress.chapters_total) if progress.chapters_total > 0 else "?"
-            ),
-            "chapters_done": str(progress.chapters_done),
-            "chapter_pages_done": str(progress.chapter_pages_done),
-            "chapter_pages_total": str(total) if total > 0 else "?",
-        }
-        key = "message_progress" if total > 0 else "message_progress_count"
-        return self._render_message(key, variables)
+    def _task_progress_text(progress: DownloadProgress) -> str:
+        if progress.chapter_index > 0 and progress.chapters_total > 0:
+            chapter = f"第 {progress.chapter_index}/{progress.chapters_total} 章"
+        else:
+            chapter = "章节未知"
+        if progress.chapter_pages_total > 0:
+            return (
+                f"{chapter} · 页 {progress.chapter_pages_done}/"
+                f"{progress.chapter_pages_total}"
+            )
+        return f"{chapter} · 已下载 {progress.chapter_pages_done} 页"
 
     #  模板与变量
 
@@ -594,61 +646,3 @@ class JMModule(ModuleBase):
             self._semaphore_limit = limit
 
         return self._semaphore
-
-
-class _ProgressReporter:
-    # 下载进度节流：从下载开始计时，按实例间隔发送（默认 5 秒，章节多时放宽）
-    # 用 event.send 直接发送，避免把 MessageEventResult 塞回指令生成器
-
-    _MIN_INTERVAL = 5.0
-
-    def __init__(self, event, render, interval: float | None = None) -> None:
-        self._event = event
-        self._render = render
-        self._interval = float(interval or self._MIN_INTERVAL)
-        self._last_at = asyncio.get_running_loop().time()
-        self._latest: DownloadProgress | None = None
-        self._last_sent: DownloadProgress | None = None
-        self._disabled = False
-        self._lock = asyncio.Lock()
-
-    async def report(self, progress: DownloadProgress) -> None:
-        self._latest = progress
-        if self._disabled:
-            return
-
-        async with self._lock:
-            if self._disabled:
-                return
-
-            now = asyncio.get_running_loop().time()
-            if now - self._last_at < self._interval:
-                return
-            await self._send(progress, now)
-
-    async def flush(self) -> None:
-        # 下载结束后补发最终快照，确保页数/章节数能看到 完成状态；
-        # 本次下载一条进度都没发过时不补，避免短下载多一条消息
-        async with self._lock:
-            if self._disabled or self._last_sent is None or self._latest is None:
-                return
-            if self._latest == self._last_sent:
-                return
-            await self._send(
-                self._latest, asyncio.get_running_loop().time()
-            )
-
-    async def _send(self, progress: DownloadProgress, now: float) -> None:
-        text = self._render(progress)
-        try:
-            await self._event.send(MessageChain().message(text))
-        except Exception as e:  # noqa: BLE001
-            self._disabled = True
-            logger.warning(
-                f"发送进度消息失败，后续进度不再发送："
-                f"{type(e).__name__}: {e}"
-            )
-            return
-
-        self._last_at = now
-        self._last_sent = progress
