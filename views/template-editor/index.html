@@ -372,7 +372,7 @@
         '<div class="card-header">' +
           '<span class="card-title">' + esc(group.label || groupKey) + '</span>' +
           '<div class="header-actions">' +
-            '<button class="btn btn-secondary btn-sm" data-action="reset-templates" data-module="' + esc(mod.name) + '">全部恢复默认</button>' +
+            '<button class="btn btn-secondary btn-sm" data-action="reset-templates" data-module="' + esc(mod.name) + '" data-group="' + esc(groupKey) + '">恢复本页默认</button>' +
             '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存</button>' +
           '</div>' +
         '</div>' +
@@ -387,7 +387,7 @@
       '<div class="card-header">' +
         '<span class="card-title">模块设置</span>' +
         '<div class="header-actions">' +
-          '<button class="btn btn-secondary btn-sm" data-action="reset-config" data-module="' + esc(mod.name) + '">恢复默认</button>' +
+          '<button class="btn btn-secondary btn-sm" data-action="reset-config" data-module="' + esc(mod.name) + '" data-group="settings">恢复本页默认</button>' +
           '<button class="btn btn-primary btn-sm" data-action="save-config" data-module="' + esc(mod.name) + '">保存设置</button>' +
         '</div>' +
       '</div>' +
@@ -633,20 +633,15 @@
     toast('已填入默认模板，保存后生效');
   }
 
-  /** 一个分组的字段全部恢复为默认：直接调后端 reset，立即生效 */
-  async function resetTemplateGroup(moduleName) {
-    await resetModuleConfig(moduleName);
-  }
-
-  /** 模块设置恢复默认（调用后端 reset 接口） */
-  async function resetModuleConfig(moduleName) {
+  /** 当前配置页恢复默认：只重置该分组，立即生效 */
+  async function resetModuleConfig(moduleName, group) {
     const mod = moduleByName(moduleName);
     if (!mod) return;
 
     try {
-      await api.post(mod.name + '/config/reset', {});
+      await api.post(mod.name + '/config/reset', group ? { group } : {});
       await reloadAll();
-      toast('已恢复默认设置');
+      toast(group ? '已恢复本页默认设置' : '已恢复默认设置');
     } catch (e) {
       toast('恢复失败：' + e.message, 'error');
     }
@@ -1361,11 +1356,8 @@
         break;
 
       case 'reset-templates':
-        await resetModuleConfig(moduleName);
-        break;
-
       case 'reset-config':
-        await resetModuleConfig(moduleName);
+        await resetModuleConfig(moduleName, target.dataset.group || '');
         break;
 
       case 'add-var':

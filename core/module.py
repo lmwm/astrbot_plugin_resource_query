@@ -454,11 +454,38 @@ class ModuleBase(ABC):
         return json_response({"status": "ok"})
 
     async def api_reset_config(self):
-        # 用默认配置覆盖用户配置
-        from astrbot.api.web import json_response
+        # 恢复默认：带 group 时只重置该分组的字段，不带时重置全部
+        from astrbot.api.web import json_response, request
 
-        values = self._config_store.reset()
+        payload = await request.json(default={})
+        group = ""
+        if isinstance(payload, dict):
+            group = str(payload.get("group") or "").strip()
+
+        if group:
+            keys = self._group_field_keys(group)
+            if keys:
+                self._config_store.remove_values(keys)
+            values = self.load_module_config()
+        else:
+            values = self._config_store.reset()
+
         return json_response({"status": "ok", "config": self.config_payload(values)})
+
+    def _group_field_keys(self, group: str) -> list[str]:
+        # 某个配置页（分组）包含的字段键；settings 表示未归入任何分组的字段
+        known = {str(item.get("key")) for item in self.config_groups}
+        result: list[str] = []
+        for key, meta in self.config_fields.items():
+            raw = meta.get("group")
+            groups = raw if isinstance(raw, list) else ([raw] if raw else [])
+            groups = {str(item) for item in groups}
+            if group == "settings":
+                if not (groups & known):
+                    result.append(key)
+            elif group in groups:
+                result.append(key)
+        return result
 
     def get_web_apis(self) -> list[dict]:
         # 默认提供配置读写与恢复默认；子类用 super().get_web_apis() + [...] 追加自有接口

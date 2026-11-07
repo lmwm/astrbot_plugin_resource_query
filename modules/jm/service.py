@@ -192,6 +192,10 @@ class JMService:
             logger.warning(f"JM{album_id} 获取漫画详情失败：{self._describe_error(e)}")
             return AlbumInfo(id=str(album_id), name=self._describe_error(e))
 
+        actual_id = str(getattr(album, "album_id", "") or album_id)
+        if actual_id != str(album_id):
+            logger.info(f"JM{album_id} 实为章节，已定位到本子 JM{actual_id}")
+
         info = self._to_info(album_id, album)
         self.cache.save_info(info)
         return info
@@ -216,6 +220,8 @@ class JMService:
 
     @staticmethod
     def _to_info(album_id: str, album) -> AlbumInfo:
+        # 章节 ID 会被 jmcomic 重定向到所属本子，详情按实际本子 ID 展示
+        actual_id = str(getattr(album, "album_id", "") or album_id)
         authors = [
             str(item) for item in (getattr(album, "authors", None) or [])
         ]
@@ -234,8 +240,8 @@ class JMService:
         try:
             from jmcomic import JmcomicText
 
-            url = JmcomicText.format_album_url(str(album_id))
-            cover = JmcomicText.get_album_cover_url(str(album_id))
+            url = JmcomicText.format_album_url(actual_id)
+            cover = JmcomicText.get_album_cover_url(actual_id)
         except Exception:  # noqa: BLE001
             url = cover = ""
 
@@ -243,7 +249,7 @@ class JMService:
             getattr(album, "author", "") or "未知"
         )
         return AlbumInfo(
-            id=str(album_id),
+            id=actual_id,
             name=str(getattr(album, "name", "") or "未知"),
             author=author,
             oname=str(getattr(album, "oname", "") or ""),
@@ -304,16 +310,21 @@ class JMService:
             logger.error(f"JM{album_id} 下载失败：{error}")
             return DownloadResult(success=False, album_info=info, error=error)
 
-        logger.info(
-            f"JM{album_id} 下载完成：{image_count} 张图片，"
-            f"PDF {round(size_mb, 2)} MB"
-        )
+        if pdf_path is not None:
+            logger.info(
+                f"JM{album_id} 下载完成：{image_count} 张图片，"
+                f"PDF {round(size_mb, 2)} MB"
+            )
+        else:
+            logger.info(
+                f"JM{album_id} 下载完成：{image_count} 张图片（未生成 PDF）"
+            )
 
         return DownloadResult(
             success=True,
             album_info=album_info,
-            pdf_path=str(pdf_path),
-            pdf_name=pdf_path.name,
+            pdf_path=str(pdf_path) if pdf_path is not None else None,
+            pdf_name=pdf_path.name if pdf_path is not None else None,
             file_size_mb=round(size_mb, 2),
         )
 
@@ -323,7 +334,7 @@ class JMService:
         info: AlbumInfo,
         progress: ProgressCallback | None,
         force: bool = False,
-    ) -> tuple[Path, AlbumInfo, int, float]:
+    ) -> tuple[Path | None, AlbumInfo, int, float]:
         import jmcomic
 
         quality = self._quality()
@@ -351,22 +362,29 @@ class JMService:
         album_info.page_count = len(images)
 
         pdf_name = f"JM{album_id}-{self.paths.display_title(album_info)}"
-        pdf_path = await asyncio.to_thread(
-            make_pdf, image_dir, pdf_name, images, quality, embed_jpeg
-        )
+        pdf_path: Path | None = None
+        size_mb = 0.0
+        if self._config.get("jm_make_pdf", False):
+            pdf_path = await asyncio.to_thread(
+                make_pdf, image_dir, pdf_name, images, quality, embed_jpeg
+            )
 
         await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, images)
 
-        try:
-            size_mb = pdf_path.stat().st_size / (1024 * 1024)
-        except OSError:
-            size_mb = 0.0
+        if pdf_path is not None:
+            try:
+                size_mb = pdf_path.stat().st_size / (1024 * 1024)
+            except OSError:
+                size_mb = 0.0
 
-        # 信息与 PDF 状态一次写入，避免两次读盘、两次写盘
-        self.cache.save_info(
-            album_info,
-            {"name": pdf_path.name, "size_mb": round(size_mb, 2)},
-        )
+            # 信息与 PDF 状态一次写入，避免两次读盘、两次写盘
+            self.cache.save_info(
+                album_info,
+                {"name": pdf_path.name, "size_mb": round(size_mb, 2)},
+            )
+        else:
+            # 未生成 PDF：保留已有的 PDF 状态，只更新漫画信息
+            self.cache.save_info(album_info)
         return pdf_path, album_info, len(images), size_mb
 
     @staticmethod

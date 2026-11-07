@@ -145,25 +145,32 @@ CONFIG_FIELDS = {
         "type": "int",
         "group": "output",
         "hint": (
-            "取值 1-95，越大越清晰体积越大。站点原图（多为 webp）会原样保留在图片目录作为存档；"
+            "取值 1-95，越大越清晰体积越大，仅在「生成 PDF」开启时使用。站点原图（多为 webp）会原样保留在图片目录作为存档；"
             "生成 PDF 时默认 75：JPEG 原图直接嵌入、webp 转 JPEG；其它值统一按目标质量转码。"
             "实测某 26 页 webp 本子：50→7.4MB、75→10.4MB、90→15.4MB（不同本子差异较大）"
         ),
         "default": 75,
     },
     #  发送与文件
+    "jm_make_pdf": {
+        "label": "生成 PDF",
+        "type": "bool",
+        "group": "output",
+        "hint": "关闭时只下载图片（保留原图存档），不生成 PDF、不发送文件；默认关闭",
+        "default": False,
+    },
     "jm_send_file": {
         "label": "下载后发送 PDF",
         "type": "bool",
         "group": "output",
-        "hint": "关闭后不发送文件，只回复下载完成提示",
+        "hint": "仅在「生成 PDF」开启时有效；关闭后只回复下载完成提示",
         "default": False,
     },
     "jm_max_file_size": {
         "label": "文件大小上限（MB）",
         "type": "int",
         "group": "output",
-        "hint": "超过则不发送，0 表示不限制",
+        "hint": "仅在「生成 PDF」开启并发送文件时生效；超过则不发送，0 表示不限制",
         "default": 10,
     },
     "jm_show_info": {

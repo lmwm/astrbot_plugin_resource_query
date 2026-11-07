@@ -135,8 +135,34 @@ class JMModule(ModuleBase):
         return saved
 
     async def api_reset_config(self):
-        # 恢复默认：config.json 与 option.yml 一起重置
-        from astrbot.api.web import json_response
+        # 恢复默认：带 group 时只重置当前配置页；不带时兼容旧行为，全部重置
+        from astrbot.api.web import json_response, request
+
+        payload = await request.json(default={})
+        group = ""
+        if isinstance(payload, dict):
+            group = str(payload.get("group") or "").strip()
+
+        if group == "option":
+            # 下载参数存 option.yml：只把表单字段写回默认值，保留手工加的其它键
+            defaults = self._config_store.default_values()
+            self._config_store.remove_values(list(OPTION_FIELDS))
+            self._service.update_option_values(
+                {key: defaults[key] for key in OPTION_FIELDS}
+            )
+            config = self.load_module_config()
+            return json_response(
+                {"status": "ok", "config": self.config_payload(config)}
+            )
+
+        if group:
+            keys = self._group_field_keys(group)
+            if keys:
+                self._config_store.remove_values(keys)
+            config = self.load_module_config()
+            return json_response(
+                {"status": "ok", "config": self.config_payload(config)}
+            )
 
         self._config_store.reset()
         self._service.reset_option_file()
@@ -300,6 +326,7 @@ class JMModule(ModuleBase):
         send_file = bool(config.get("jm_send_file"))
         show_info = bool(config.get("jm_show_info"))
         info_after = bool(config.get("jm_info_after_download"))
+        make_pdf_enabled = bool(config.get("jm_make_pdf"))
         max_size_mb = parse_int(config.get("jm_max_file_size"), 0)
 
         # 缓存命中时完全不请求站点；info.json 无效时缓存层会从 PDF 文件名恢复标题
@@ -329,6 +356,9 @@ class JMModule(ModuleBase):
             return
 
         info = await self._service.get_album_info(album_id, force=force)
+        # 章节 ID 会被 jmcomic 重定向到所属本子；后续下载与目录统一用实际本子 ID
+        if str(info.id).isdigit() and int(info.id) != album_id:
+            album_id = int(info.id)
         variables.update(self._info_variables(album_id, info))
 
         # 详情在下载前发送
@@ -338,7 +368,11 @@ class JMModule(ModuleBase):
 
         yield event.plain_result(self._render_message("message_start", variables))
 
-        reporter = _ProgressReporter(event, self._progress_text)
+        reporter = _ProgressReporter(
+            event,
+            self._progress_text,
+            self._progress_interval(info.chapter_count),
+        )
 
         async with self._get_semaphore(config):
             result = await self._service.download(
@@ -369,7 +403,16 @@ class JMModule(ModuleBase):
                 yield item
 
         if not result.pdf_path:
-            yield event.plain_result(self._render_message("message_no_pdf", variables))
+            if not make_pdf_enabled:
+                yield event.plain_result(
+                    self._render_message(
+                        "message_done", {**variables, "size_mb": "0"}
+                    )
+                )
+            else:
+                yield event.plain_result(
+                    self._render_message("message_no_pdf", variables)
+                )
             return
 
         async for r in self._send_pdf(
@@ -442,6 +485,18 @@ class JMModule(ModuleBase):
 
     #  进度
 
+    @staticmethod
+    def _progress_interval(chapter_total: int) -> float:
+        # 章节越多，进度消息越稀，避免大本子长下载刷屏
+        total = max(0, int(chapter_total or 0))
+        if total <= 10:
+            return 5.0
+        if total <= 30:
+            return 15.0
+        if total <= 60:
+            return 30.0
+        return 60.0
+
     def _progress_text(self, progress: DownloadProgress) -> str:
         # 页数按章节统计；章节/页数总数未知时显示 ?
         total = progress.chapter_pages_total
@@ -483,6 +538,16 @@ class JMModule(ModuleBase):
                 return "、".join(items[:limit]) + f" …等{len(items)}个"
             return "、".join(items)
 
+        def chapter_text(lines, limit: int = 20) -> str:
+            if not lines:
+                return "无"
+            if len(lines) > limit:
+                return (
+                    "\n".join(lines[:limit])
+                    + f"\n…其余 {len(lines) - limit} 章"
+                )
+            return "\n".join(lines)
+
         authors = list(info.authors) or (
             [info.author] if info.author.strip() and info.author != "未知" else []
         )
@@ -492,7 +557,7 @@ class JMModule(ModuleBase):
             if str(item).strip()
         ]
         return {
-            "id": str(album_id),
+            "id": str(info.id or album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
             "authors": join_list(authors),
@@ -509,7 +574,7 @@ class JMModule(ModuleBase):
             "actors": join_list(info.actors),
             "works": join_list(info.works),
             "description": text(info.description, "无"),
-            "chapter_list": "\n".join(chapters) or "无",
+            "chapter_list": chapter_text(chapters),
         }
 
     @staticmethod
@@ -532,14 +597,15 @@ class JMModule(ModuleBase):
 
 
 class _ProgressReporter:
-    # 下载进度节流：从下载开始计时，固定每 5 秒最多发一条；下载成功后补发最终进度
+    # 下载进度节流：从下载开始计时，按实例间隔发送（默认 5 秒，章节多时放宽）
     # 用 event.send 直接发送，避免把 MessageEventResult 塞回指令生成器
 
     _MIN_INTERVAL = 5.0
 
-    def __init__(self, event, render) -> None:
+    def __init__(self, event, render, interval: float | None = None) -> None:
         self._event = event
         self._render = render
+        self._interval = float(interval or self._MIN_INTERVAL)
         self._last_at = asyncio.get_running_loop().time()
         self._latest: DownloadProgress | None = None
         self._last_sent: DownloadProgress | None = None
@@ -556,7 +622,7 @@ class _ProgressReporter:
                 return
 
             now = asyncio.get_running_loop().time()
-            if now - self._last_at < self._MIN_INTERVAL:
+            if now - self._last_at < self._interval:
                 return
             await self._send(progress, now)
 
