@@ -186,7 +186,7 @@ def load_option(path: Path, image_dir: Path, rule: str | None = None, force: boo
     else:
         option.dir_rule.base_dir = str(image_dir)
 
-    # 强制全量重下：忽略库的「图片已存在」缓存（PDF 由调用方重新生成）
+    # 强制全量重下：忽略库的「图片已存在」缓存（完成标记由调用方重写）
     if force:
         option.download.cache = False
 

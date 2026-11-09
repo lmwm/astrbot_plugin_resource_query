@@ -1,17 +1,16 @@
 # JM 下载目录布局
 #
-# 每部漫画一个根目录，PDF、info.json 与章节图片目录同级：
+# 每部漫画一个根目录，info.json 与章节图片目录同级：
 #   JMDownload/
 #   └── JM 1083382/                     ← 第一层目录带空格
 #       ├── JM1083382-P001-漫画名称/     ← 章节图片目录（Pindex-标题）
 #       │   └── 00001.webp
 #       ├── JM1083382-P002-…
-#       ├── JM1083382-漫画名称.pdf
 #       └── info.json
 #
 # 章节子目录解决多章节图片同名（都是 00001.webp）互相覆盖的问题；
 # 兼容策略：第一层目录允许无空格的旧名 `JM<ID>`；旧版扁平图片、images/pdf
-# 子目录与 JP<序号>-<Pid> 章节目录会在重新下载成功后清理。
+# 子目录、旧 PDF 与 JP<序号>-<Pid> 章节目录会在重新下载成功后清理。
 
 from __future__ import annotations
 
@@ -42,7 +41,7 @@ class AlbumPaths:
         self._normalize_zh = normalize_zh or None
 
     def set_normalize_zh(self, value: str | None) -> None:
-        # 目录/PDF 名的繁简统一（zh-cn / zh-tw / None）
+        # 目录名的繁简统一（zh-cn / zh-tw / None）
         self._normalize_zh = str(value or "").strip() or None
 
     def album_root(self, album_id: str) -> Path:
@@ -101,8 +100,20 @@ class AlbumPaths:
     def info_file(self, album_id: str) -> Path:
         return self.album_root(album_id) / "info.json"
 
+    def count_images(self, album_id: str) -> int:
+        # 递归统计漫画根下的图片数；用于「已下载」判定与进度兜底
+        root = self.album_root(album_id)
+        if not root.is_dir():
+            return 0
+
+        total = 0
+        for path in root.rglob("*"):
+            if path.is_file() and path.suffix.lower() in _IMAGE_SUFFIXES:
+                total += 1
+        return total
+
     def cleanup_legacy_layout(self, album_id: str, image_files: list[Path]) -> None:
-        # 清理旧结构：images/pdf 子目录、旧扁平图片、旧内层目录
+        # 清理旧结构：images/pdf 子目录、旧扁平图片、旧 PDF、旧内层目录
         # image_files 是本次下载的图片，保留它们的文件与所在目录
         root = self.album_root(album_id)
         if not root.exists():
@@ -127,11 +138,15 @@ class AlbumPaths:
 
         for item in items:
             if item.is_file():
-                # 旧版直接放根目录的扁平图片
-                if (
-                    item.suffix.lower() in _IMAGE_SUFFIXES
-                    and item.resolve() not in keep_files
+                # 旧版直接放根目录的扁平图片，以及已停用的 PDF
+                if item.suffix.lower() in _IMAGE_SUFFIXES and (
+                    item.resolve() not in keep_files
                 ):
+                    try:
+                        item.unlink(missing_ok=True)
+                    except OSError:
+                        continue
+                if item.suffix.lower() == ".pdf":
                     try:
                         item.unlink(missing_ok=True)
                     except OSError:
@@ -187,44 +202,15 @@ class AlbumPaths:
                 continue
             moved += 1
 
-        self._migrate_ready_pdfs(legacy)
+        # 旧版 ready/ 下只有已停用的 PDF，整目录清掉
+        shutil.rmtree(legacy / "ready", ignore_errors=True)
 
-        for leftover in (legacy / "ready", legacy):
-            try:
-                leftover.rmdir()
-            except OSError:
-                pass
+        try:
+            legacy.rmdir()
+        except OSError:
+            pass
 
         return moved
-
-    def _migrate_ready_pdfs(self, legacy: Path) -> None:
-        # 过渡版本的 ready/*.pdf 归位到对应漫画根目录，已有 PDF 时不覆盖
-        try:
-            pdfs = list((legacy / "ready").glob("*.pdf"))
-        except OSError:
-            return
-
-        for pdf in pdfs:
-            match = _ALBUM_DIR_RE.match(pdf.stem.split("-", 1)[0])
-            if match is None:
-                continue
-
-            album_id = match.group(1)
-            root = self.album_root(album_id)
-
-            try:
-                root.mkdir(parents=True, exist_ok=True)
-            except OSError:
-                continue
-
-            if any(root.glob("*.pdf")):
-                continue
-
-            title = pdf.stem.split("-", 1)[1] if "-" in pdf.stem else pdf.stem
-            try:
-                shutil.move(str(pdf), str(root / f"JM{album_id}-{title}.pdf"))
-            except OSError:
-                continue
 
     @staticmethod
     def safe_name(raw: str) -> str:

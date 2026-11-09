@@ -6,6 +6,12 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 
 
+class JMError(Exception):
+    # 流程失败：异常文本就是可以直接发给用户的原因
+
+    pass
+
+
 @dataclass(frozen=True)
 class DownloadProgress:
     # 一次下载进度快照；页数是「当前/最近章节」的页数，总数为 0 表示未知
@@ -74,11 +80,9 @@ class AlbumInfo:
 
 @dataclass
 class DownloadResult:
-    # 下载结果；成功时带 PDF 路径与大小，失败时 error 为可读原因
+    # 下载结果；成功时带实际下载的图片数，失败时 error 为可读原因
 
     success: bool
     album_info: AlbumInfo | None = None
-    pdf_path: str | None = None
-    pdf_name: str | None = None
-    file_size_mb: float = 0.0
+    image_count: int = 0
     error: str = ""

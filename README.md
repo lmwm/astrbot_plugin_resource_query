@@ -14,7 +14,7 @@
 | `/query` | 显示帮助 |
 | `/mimo` · `/mimo <序号或名称>` | 查询 MiMo 余额与用量 |
 | `/wasu` · `/wasu <名称>` | 查询华数流量、通话、余额 |
-| `/jm <漫画ID>` | 下载漫画（可选生成 PDF）（**仅私聊**） |
+| `/jm <漫画ID>` | 下载漫画（**仅私聊**） |
 | `/query update` | 检查并更新插件自身（总是强制重装） |
 
 > 出问题时先查 AstrBot 日志（`data/logs/`），或到本仓库提 Issue。
@@ -25,7 +25,7 @@
 |------|------|------|------|------|
 | 小米 MiMo | `mimo` | 余额、Token 用量、费用、限额查询 | 多账号 | 支持 |
 | 华数广电 | `wasu` | 流量、通话、余额查询 | 多账号 | 支持 |
-| JMComic | `jm` | 漫画下载（可选生成 PDF，仅私聊） | — | 支持（消息模板） |
+| JMComic | `jm` | 漫画下载（仅私聊） | — | 支持（消息模板） |
 | 插件更新 | `update` | 从 GitHub 检查并更新插件自身 | — | 支持（消息模板） |
 
 ## 架构设计
@@ -43,7 +43,7 @@ main.py                     插件入口：只做「注册 + 分发」
   └── modules/              功能模块层（每个功能一个包）
         ├── mimo/           MiMo 查询
         ├── wasu/           华数查询
-        ├── jm/             JM 下载（module / service / option / paths / cache / pdf）
+        ├── jm/             JM 下载（module / service / option / paths / cache）
         └── update/         插件更新
   └── common/               通用工具层：路径、文件读写、YAML 解析与写入
   └── views/template-editor/  管理界面（schema 驱动，单文件入口，脚本内联）
@@ -70,8 +70,8 @@ main.py                     插件入口：只做「注册 + 分发」
 | `/mimo otp <验证码>` | 提交登录短信验证码 |
 | `/wasu` / `/wasu <名称>` | 查询全部 / 指定华数账号 |
 | `/wasu ls` / `/wasu del <名称>` | 列出 / 删除华数账号 |
-| `/jm <漫画ID>` | 下载漫画（可选生成 PDF）（仅私聊） |
-| `/jm -F <漫画ID>` | `-F`（不区分大小写）忽略本地图片与 PDF，全部重新下载 |
+| `/jm <漫画ID>` | 下载漫画（**仅私聊**） |
+| `/jm -F <漫画ID>` | `-F`（不区分大小写）忽略已下载内容，强制重新下载 |
 | `/jm LS` | `LS`（不区分大小写）查看当前下载任务与章节页数进度 |
 
 模块被禁用时，其指令会提示「模块未启用」。
@@ -105,7 +105,7 @@ plugin_data/astrbot_plugin_resource_query/
 │   │   ├── config.json
 │   │   └── <名称>.json        # 账号
 │   ├── jm/
-│   │   ├── config.json        # 发送 / 模板 / 画质 / 任务数
+│   │   ├── config.json        # 模板 / 任务数
 │   │   └── option.yml         # 下载参数（jmcomic 原生 option，由 Views 维护）
 │   └── update/
 │       └── config.json        # 代理、重试、自动更新、消息模板
@@ -119,7 +119,7 @@ plugin_data/astrbot_plugin_resource_query/
 页面内每个模块按能力显示对应区块：
 
 - **账号管理**（`mimo` / `wasu`）：添加、编辑、删除账号；支持登录与凭据测试的模块会显示相应按钮
-- **模块设置**：该模块自己的配置项；JM 的下载参数单独一页「下载参数」，其余在「发送与文件」
+- **模块设置**：该模块自己的配置项；JM 的下载参数单独一页「下载参数」，其余在「下载调度」
 - **消息模板**（`jm` / `update`）：按流程阶段分开的文案，可逐条修改、实时预览并恢复默认；每个模板只能使用该阶段已产生的变量，保存时后端会拒绝不可用变量
 - **恢复默认按页生效**：每个配置页的「恢复本页默认」只重置当前页字段，不影响其他页；JM「下载参数」页只重置 `option.yml` 的表单字段，手工添加的其它键保留
 - **模板变量**：变量的中文说明、预览示例值与是否在快捷插入区显示
@@ -127,7 +127,7 @@ plugin_data/astrbot_plugin_resource_query/
 
 JM 下载产物位于插件数据目录（`plugin_data/astrbot_plugin_resource_query/`）下。
 命名规则统一：图片目录恒为 `JM<ID>-P<章节序号:03>-<标题>/`，单章节本子的序号是
-`P001`；PDF 与 `info.json` 放在 `JM <ID>/` 根：
+`P001`；`info.json` 放在 `JM <ID>/` 根：
 
 ```
 JMDownload/
@@ -137,24 +137,26 @@ JMDownload/
     │   └── 00002.webp …
     ├── JM<ID>-P002-<名称>/           # 多章节时逐章递增
     │   └── 00001.webp …
-    ├── JM<ID>-<名称>.pdf             # 生成的 PDF
-    └── info.json                     # 漫画信息缓存 + 最近一次 PDF 文件名/大小
+    └── info.json                     # 漫画信息缓存 + 下载完成标记
 ```
 
 > 旧版本把下载内容放在 AstrBot 数据根目录的 `JMDownload/` 下（目录名为 `JM<ID>`）；
 > 升级后会自动搬移到新位置并给第一层目录加空格。旧版直接堆在根目录的扁平图片
 > （`00001.webp` 等）与旧命名的图片目录会在重新下载成功后自动清理。
 
-> **发送漫画信息**（`jm_show_info`）：开启后按「消息模板 → 漫画信息」发送 ID、前 5 章每章
-> 页数（如 `第001章 - 10页`，超过 5 章时加省略号），最后一行「共 N 章 · M 页」；标题不再
-> 显示，但仍完整保存在 `info.json` 中。单章节直接用本子总页数，多章节只为前 5 章各请求一次
-> 章节详情。其它字段仍可作为模板变量自行添加；旧缓存缺分章页数时单章节会回退到总页数，
-> 多章节可用 `-F` 重下补全。
+> **指令流程**：收到指令先回复「已收到指令，正在查询」→ 查询并发送漫画信息 →
+> 判断是否已下载（是则回复「已下载过」并结束）→ 未下载则继续下载 → 回复
+> 「下载完成 · 共 N 页」。已下载判定以下载成功时写入的完成标记为准；没有标记的旧目录
+> 按图片数是否达到总页数判定。`-F` 跳过判定并强制重下。
 
-> **PDF 生成**（`jm_make_pdf`，默认关闭）：关闭时只下载图片并保留原图存档，不生成 PDF、
-> 不发送文件；开启后才会合成 PDF，「下载后发送 PDF」「文件大小上限」「PDF 画质」仅在开启时
-> 生效。若在模板里使用章节列表，最多展示 20 章（其余显示数量）。下载过程**不再自动发送进度消息**，
-> 需要看进度时发 `/jm LS`，会列出当前任务、章节页数与已用时。
+> **漫画信息**：按「消息模板 → 漫画信息」发送 ID、前 5 章每章页数（如 `第001章 - 10页`，
+> 超过 5 章时加省略号），最后一行「共 N 章 · M 页」；标题不显示但完整保存在 `info.json`。
+> 单章节直接用本子总页数，多章节只为前 5 章各请求一次章节详情。其它字段仍可作为模板
+> 变量自行添加；旧缓存缺分章页数时单章节会回退到总页数，多章节可用 `-F` 重下补全。
+
+> 下载过程**不自动发送进度消息**，需要看进度时发 `/jm LS`，会列出当前任务、章节页数与
+> 已用时。插件不再生成或发送 PDF，只保留站点原图；重新下载成功后会清理旧 PDF 与旧版
+> 目录结构。
 
 ### JM 下载参数（option.yml）
 
@@ -197,8 +199,7 @@ client:
 `plugin_data/{plugin}/` 空目录会在加载时自动清理。`{title}` 由模块解析：优先含中文的
 `oname`，并按「目录繁简转换」统一简繁（多章节本子首章 `Ptitle` 常为空，所以不用 `{Ptitle}`）。
 
-PDF 名固定 `JM<ID>-<标题>.pdf`，放在 `JM <ID>/` 根目录。目录名与 PDF 名里的空格会保留
-（jmcomic 只替换 Windows 非法字符 `\ / : * ? " < > |`，不动空格）。
+目录名里的空格会保留（jmcomic 只替换 Windows 非法字符 `\ / : * ? " < > |`，不动空格）。
 
 表单没有覆盖的键（`client.domain`、`plugins` 等）仍可手工加进文件并保留；
 可用的全部字段见 jmcomic 的
@@ -207,12 +208,10 @@ PDF 名固定 `JM<ID>-<标题>.pdf`，放在 `JM <ID>/` 根目录。目录名与
 （`python Scripts/gen_option.py` 写 `modules/jm/option.default.yml`，
 `--stdout` 直接打印，`--base-dir` 指定目录）；删除 `config/jm/option.yml` 后重载也会恢复默认。
 
-> 图片按站点原格式（多为 webp）保留在图片目录作为存档；生成 PDF 时才把非 JPEG
-> 转码成目标画质（默认 75）。jmcomic 自带的 `img2pdf` 插件不做这层转码，直接嵌入
-> webp 会按无损重编码、体积膨胀数倍，所以 PDF 合成仍由本模块完成。
-> 缓存命中时只读 `info.json`，不请求站点。
+> 图片按站点原格式（多为 webp/jpg）保留在图片目录，插件不做转码与 PDF 合成。
+> 缓存优先读 `info.json`，不请求站点。
 
-> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失、**或 requirements.txt 里 `==` 锁定的版本与已装版本不一致**，就用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发；pip 的 `only-if-needed` 策略也不会升级已满足下限的旧包）。JM 声明 `jmcomic`、`img2pdf`、`Pillow`、`zhconv`（目录繁简转换），并把 `jmcomic` 锁定为 `2.7.10`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
+> 插件的运行依赖由**模块声明、插件初始化时统一检查**：每个模块用 `required_packages`（导入名 → 安装名）声明，`initialize()` 汇总后若有缺失、**或 requirements.txt 里 `==` 锁定的版本与已装版本不一致**，就用 AstrBot 的 `pip_installer` 按插件 `requirements.txt` 补装一次（AstrBot 本身只在安装插件、它自己的更新、失败恢复、导入报 `ModuleNotFoundError` 时装依赖，普通重载与本插件自更新不触发；pip 的 `only-if-needed` 策略也不会升级已满足下限的旧包）。JM 声明 `jmcomic`、`Pillow`、`zhconv`（目录繁简转换），并把 `jmcomic` 锁定为 `2.7.10`；补装失败时 `/jm` 会按「缺少运行依赖」模板提示（Views 可改），日志记录缺失模块名。以后新增模块只需声明自己的依赖。
 
 ## 首次使用
 
@@ -308,7 +307,7 @@ astrbot_plugin_resource_query/
 ├── modules/                 # 功能模块层
 │   ├── mimo/                # module / manager / account / query / result / utils / config.py
 │   ├── wasu/                # module / result / constants / utils / config.py
-│   ├── jm/                  # module / service / paths / cache / pdf / models / utils / config.py
+│   ├── jm/                  # module / service / paths / cache / models / utils / config.py
 │   └── update/              # module / updater / schedule / config.py
 ├── views/template-editor/   # 管理界面（单文件入口，脚本内联）
 │   └── index.html

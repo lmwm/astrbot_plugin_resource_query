@@ -1,3 +1,19 @@
+## v6.34.0 (2026-11-09)
+
+### 变更
+
+- **新指令流程**：收到指令 → 回复「已收到指令，正在查询」→ 查询漫画信息并发送 → 判断是否已下载（是则回复已下载并结束）→ 未下载则继续下载 → 回复「下载完成 · 共 N 页」；任务在结束时清理
+- **已下载判定改为图片数**：下载成功时在 `info.json` 写入 `download` 完成标记（`completed / images / pages / at`）；有标记直接视为已下载，无标记的旧目录按图片数是否达到总页数判定；`-F` 跳过判定并强制重下
+- **查询失败不再进入下载**：`get_album_info` 失败直接回复错误，避免先发「开始下载」再失败，也避免用错误标题创建目录
+- 漫画信息改为固定发送：不再受开关控制，模板仍为 ID + 前 5 章页数 + 总章节/页数
+- `/jm LS` 与 `-F` 保留；`LS` 中已下载任务短暂显示「已下载」状态
+
+### 移除
+
+- **移除 PDF 生成与发送**：删除 `pdf.py` 与 `img2pdf` 依赖，只保留站点原图；下载目录不再生成 PDF，重新下载成功后顺带清理根目录旧 PDF
+- 删除配置项 `jm_make_pdf` / `jm_send_file` / `jm_max_file_size` / `jm_jpeg_quality` / `jm_show_info` / `jm_info_after_download`，旧 `config.json` 加载时自动清理
+- 删除模板 `message_start` / `message_cached` / `message_too_large` / `message_send_failed` / `message_no_pdf`；新增 `message_received` / `message_downloaded`，`message_done` 改为完成消息（带页数）
+
 ## v6.33.0 (2026-11-07)
 
 ### 变更

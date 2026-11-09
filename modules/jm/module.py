@@ -1,9 +1,11 @@
 # JMComic 漫画下载模块
 #
 # 只负责指令语义与消息编排：解析参数、控制发送顺序、按模块配置里的模板渲染消息。
-# 目录、缓存、下载与 PDF 由 JMService 负责；服务只产出数据，不拼用户文案。
+# 目录、缓存、下载由 JMService 负责；服务只产出数据，不拼用户文案。
 #
-# 限制：仅允许私聊使用，避免群内分发大文件。
+# 流程：收到指令 → 查询信息 → 发送信息 → 已下载则跳过 → 下载 → 完成。
+#
+# 限制：仅允许私聊使用。
 
 from __future__ import annotations
 
@@ -13,7 +15,6 @@ import time
 from pathlib import Path
 from typing import ClassVar
 
-from astrbot.api.message_components import File
 from astrbot.core.utils.astrbot_path import get_astrbot_data_path
 
 from ...common.module_log import log_separator, module_logger
@@ -29,7 +30,7 @@ from .config import (
     VAR_SAMPLES,
     VARIABLES,
 )
-from .models import AlbumInfo, DownloadProgress
+from .models import AlbumInfo, DownloadProgress, JMError
 from .service import JMService
 from .utils import normalize_album_id, pick_display_name
 
@@ -41,7 +42,7 @@ _USAGE_SHORT = "用法：/jm [-F] <漫画ID>；/jm LS 查看当前任务"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
     "例如：/jm 123456、/jm -F 123456、/jm LS\n"
-    "-F（不区分大小写）表示忽略本地图片与 PDF，全部重新下载\n"
+    "-F（不区分大小写）表示忽略已下载内容，全部重新下载\n"
     "LS（不区分大小写）列出当前下载任务与进度"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
@@ -50,8 +51,19 @@ _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 _REMOVED_CONFIG_KEYS = (
     "jm_download_dir",
     "jm_dir_rule",
+    "jm_make_pdf",
+    "jm_send_file",
+    "jm_max_file_size",
+    "jm_jpeg_quality",
+    "jm_show_info",
+    "jm_info_after_download",
     "message_progress",
     "message_progress_count",
+    "message_start",
+    "message_cached",
+    "message_too_large",
+    "message_send_failed",
+    "message_no_pdf",
 )
 
 # 6.29.0–6.31.1 的完整漫画信息默认模板；6.32.0 起自动迁移为简短格式
@@ -90,7 +102,6 @@ class JMModule(ModuleBase):
     #  运行依赖（插件初始化时统一检查与补装）
     required_packages: ClassVar[dict[str, str]] = {
         "jmcomic": "jmcomic",
-        "img2pdf": "img2pdf",
         "PIL": "Pillow",
         "zhconv": "zhconv",
     }
@@ -362,7 +373,7 @@ class JMModule(ModuleBase):
 
     async def _download_and_send(self, album_id: int, event, force: bool):
         # 一次下载的完整流程；异常兜底成模板消息，并记录开始/结束分割线
-        label = "强制重下" if force else "缓存优先"
+        label = "强制重下" if force else "按需下载"
         log_separator(logger, f"JM 下载开始：ID {album_id}（{label}）")
 
         variables = {"id": str(album_id), "title": "未知"}
@@ -377,10 +388,19 @@ class JMModule(ModuleBase):
         self._tasks.append(task)
 
         try:
+            # 第一件事：告诉用户指令已收到，后续查询与判定都在此之后
+            yield event.plain_result(
+                self._render_message("message_received", variables)
+            )
             async for result in self._run_flow(
                 album_id, event, force, variables, task
             ):
                 yield result
+        except JMError as e:
+            logger.error(f"JM{album_id} 流程失败：{e}")
+            yield event.plain_result(
+                self._render_message("message_error", {**variables, "error": str(e)})
+            )
         except Exception as e:  # noqa: BLE001
             error = f"{type(e).__name__}: {e}"
             logger.error(f"JM{album_id} 下载过程异常：{error}")
@@ -402,61 +422,41 @@ class JMModule(ModuleBase):
         variables: dict,
         task: dict,
     ):
-        # 配置在加载/保存后已合并默认值；为空时（尚未加载）现读一次
-        config = self._service.config or self.load_module_config()
-
-        send_file = bool(config.get("jm_send_file"))
-        show_info = bool(config.get("jm_show_info"))
-        info_after = bool(config.get("jm_info_after_download"))
-        make_pdf_enabled = bool(config.get("jm_make_pdf"))
-        max_size_mb = parse_int(config.get("jm_max_file_size"), 0)
-
-        # 缓存命中时完全不请求站点；info.json 无效时缓存层会从 PDF 文件名恢复标题
-        cached = self._service.check_local(album_id)
-        if not force and cached:
-            info = cached["info"]
-            task["status"] = "缓存命中"
-            task["title"] = self._message_title(info)
-            variables.update(self._info_variables(album_id, info))
-            size_mb = cached["pdf_size_mb"]
-            sized = {**variables, "size_mb": f"{size_mb:.1f}"}
-
-            if show_info:
-                async for item in self._send_info(event, variables):
-                    yield item
-
-            yield event.plain_result(self._render_message("message_cached", sized))
-
-            async for result in self._send_pdf(
-                event,
-                cached["pdf_path"],
-                cached["pdf_name"],
-                size_mb,
-                send_file,
-                max_size_mb,
-                sized,
-            ):
-                yield result
+        # 1 查询漫画信息：失败直接报错，不进入下载
+        try:
+            info = await self._service.get_album_info(album_id, force=force)
+        except JMError as e:
+            task["status"] = "查询失败"
+            logger.warning(f"JM{album_id} 查询失败：{e}")
+            yield event.plain_result(
+                self._render_message(
+                    "message_error", {**variables, "error": str(e)}
+                )
+            )
             return
-
-        info = await self._service.get_album_info(album_id, force=force)
-        # 章节 ID 会被 jmcomic 重定向到所属本子；后续下载与目录统一用实际本子 ID
+        # 章节 ID 会被 jmcomic 重定向到所属本子；后续判定、下载与目录统一用实际本子 ID
         if str(info.id).isdigit() and int(info.id) != album_id:
             album_id = int(info.id)
         task["id"] = album_id
         task["title"] = self._message_title(info)
         variables.update(self._info_variables(album_id, info))
 
-        # 详情在下载前发送
-        if show_info and not info_after:
-            async for item in self._send_info(event, variables):
-                yield item
+        # 2 发送查询到的漫画信息
+        yield event.plain_result(self._render_message("message_info", variables))
 
-        yield event.plain_result(self._render_message("message_start", variables))
+        # 3 已下载判定；-F 跳过
+        if not force and self._service.is_downloaded(str(album_id), info.page_count):
+            task["status"] = "已下载"
+            yield event.plain_result(
+                self._render_message("message_downloaded", variables)
+            )
+            return
 
+        # 4 下载；进度只写任务表，供 /jm LS 查询
         async def record(progress: DownloadProgress) -> None:
             task["progress"] = progress
 
+        config = self._service.config or self.load_module_config()
         task["status"] = "等待下载槽"
         async with self._get_semaphore(config):
             task["status"] = "下载中"
@@ -480,83 +480,10 @@ class JMModule(ModuleBase):
         # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
             variables.update(self._info_variables(album_id, result.album_info))
+        variables["pages"] = str(result.image_count)
 
-        if show_info and info_after:
-            async for item in self._send_info(event, variables):
-                yield item
-
-        if not result.pdf_path:
-            if not make_pdf_enabled:
-                yield event.plain_result(
-                    self._render_message(
-                        "message_done", {**variables, "size_mb": "0"}
-                    )
-                )
-            else:
-                yield event.plain_result(
-                    self._render_message("message_no_pdf", variables)
-                )
-            return
-
-        async for r in self._send_pdf(
-            event,
-            result.pdf_path,
-            result.pdf_name or "",
-            result.file_size_mb,
-            send_file,
-            max_size_mb,
-            {**variables, "size_mb": f"{result.file_size_mb:.1f}"},
-        ):
-            yield r
-
-    async def _send_pdf(
-        self,
-        event,
-        pdf_path: str,
-        pdf_name: str,
-        size_mb: float,
-        send_file: bool,
-        max_size_mb: int,
-        variables: dict,
-    ):
-        if not send_file:
-            yield event.plain_result(self._render_message("message_done", variables))
-            return
-
-        if max_size_mb > 0 and size_mb > max_size_mb:
-            logger.warning(
-                f"JM{variables.get('id')} 文件 {size_mb:.1f} MB "
-                f"超过上限 {max_size_mb} MB，未发送"
-            )
-            yield event.plain_result(
-                self._render_message(
-                    "message_too_large",
-                    {
-                        **variables,
-                        "size_mb": f"{size_mb:.1f}",
-                        "max_size_mb": str(max_size_mb),
-                    },
-                )
-            )
-            return
-
-        try:
-            yield event.chain_result(
-                [File(name=pdf_name or "comic.pdf", file=pdf_path)]
-            )
-            logger.info(f"JM{variables.get('id')} 已发送文件：{pdf_name}")
-        except Exception as e:  # noqa: BLE001
-            error = f"{type(e).__name__}: {e}"
-            logger.error(f"JM{variables.get('id')} 发送文件失败：{error}")
-            yield event.plain_result(
-                self._render_message(
-                    "message_send_failed", {**variables, "error": error}
-                )
-            )
-
-    async def _send_info(self, event, variables: dict):
-        # 只发简短信息；封面等其它字段仍可通过模板变量自行添加
-        yield event.plain_result(self._render_message("message_info", variables))
+        # 5 完成
+        yield event.plain_result(self._render_message("message_done", variables))
 
     #  任务查询（/jm LS）
 

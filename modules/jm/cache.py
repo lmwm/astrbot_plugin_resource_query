@@ -1,14 +1,14 @@
-# JM 本地缓存：info.json、PDF 状态与本地命中判定
+# JM 本地缓存：info.json 与「是否已下载」判定
 #
-# info.json 同时保存漫画信息与最近一次成功生成的 PDF 状态：
-#   {"id": "...", "name": "...", "pdf": {"name": "JM123-标题.pdf", "size_mb": 7.7}}
-# 命中缓存时先按记录的文件名直接判断，文件被删除才回退到目录扫描，
-# 避免每次 /jm 都递归遍历图片目录。
+# info.json 同时保存漫画信息与下载完成标记：
+#   {"id": "...", "name": "...", "download": {"completed": true, "images": 26, "pages": 26, "at": "..."}}
+# 判定优先看完成标记（下载成功时才写入）；没有标记的目录才递归统计图片数，
+# 与信息里的总页数比较，避免每次 /jm 都扫描大目录。
 
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from datetime import datetime, timezone
 
 from ...common.module_log import module_logger
 from .models import AlbumInfo
@@ -18,7 +18,7 @@ logger = module_logger("jm")
 
 
 class AlbumCache:
-    # 负责漫画信息缓存、PDF 状态记录与「是否已有可用 PDF」的判定
+    # 负责漫画信息缓存、下载完成标记与本地命中判定
 
     def __init__(self, paths: AlbumPaths) -> None:
         self._paths = paths
@@ -121,87 +121,41 @@ class AlbumCache:
 
         return info
 
-    @staticmethod
-    def _info_from_pdf_name(album_id: str, pdf_name: str) -> AlbumInfo:
-        # info.json 无效时至少从 PDF 文件名恢复标题，避免缓存命中还要联网
-        prefix = f"JM{album_id}-"
-        title = ""
-        if pdf_name.lower().startswith(prefix.lower()) and pdf_name.lower().endswith(
-            ".pdf"
-        ):
-            title = pdf_name[len(prefix) : -len(".pdf")]
-        return AlbumInfo(id=str(album_id), name=title or "未知")
-
-    def save_info(self, info: AlbumInfo, pdf: dict | None = None) -> None:
-        # 写入漫画信息；pdf 给定时一并写入最近一次 PDF 状态（一次读盘、一次写盘）
-        # 未给 pdf 时保留已有记录，避免先写信息把它冲掉
+    def save_info(self, info: AlbumInfo, download: dict | None = None) -> None:
+        # 写入漫画信息；download 给定时一并写入完成标记（一次读盘、一次写盘）
+        # 未给 download 时保留已有标记，避免更新信息把它冲掉
         data = info.to_dict()
-        if pdf is not None:
-            data["pdf"] = pdf
+        if download is not None:
+            data["download"] = download
         else:
             raw = self._read_raw(info.id) or {}
-            if isinstance(raw.get("pdf"), dict):
-                data["pdf"] = raw["pdf"]
+            if isinstance(raw.get("download"), dict):
+                data["download"] = raw["download"]
         self._write_raw(info.id, data)
 
-    def _pdf_from_state(self, raw: dict | None, album_id: str) -> Path | None:
-        # 按 info.json 记录的文件名取 PDF；只接受漫画根目录下的裸文件名
-        if not isinstance(raw, dict):
-            return None
-
-        pdf = raw.get("pdf")
-        if not isinstance(pdf, dict):
-            return None
-
-        name = str(pdf.get("name") or "").strip()
-        if (
-            not name
-            or name.startswith(".")
-            or "/" in name
-            or "\\" in name
-            or name in {".", ".."}
-        ):
-            return None
-
-        path = self._paths.album_root(album_id) / name
-        return path if path.is_file() else None
-
-    def _scan_pdf(self, album_id: str) -> Path | None:
-        # 兼容没有 PDF 状态记录的老目录：根目录 → 旧 pdf/ → 过渡版 ready/
-        root = self._paths.album_root(album_id)
-        for pdf_path in sorted(root.glob("*.pdf")):
-            if pdf_path.is_file():
-                return pdf_path
-        for pdf_path in sorted((root / "pdf").glob("*.pdf")):
-            if pdf_path.is_file():
-                return pdf_path
-        for pdf_path in sorted(
-            (self._paths.root / "ready").glob(f"JM{album_id}-*.pdf")
-        ):
-            if pdf_path.is_file():
-                return pdf_path
-        return None
+    def mark_downloaded(self, info: AlbumInfo, image_count: int) -> None:
+        # 下载成功后写入完成标记；pages 取接口页数与实际图片数的较大值
+        download = {
+            "completed": True,
+            "images": max(0, int(image_count)),
+            "pages": max(int(info.page_count or 0), int(image_count)),
+            "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
+        self.save_info(info, download)
 
     #  本地命中
 
-    def check_local(self, album_id: str) -> dict | None:
-        # 返回本地产物信息；只查 PDF，不再递归统计图片（下载前不需要）
+    def is_downloaded(self, album_id: str, expected_pages: int = 0) -> bool:
+        # 已下载：完成标记优先；没有标记时按图片数是否达到总页数判定
         raw = self._read_raw(album_id)
-        pdf_path = self._pdf_from_state(raw, album_id)
-        if pdf_path is None:
-            pdf_path = self._scan_pdf(album_id)
-        if pdf_path is None:
-            return None
+        if isinstance(raw, dict):
+            download = raw.get("download")
+            if isinstance(download, dict) and download.get("completed") is True:
+                return True
+            if expected_pages <= 0:
+                expected_pages = int(raw.get("page_count", 0) or 0)
 
-        try:
-            size_mb = round(pdf_path.stat().st_size / (1024 * 1024), 2)
-        except OSError:
-            return None
+        if expected_pages <= 0:
+            return False
 
-        return {
-            "pdf_path": str(pdf_path),
-            "pdf_name": pdf_path.name,
-            "pdf_size_mb": size_mb,
-            "info": self._to_info(raw, album_id)
-            or self._info_from_pdf_name(album_id, pdf_path.name),
-        }
+        return self._paths.count_images(album_id) >= expected_pages

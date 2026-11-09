@@ -88,7 +88,7 @@ CONFIG_FIELDS = {
         "group": "option",
         "hint": (
             "留空按站点原格式保存（多为 webp，保留原图存档）；"
-            "填 .jpg 则在下载时转成 JPEG（PDF 直嵌）；对应 option.yml 的 download.image.suffix"
+            "填 .jpg 则在下载时转成 JPEG；对应 option.yml 的 download.image.suffix"
         ),
         "default": _option_default("download", "image", "suffix"),
     },
@@ -140,53 +140,6 @@ CONFIG_FIELDS = {
         "hint": "插件同时运行的漫画下载数，属于插件调度，不写入 option.yml",
         "default": 2,
     },
-    "jm_jpeg_quality": {
-        "label": "PDF 画质（JPEG 质量）",
-        "type": "int",
-        "group": "output",
-        "hint": (
-            "取值 1-95，越大越清晰体积越大，仅在「生成 PDF」开启时使用。站点原图（多为 webp）会原样保留在图片目录作为存档；"
-            "生成 PDF 时默认 75：JPEG 原图直接嵌入、webp 转 JPEG；其它值统一按目标质量转码。"
-            "实测某 26 页 webp 本子：50→7.4MB、75→10.4MB、90→15.4MB（不同本子差异较大）"
-        ),
-        "default": 75,
-    },
-    #  发送与文件
-    "jm_make_pdf": {
-        "label": "生成 PDF",
-        "type": "bool",
-        "group": "output",
-        "hint": "关闭时只下载图片（保留原图存档），不生成 PDF、不发送文件；默认关闭",
-        "default": False,
-    },
-    "jm_send_file": {
-        "label": "下载后发送 PDF",
-        "type": "bool",
-        "group": "output",
-        "hint": "仅在「生成 PDF」开启时有效；关闭后只回复下载完成提示",
-        "default": False,
-    },
-    "jm_max_file_size": {
-        "label": "文件大小上限（MB）",
-        "type": "int",
-        "group": "output",
-        "hint": "仅在「生成 PDF」开启并发送文件时生效；超过则不发送，0 表示不限制",
-        "default": 10,
-    },
-    "jm_show_info": {
-        "label": "发送漫画信息",
-        "type": "bool",
-        "group": "output",
-        "hint": "开启后在下载流程中发送 ID、前 5 章页数与总章节/页数；使用本地缓存时同样发送",
-        "default": False,
-    },
-    "jm_info_after_download": {
-        "label": "详情在下载完成后发送",
-        "type": "bool",
-        "group": "output",
-        "hint": "关闭则在发送「开始下载」之前先发送详情；开启则等下载完成后再发送详情",
-        "default": False,
-    },
     #  消息模板
     "message_info": {
         "label": "漫画信息",
@@ -217,61 +170,37 @@ CONFIG_FIELDS = {
             "chapter_list",
         ],
     },
-    "message_start": {
-        "label": "开始下载",
+    "message_received": {
+        "label": "收到指令",
         "type": "template",
         "group": "messages",
-        "hint": "开始下载时发送",
-        "default": "JM{id} 开始下载…",
-        "variables": ["id", "title"],
+        "hint": "收到下载指令、开始查询漫画信息前发送",
+        "default": "已收到指令，正在查询 JM{id}…",
+        "variables": ["id"],
     },
-    "message_cached": {
-        "label": "使用本地缓存",
+    "message_downloaded": {
+        "label": "已下载",
         "type": "template",
         "group": "messages",
-        "hint": "命中本地缓存、不重新下载时",
-        "default": "JM{id} 使用本地缓存…",
-        "variables": ["id", "title", "size_mb"],
+        "hint": "判断为已下载、跳过下载时",
+        "default": "√ JM{id} 已下载过，跳过下载",
+        "variables": ["id", "title", "pages"],
     },
     "message_done": {
         "label": "下载完成",
         "type": "template",
         "group": "messages",
-        "hint": "不发送文件时回复这条",
-        "default": "√ 下载完成",
-        "variables": ["id", "title", "size_mb", "pages"],
+        "hint": "图片下载完成时；{pages} 为实际下载的图片数",
+        "default": "√ JM{id} 下载完成 · 共 {pages} 页",
+        "variables": ["id", "title", "pages"],
     },
     "message_error": {
         "label": "失败消息",
         "type": "template",
         "group": "messages",
-        "hint": "下载失败时",
-        "default": "× 下载失败：{error}",
+        "hint": "查询漫画信息或下载失败时",
+        "default": "× 操作失败：{error}",
         "variables": ["id", "title", "error"],
-    },
-    "message_too_large": {
-        "label": "文件超过上限",
-        "type": "template",
-        "group": "messages",
-        "hint": "文件超过大小上限、未发送时",
-        "default": "! 文件 {size_mb} MB 超过上限 {max_size_mb} MB，未发送",
-        "variables": ["id", "title", "size_mb", "max_size_mb"],
-    },
-    "message_send_failed": {
-        "label": "发送失败",
-        "type": "template",
-        "group": "messages",
-        "hint": "发送文件失败时",
-        "default": "× 发送失败：{error}",
-        "variables": ["id", "title", "error"],
-    },
-    "message_no_pdf": {
-        "label": "未生成 PDF",
-        "type": "template",
-        "group": "messages",
-        "hint": "下载完成但没有生成 PDF 时",
-        "default": "! 下载完成但未生成 PDF 文件",
-        "variables": ["id", "title"],
     },
     "message_missing_deps": {
         "label": "缺少运行依赖",
@@ -308,7 +237,7 @@ CONFIG_GROUPS = [
     },
     {
         "key": "output",
-        "label": "发送与文件",
+        "label": "下载调度",
     },
     {
         "key": "messages",
@@ -338,8 +267,6 @@ VARIABLES = {
     "works": "作品系列",
     "description": "简介",
     "chapter_list": "章节列表（多行）",
-    "size_mb": "PDF 大小（MB）",
-    "max_size_mb": "文件大小上限（MB）",
     "error": "错误信息",
     "deps": "缺失的依赖",
 }
@@ -366,8 +293,6 @@ VAR_SAMPLES = {
     "works": "作品A",
     "description": "示例简介",
     "chapter_list": "第1话 上（id: 181251）\n第2话 下（id: 181252）",
-    "size_mb": "7.7",
-    "max_size_mb": "10",
     "error": "网络连接超时",
     "deps": "jmcomic、Pillow",
 }
