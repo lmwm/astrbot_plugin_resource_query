@@ -61,6 +61,7 @@ _REMOVED_CONFIG_KEYS = (
     "message_progress_count",
     "message_start",
     "message_cached",
+    "message_downloaded",
     "message_too_large",
     "message_send_failed",
     "message_no_pdf",
@@ -185,9 +186,9 @@ class JMModule(ModuleBase):
             group = str(payload.get("group") or "").strip()
 
         if group == "option":
-            # 下载参数存 option.yml：只把表单字段写回默认值，保留手工加的其它键
+            # 「模块设置」页：option 表单字段写回 option.yml 默认值，其余字段从 config.json 删除
             defaults = self._config_store.default_values()
-            self._config_store.remove_values(list(OPTION_FIELDS))
+            self._config_store.remove_values(self._group_field_keys("option"))
             self._service.update_option_values(
                 {key: defaults[key] for key in OPTION_FIELDS}
             )
@@ -444,12 +445,10 @@ class JMModule(ModuleBase):
         # 2 发送查询到的漫画信息
         yield event.plain_result(self._render_message("message_info", variables))
 
-        # 3 已下载判定；-F 跳过
+        # 3 已下载判定；-F 跳过。已下载也发同一条完成消息，不再单独提示
         if not force and self._service.is_downloaded(str(album_id), info.page_count):
             task["status"] = "已下载"
-            yield event.plain_result(
-                self._render_message("message_downloaded", variables)
-            )
+            yield event.plain_result(self._render_message("message_done", variables))
             return
 
         # 4 下载；进度只写任务表，供 /jm LS 查询
@@ -480,7 +479,7 @@ class JMModule(ModuleBase):
         # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
             variables.update(self._info_variables(album_id, result.album_info))
-        variables["pages"] = str(result.image_count)
+        variables["pages"] = f"{result.image_count:03d}"
 
         # 5 完成
         yield event.plain_result(self._render_message("message_done", variables))
@@ -575,16 +574,22 @@ class JMModule(ModuleBase):
                 continue
             index = str(item.get("index") or "").strip()
             pages = int(item.get("pages", 0) or 0)
-            page_text = f"{pages}页" if pages > 0 else "页数未知"
+            # 页数固定 3 位，不足补 0（第001章 - 010页）
+            page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
             page_lines.append(f"第{index}章 - {page_text}")
         if not page_lines:
             if info.chapter_count == 1 and info.page_count > 0:
-                page_lines = [f"第001章 - {info.page_count}页"]
+                page_lines = [f"第001章 - {info.page_count:03d}页"]
             else:
                 page_lines = ["章节页数未知"]
+
+        # 完成消息复用信息内容，只在每个章节行前加 √；省略号行不加
+        done_lines = [f"√ {line}" for line in page_lines]
         if info.chapter_count > 5:
             page_lines.append("…")
-        total_pages = str(info.page_count) if info.page_count > 0 else "未知"
+            done_lines.append("…")
+
+        total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
         return {
             "id": str(info.id or album_id),
             "title": self._message_title(info),
@@ -593,6 +598,7 @@ class JMModule(ModuleBase):
             "pages": total_pages,
             "chapters": str(info.chapter_count),
             "chapter_pages": "\n".join(page_lines),
+            "chapter_pages_done": "\n".join(done_lines),
             "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
             "url": text(info.url),
             "cover": text(info.cover, ""),
