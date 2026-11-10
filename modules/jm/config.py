@@ -148,7 +148,7 @@ CONFIG_FIELDS = {
         "label": "漫画信息",
         "type": "template",
         "group": "messages",
-        "hint": "ID 行、全部章节（一个 {chapter} 自动展开为每章一行，含标题/ID/页数/下载标记）、总章节数与总页数；下载前后共用这一条消息",
+        "hint": "ID 行、章节（{chapter} 每出现一次输出下一章，模板里写几个就显示几章，含标题/ID/页数/下载标记）、总章节数与总页数；下载前后共用这一条消息",
         "default": "ID JM{id}\n{chapter}\n{chapter_summary}",
         "variables": [
             "id",
@@ -226,7 +226,7 @@ CONFIG_GROUPS = [
 # 消息模板变量（变量配置页与标签使用）
 VARIABLES = {
     "id": "漫画 ID",
-    "chapter": "全部章节（每章一行，含标题 / ID / 页数 / 下载标记）",
+    "chapter": "每出现一次输出下一章（写几个显示几章，含标题 / ID / 页数 / 下载标记）",
     "chapter_summary": "总章节数与总页数",
     "title": "标题",
     "author": "作者",
@@ -247,7 +247,7 @@ VARIABLES = {
 # 变量示例值，供模板预览使用
 VAR_SAMPLES = {
     "id": "181251",
-    "chapter": "第001章 - 010页 【√】 上（id: 181251）\n第002章 - 012页 【×】 下（id: 181252）",
+    "chapter": "第001章 - 010页 【√】 上（id: 181251）",
     "chapter_summary": "共 3 章 · 022 页",
     "title": "示例漫画",
     "author": "示例作者",

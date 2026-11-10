@@ -583,9 +583,26 @@ class JMModule(ModuleBase):
     #  模板与变量
 
     def _render_message(self, key: str, variables: dict) -> str:
-        # 从模块配置取模板渲染；缺失变量保留 {name} 占位符
+        # 从模块配置取模板渲染；{chapter} 每出现一次取下一章，写几个就显示几章
         config = self._service.config or self.load_module_config()
-        return render_template(config.get(key), variables)
+        template = str(config.get(key) or "")
+
+        slot_count = template.count("{chapter}")
+        for index in range(slot_count):
+            template = template.replace(
+                "{chapter}", f"{{chapter_{index + 1}}}", 1
+            )
+
+        render_vars = dict(variables)
+        chapter_lines = render_vars.pop("chapter", [])
+        if not isinstance(chapter_lines, (list, tuple)):
+            chapter_lines = [str(chapter_lines)] if chapter_lines else []
+        for index in range(slot_count):
+            render_vars[f"chapter_{index + 1}"] = (
+                str(chapter_lines[index]) if index < len(chapter_lines) else ""
+            )
+
+        return render_template(template, render_vars)
 
     def _info_variables(
         self,
@@ -634,7 +651,7 @@ class JMModule(ModuleBase):
             "id": str(info.id or album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
-            "chapter": "\n".join(chapter_lines),
+            "chapter": chapter_lines,
             "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
             "url": text(info.url),
             "pub_date": date_text(info.pub_date),
