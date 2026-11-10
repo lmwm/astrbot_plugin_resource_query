@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 
 from ...common.module_log import module_logger
@@ -200,7 +201,12 @@ class JMService:
 
         info = self._to_info(album_id, album)
         info.chapter_pages = chapter_pages
-        self.cache.save_info(info)
+        info.chapters = self._build_chapters(album, chapter_pages)
+        # 生成/重建：不保留旧下载标记，章节结构以本次远程结果为准
+        self.cache.save_info(info, keep_download=False)
+        logger.info(
+            f"JM{album_id} 已生成 info.json（{len(info.chapters)} 章）"
+        )
         return info
 
     async def _fetch_album(self, album_id: str):
@@ -319,6 +325,42 @@ class JMService:
             chapter_lines=chapter_lines,
         )
 
+    @staticmethod
+    def _build_chapters(album, chapter_pages: list[dict]) -> list[dict]:
+        # 每章保存 id / index / name / pages；页数只预取前 5 章，其余下载时补齐
+        episodes = list(getattr(album, "episode_list", None) or [])
+        page_map = {
+            str(item.get("index") or ""): int(item.get("pages", 0) or 0)
+            for item in chapter_pages
+            if isinstance(item, dict)
+        }
+        total = len(episodes)
+        chapters: list[dict] = []
+        for entry in episodes:
+            if not isinstance(entry, (list, tuple)) or len(entry) < 2:
+                continue
+            pid, pindex = entry[0], entry[1]
+            name = str(entry[2] if len(entry) > 2 else "").strip()
+            index_text = str(pindex).strip()
+            if index_text.isdigit():
+                index_text = f"{int(index_text):03d}"
+            else:
+                index_text = index_text.zfill(3)
+            pages = page_map.get(index_text, 0)
+            if total == 1:
+                pages = int(getattr(album, "page_count", 0) or 0)
+            chapters.append(
+                {
+                    "id": str(pid),
+                    "index": index_text,
+                    "name": name,
+                    "pages": pages,
+                    "images": 0,
+                    "downloaded": False,
+                }
+            )
+        return chapters
+
     #  下载
 
     async def download(
@@ -391,13 +433,29 @@ class JMService:
         album_info = self._to_info(album_id, album) if album is not None else info
         # 接口未提供总页数时用实际下载数修正（HTML 端有值，API 端常为 0）
         album_info.page_count = len(images)
+        # 保留查询阶段构造的章节列表，下载只更新各章的实际图片数与完成标记
+        if info.chapters:
+            album_info.chapters = [dict(item) for item in info.chapters]
+        elif album is not None:
+            album_info.chapters = self._build_chapters(album, info.chapter_pages)
         if not album_info.chapter_pages and info.chapter_pages:
             album_info.chapter_pages = list(info.chapter_pages)
 
+        chapter_counts = self._chapter_image_counts(images)
         await asyncio.to_thread(self.paths.cleanup_legacy_layout, album_id, images)
         # 先清理旧结构再写完成标记，标记只代表「当前目录已完整」
-        self.cache.mark_downloaded(album_info, len(images))
+        self.cache.mark_downloaded(album_info, len(images), chapter_counts)
         return album_info, len(images)
+
+    @staticmethod
+    def _chapter_image_counts(images: list[Path]) -> dict[str, int]:
+        # 图片目录名含 P<序号:03>；按章节统计本次实际落盘数
+        counts: dict[str, int] = {}
+        for path in images:
+            match = re.search(r"-p(\d{3})-", path.parent.name, re.IGNORECASE)
+            index = match.group(1) if match else "001"
+            counts[index] = counts.get(index, 0) + 1
+        return counts
 
     @staticmethod
     def _describe_error(error: Exception) -> str:

@@ -30,6 +30,7 @@ ProgressCallback = Callable[[DownloadProgress], Awaitable[None]]
 @dataclass
 class AlbumInfo:
     # 漫画信息；page_count 为 0 表示接口未提供，以实际下载到的图片数为准
+    # chapters 是 info.json 的权威章节列表：id / index / name / pages / images / downloaded
 
     id: str
     name: str
@@ -51,10 +52,12 @@ class AlbumInfo:
     cover: str = ""
     chapter_lines: list[str] = field(default_factory=list)
     chapter_pages: list[dict] = field(default_factory=list)
+    chapters: list[dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        # 转换为 info.json 的内容
+        # 转换为 info.json 的内容；schema 标识章节级结构（v2）
         return {
+            "schema": 2,
             "id": self.id,
             "name": self.name,
             "oname": self.oname,
@@ -75,6 +78,7 @@ class AlbumInfo:
             "cover": self.cover,
             "chapter_lines": self.chapter_lines,
             "chapter_pages": self.chapter_pages,
+            "chapters": self.chapters,
         }
 
 

@@ -455,8 +455,6 @@ class JMModule(ModuleBase):
             str(album_id), info.page_count
         )
         task["status"] = "已下载" if downloaded else "待下载"
-        if downloaded:
-            variables["chapter_pages"] = variables["chapter_pages_done"]
 
         # 3 发送漫画信息；已下载时这条就是本次流程的最后一条
         yield event.plain_result(self._render_message("message_info", variables))
@@ -580,24 +578,45 @@ class JMModule(ModuleBase):
             for item in (info.chapter_lines or [])
             if str(item).strip()
         ]
-        page_lines: list[str] = []
-        for item in info.chapter_pages or []:
-            if not isinstance(item, dict):
-                continue
-            index = str(item.get("index") or "").strip()
-            pages = int(item.get("pages", 0) or 0)
-            # 页数固定 3 位，不足补 0（第001章 - 010页）
-            page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
-            page_lines.append(f"第{index}章 - {page_text}")
-        if not page_lines:
-            if info.chapter_count == 1 and info.page_count > 0:
-                page_lines = [f"第001章 - {info.page_count:03d}页"]
-            else:
-                page_lines = ["章节页数未知"]
+        # 章节信息优先用 chapters（每章带 downloaded 标记）；旧缓存回退 chapter_pages
+        chapter_items = info.chapters or []
+        base_lines: list[str] = []
+        downloaded_flags: list[bool] = []
+        if chapter_items:
+            for chapter in chapter_items[:5]:
+                if not isinstance(chapter, dict):
+                    continue
+                index = str(chapter.get("index") or "").strip()
+                pages = int(chapter.get("pages", 0) or 0)
+                # 页数固定 3 位，不足补 0（第001章 - 010页）
+                page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
+                base_lines.append(f"第{index}章 - {page_text}")
+                downloaded_flags.append(chapter.get("downloaded") is True)
+        else:
+            for item in info.chapter_pages or []:
+                if not isinstance(item, dict):
+                    continue
+                index = str(item.get("index") or "").strip()
+                pages = int(item.get("pages", 0) or 0)
+                page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
+                base_lines.append(f"第{index}章 - {page_text}")
+                downloaded_flags.append(False)
+            if not base_lines:
+                if info.chapter_count == 1 and info.page_count > 0:
+                    base_lines = [f"第001章 - {info.page_count:03d}页"]
+                else:
+                    base_lines = ["章节页数未知"]
+                downloaded_flags = [False]
 
-        # 完成消息复用信息内容，只在每个章节行尾加【√】（行尾对齐）；省略号行不加
-        done_lines = [f"{line} 【√】" for line in page_lines]
-        if info.chapter_count > 5:
+        # 信息消息按每章 downloaded 加【√】；完成消息所有章节都加
+        page_lines = [
+            f"{line} 【√】" if flag else line
+            for line, flag in zip(base_lines, downloaded_flags)
+        ]
+        done_lines = [f"{line} 【√】" for line in base_lines]
+
+        total_chapters = info.chapter_count or len(chapter_items)
+        if total_chapters > 5:
             page_lines.append("…")
             done_lines.append("…")
 
