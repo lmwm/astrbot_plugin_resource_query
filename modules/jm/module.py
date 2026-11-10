@@ -47,6 +47,9 @@ _USAGE_TEXT = (
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
+# 相邻两条消息之间的固定间隔，避免一次请求的消息扎堆
+_MESSAGE_INTERVAL = 1.0
+
 # 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
 _REMOVED_CONFIG_KEYS = (
     "jm_download_dir",
@@ -360,8 +363,13 @@ class JMModule(ModuleBase):
 
         await self._service.ensure_ready()
 
+        # 逐条发送，条与条之间留 1 秒，避免消息扎堆
+        sent = False
         async for r in self._download_and_send(album_id, event, force):
+            if sent:
+                await asyncio.sleep(_MESSAGE_INTERVAL)
             yield r
+            sent = True
 
     @staticmethod
     def _split_force(args: list[str]) -> tuple[str, bool]:
@@ -442,12 +450,13 @@ class JMModule(ModuleBase):
         task["title"] = self._message_title(info)
         variables.update(self._info_variables(album_id, info))
 
-        # 2 已下载判定：在信息消息的 ID 行用标记区分（√ 已下载 / × 未下载）
+        # 2 已下载判定：已下载时章节行尾带【√】，未下载时不带
         downloaded = not force and self._service.is_downloaded(
             str(album_id), info.page_count
         )
-        variables["status_mark"] = "√" if downloaded else "×"
         task["status"] = "已下载" if downloaded else "待下载"
+        if downloaded:
+            variables["chapter_pages"] = variables["chapter_pages_done"]
 
         # 3 发送漫画信息；已下载时这条就是本次流程的最后一条
         yield event.plain_result(self._render_message("message_info", variables))
@@ -482,7 +491,6 @@ class JMModule(ModuleBase):
         # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
             variables.update(self._info_variables(album_id, result.album_info))
-        variables["status_mark"] = "√"
         variables["pages"] = f"{result.image_count:03d}"
 
         # 5 完成
@@ -587,8 +595,8 @@ class JMModule(ModuleBase):
             else:
                 page_lines = ["章节页数未知"]
 
-        # 完成消息复用信息内容，只在每个章节行尾加 √（行尾对齐）；省略号行不加
-        done_lines = [f"{line} √" for line in page_lines]
+        # 完成消息复用信息内容，只在每个章节行尾加【√】（行尾对齐）；省略号行不加
+        done_lines = [f"{line} 【√】" for line in page_lines]
         if info.chapter_count > 5:
             page_lines.append("…")
             done_lines.append("…")

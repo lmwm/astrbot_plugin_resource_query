@@ -27,7 +27,7 @@ def _option_default(*keys: str):
 
 # 多行模板默认内容（单行模板直接写在字段里）
 _MISSING_DEPS_LINES = [
-    "× 缺少运行依赖：{deps}",
+    "缺少运行依赖：{deps}",
     "插件初始化时已尝试自动补装但未成功，请在 AstrBot 插件管理中重装插件；",
     "仍失败时可在 AstrBot 的 Python 环境里手动安装",
 ]
@@ -145,11 +145,10 @@ CONFIG_FIELDS = {
         "label": "漫画信息",
         "type": "template",
         "group": "messages",
-        "hint": "ID 行尾标记下载状态（√ 已下载 / × 未下载）、前 5 章页数、总章节数与总页数；标题不显示但照常保存",
-        "default": "🆔 JM{id} {status_mark}\n{chapter_pages}\n{chapter_summary}",
+        "hint": "ID 行、前 5 章页数（已下载时章节行尾带【√】）、总章节数与总页数；标题不显示但照常保存",
+        "default": "ID JM{id}\n{chapter_pages}\n{chapter_summary}",
         "variables": [
             "id",
-            "status_mark",
             "title",
             "author",
             "authors",
@@ -184,11 +183,10 @@ CONFIG_FIELDS = {
         "label": "下载完成",
         "type": "template",
         "group": "messages",
-        "hint": "下载完成时发送；内容与漫画信息一致，章节行尾带 √；本地已下载时不再发送",
-        "default": "🆔 JM{id} {status_mark}\n{chapter_pages_done}\n{chapter_summary}",
+        "hint": "下载完成时发送；内容与漫画信息一致，章节行尾带【√】；本地已下载时不再发送",
+        "default": "ID JM{id}\n{chapter_pages_done}\n{chapter_summary}",
         "variables": [
             "id",
-            "status_mark",
             "title",
             "chapter_pages_done",
             "chapter_summary",
@@ -200,7 +198,7 @@ CONFIG_FIELDS = {
         "type": "template",
         "group": "messages",
         "hint": "查询漫画信息或下载失败时",
-        "default": "× 操作失败：{error}",
+        "default": "失败：{error}",
         "variables": ["id", "title", "error"],
     },
     "message_missing_deps": {
@@ -251,9 +249,8 @@ VARIABLES = {
     "pages": "页数",
     "chapters": "章节数",
     "chapter_pages": "前 5 章每章页数（多行）",
-    "chapter_pages_done": "前 5 章每章页数（下载完成，行尾带 √）",
+    "chapter_pages_done": "前 5 章每章页数（下载完成，行尾带【√】）",
     "chapter_summary": "总章节数与总页数",
-    "status_mark": "下载状态标记（√ 已下载 / × 未下载）",
     "url": "作品链接",
     "cover": "封面图 URL（仅模板展示用，不会自动发图）",
     "pub_date": "发布日期",
@@ -279,9 +276,8 @@ VAR_SAMPLES = {
     "pages": "026",
     "chapters": "3",
     "chapter_pages": "第001章 - 010页\n第002章 - 012页",
-    "chapter_pages_done": "第001章 - 010页 √\n第002章 - 012页 √",
+    "chapter_pages_done": "第001章 - 010页 【√】\n第002章 - 012页 【√】",
     "chapter_summary": "共 3 章 · 022 页",
-    "status_mark": "√",
     "url": "https://18comic.vip/album/181251/",
     "cover": "https://cdn.example.com/cover.jpg",
     "pub_date": "2024-01-01",
