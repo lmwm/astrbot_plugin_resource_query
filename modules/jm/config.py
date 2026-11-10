@@ -249,7 +249,7 @@ VARIABLES = {
     "actors": "登场人物",
     "works": "作品系列",
     "description": "简介",
-    "chapter_list": "章节列表（多行）",
+    "chapter_list": "最多 20 章完整列表（含页数、下载标记、标题与章节 ID）",
     "error": "错误信息",
     "deps": "缺失的依赖",
 }
@@ -275,7 +275,7 @@ VAR_SAMPLES = {
     "actors": "人物A、人物B",
     "works": "作品A",
     "description": "示例简介",
-    "chapter_list": "第1话 上（id: 181251）\n第2话 下（id: 181252）",
+    "chapter_list": "第001章 - 010页 【√】 上（id: 181251）\n第002章 - 012页 【×】 下（id: 181252）",
     "error": "网络连接超时",
     "deps": "jmcomic、Pillow",
 }

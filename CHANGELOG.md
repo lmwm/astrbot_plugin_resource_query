@@ -1,3 +1,11 @@
+## v6.41.0 (2026-11-10)
+
+### 变更
+
+- **`chapter_list` 与 `chapter_pages` 统一数据源**：两者都从 `info.json` 的 `chapters` 生成；`chapter_list` 每章一行包含页数、下载标记、标题与章节 ID（`第001章 - 010页 【√】 标题（id: 123）`），最多 20 章，超过显示「…其余 N 章」
+- `chapter_pages` 保持前 5 章精简格式（只有页数与下载标记），默认漫画信息仍用它
+- `chapter_list` 不再依赖旧的 `chapter_lines` 字符串；下载标记与 `chapter_pages` 一致
+
 ## v6.40.0 (2026-11-10)
 
 ### 变更

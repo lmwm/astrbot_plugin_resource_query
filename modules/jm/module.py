@@ -594,7 +594,7 @@ class JMModule(ModuleBase):
         authors = list(info.authors) or (
             [info.author] if info.author.strip() and info.author != "未知" else []
         )
-        chapters = [
+        legacy_lines = [
             str(item).strip()
             for item in (info.chapter_lines or [])
             if str(item).strip()
@@ -602,8 +602,9 @@ class JMModule(ModuleBase):
         # 章节信息优先用 chapters（每章带 downloaded 标记）；旧缓存回退 chapter_pages
         chapter_items = info.chapters or []
         page_lines: list[str] = []
+        list_lines: list[str] = []
         if chapter_items:
-            for chapter in chapter_items[:5]:
+            for chapter in chapter_items:
                 if not isinstance(chapter, dict):
                     continue
                 index = str(chapter.get("index") or "").strip()
@@ -612,8 +613,18 @@ class JMModule(ModuleBase):
                 page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
                 flag = all_downloaded or chapter.get("downloaded") is True
                 mark = "√" if flag else "×"
-                page_lines.append(f"第{index}章 - {page_text} 【{mark}】")
+                # chapter_list：标题、章节 ID、页数与下载标记合并成一行
+                name = str(chapter.get("name") or "").strip()
+                chapter_id = str(chapter.get("id") or "").strip()
+                title = f" {name}" if name else ""
+                id_text = f"（id: {chapter_id}）" if chapter_id else ""
+                list_lines.append(
+                    f"第{index}章 - {page_text} 【{mark}】{title}{id_text}"
+                )
+                if len(page_lines) < 5:
+                    page_lines.append(f"第{index}章 - {page_text} 【{mark}】")
         else:
+            list_lines = list(legacy_lines)
             for item in info.chapter_pages or []:
                 if not isinstance(item, dict):
                     continue
@@ -656,7 +667,7 @@ class JMModule(ModuleBase):
             "actors": join_list(info.actors),
             "works": join_list(info.works),
             "description": text(info.description, "无"),
-            "chapter_list": chapter_text(chapters),
+            "chapter_list": chapter_text(list_lines),
         }
 
     @staticmethod
