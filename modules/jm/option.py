@@ -1,10 +1,10 @@
 # JMComic option 配置文件
 #
-# 下载参数的本体是 config/jm/option.yml（与 config.json 同目录），由 Views 表单
+# 下载参数的本体是 config/jm/option.yaml（与 config.json 同目录），由 Views 表单
 # 可视化编辑：config.py 的 OPTION_FIELDS 把表单字段映射到 option 的键，保存时
 # 只改这些键；其它键（plugins、client.domain 等）仍可在文件里手工维护。
 #
-# 默认值来自 option_default.py；Scripts/gen_option.py 用同一份默认值生成文件。
+# 默认值唯一来源是 option.default.yaml（随插件发布的模板），不再维护 Python 常量。
 
 from __future__ import annotations
 
@@ -13,15 +13,24 @@ import logging
 from pathlib import Path
 
 from ...common.module_log import module_logger
-from .option_default import (
-    DEFAULT_OPTION,
-    HEADER,
-)
+from ...common.yaml_utils import parse_yaml
 
 logger = module_logger("jm")
 
 # 「键不存在」哨兵
 _MISSING = object()
+
+# 默认配置模板（唯一默认值来源）
+_DEFAULT_FILE = Path(__file__).with_name("option.default.yaml")
+_default_cache: dict | None = None
+
+# 生成文件时的表头注释
+HEADER = """# JMComic 下载参数（jmcomic 原生 option 配置文件）
+#
+# 由插件按 Views「模块设置」表单生成并维护；表单保存会重写下面这些键，
+# 手工添加的其它配置（plugins 等）会保留。
+# 默认值来自 option.default.yaml，删除本文件后重载会按它重新生成。
+"""
 
 
 class _JmLogBridge(logging.Handler):
@@ -49,20 +58,44 @@ def _ensure_log_bridge() -> None:
     jm_logger.addHandler(bridge)
 
 
+def default_option() -> dict:
+    # 读取默认配置模板；结果缓存，返回深拷贝避免调用方改动缓存
+    global _default_cache
+    if _default_cache is None:
+        try:
+            data = parse_yaml(_DEFAULT_FILE.read_text(encoding="utf-8"))
+        except OSError as e:
+            logger.warning(f"读取默认 option 配置失败：{e}")
+            data = {}
+        _default_cache = data if isinstance(data, dict) else {}
+    return copy.deepcopy(_default_cache)
+
+
+def fixed_rule() -> str:
+    # 固定目录规则（来自默认配置）
+    dir_rule = default_option().get("dir_rule")
+    if not isinstance(dir_rule, dict):
+        return ""
+    return str(dir_rule.get("rule") or "")
+
+
 def default_payload(base_dir: str | Path) -> dict:
     # 完整默认配置；base_dir 换成实际的下载根目录（保持 rule → base_dir → normalize_zh 顺序）
-    payload = copy.deepcopy(DEFAULT_OPTION)
-    dir_rule = payload["dir_rule"]
+    payload = default_option()
+    dir_rule = payload.get("dir_rule")
+    if not isinstance(dir_rule, dict):
+        dir_rule = {}
+
     payload["dir_rule"] = {
-        "rule": dir_rule["rule"],
+        "rule": str(dir_rule.get("rule") or ""),
         "base_dir": str(base_dir),
-        "normalize_zh": dir_rule["normalize_zh"],
+        "normalize_zh": dir_rule.get("normalize_zh", "zh-cn"),
     }
     return payload
 
 
 def write_file(path: Path, payload: dict) -> bool:
-    # 写入带表头注释的 option.yml；返回是否成功
+    # 写入带表头注释的 option.yaml；返回是否成功
     import yaml
 
     try:

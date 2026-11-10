@@ -106,7 +106,7 @@ plugin_data/astrbot_plugin_resource_query/
 │   │   └── <名称>.json        # 账号
 │   ├── jm/
 │   │   ├── config.json        # 模板 / 任务数
-│   │   └── option.yml         # 下载参数（jmcomic 原生 option，由 Views 维护）
+│   │   └── option.yaml         # 下载参数（jmcomic 原生 option，由 Views 维护）
 │   └── update/
 │       └── config.json        # 代理、重试、自动更新、消息模板
 └── JMDownload/                # JM 下载产物（见下）
@@ -121,7 +121,7 @@ plugin_data/astrbot_plugin_resource_query/
 - **账号管理**（`mimo` / `wasu`）：添加、编辑、删除账号；支持登录与凭据测试的模块会显示相应按钮
 - **模块设置**：该模块自己的配置项；JM 的下载参数与「同时下载任务数」都在「模块设置」页
 - **消息模板**（`jm` / `update`）：按流程阶段分开的文案，可逐条修改、实时预览并恢复默认；每个模板只能使用该阶段已产生的变量，保存时后端会拒绝不可用变量
-- **恢复默认按页生效**：每个配置页的「恢复本页默认」只重置当前页字段，不影响其他页；JM「模块设置」页会同时重置任务数与 `option.yml` 的表单字段，手工添加的其它键保留
+- **恢复默认按页生效**：每个配置页的「恢复本页默认」只重置当前页字段，不影响其他页；JM「模块设置」页会同时重置任务数与 `option.yaml` 的表单字段，手工添加的其它键保留
 - **模板变量**：变量的中文说明、预览示例值与是否在快捷插入区显示
 - 账号编辑窗内可编辑该账号的**消息模板**并实时预览
 
@@ -167,10 +167,10 @@ JMDownload/
 > 已用时。插件不再生成或发送 PDF，只保留站点原图；重新下载成功后会清理旧 PDF 与旧版
 > 目录结构。
 
-### JM 下载参数（option.yml）
+### JM 下载参数（option.yaml）
 
-JM 的下载参数写进 jmcomic 原生的 `option.yml`，由库自己解释全部字段。文件在
-`config/jm/option.yml`（与 `config.json` 同目录），首次加载时自动生成；**Views 的
+JM 的下载参数写进 jmcomic 原生的 `option.yaml`，由库自己解释全部字段。文件在
+`config/jm/option.yaml`（与 `config.json` 同目录），首次加载时自动生成；**Views 的
 「JM 下载 → 模块设置」页直接编辑它**：下载日志、目录繁简转换、并发、缓存、解码、
 图片后缀、客户端类型、重试、超时、代理、Cookie 都会写入对应键，
 `config.json` 不再保存这些下载参数；「同时下载任务数」属插件调度，仍存在 `config.json`。
@@ -202,7 +202,7 @@ client:
   `JM<ID>-P001-<标题>/`；图片文件名保持站点原样（`00001.webp`）；章节序号来自站点的
   `photo_index`，不保证从 1 开始（站点给 81 就是 `P081`）。
 
-`option.yml` 里的 `dir_rule.base_dir` / `dir_rule.rule` 若被手工改动，加载时会强制写回固定值
+`option.yaml` 里的 `dir_rule.base_dir` / `dir_rule.rule` 若被手工改动，加载时会强制写回固定值
 并记日志，避免改坏后找不到旧文件。`base_dir` 写的是展开插件名后的实际值
 （`plugin_data/astrbot_plugin_resource_query/JMDownload`）；6.27.0 及更早版本误生成的
 `plugin_data/{plugin}/` 空目录会在加载时自动清理。`{title}` 由模块解析：优先含中文的
@@ -213,9 +213,8 @@ client:
 表单没有覆盖的键（`client.domain`、`plugins` 等）仍可手工加进文件并保留；
 可用的全部字段见 jmcomic 的
 [配置文件文档](https://jmcomic.readthedocs.io/zh-cn/latest/option_file_syntax/)。
-源码里的 `Scripts/gen_option.py` 可按默认值重新生成一份
-（`python Scripts/gen_option.py` 写 `modules/jm/option.default.yml`，
-`--stdout` 直接打印，`--base-dir` 指定目录）；删除 `config/jm/option.yml` 后重载也会恢复默认。
+默认模板在 `modules/jm/option.default.yaml`（唯一默认值来源）；删除
+`config/jm/option.yaml` 后重载会按它重新生成。
 
 > 图片按站点原格式（多为 webp/jpg）保留在图片目录，插件不做转码与 PDF 合成。
 > 缓存优先读 `info.json`，不请求站点。

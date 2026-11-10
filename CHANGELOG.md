@@ -1,3 +1,11 @@
+## v6.40.0 (2026-11-10)
+
+### 变更
+
+- **配置文件名改为 `option.yaml`**：原 `config/jm/option.yml` 在加载时自动改名为 `option.yaml`；数据根下的旧 `option.yaml` / `option.yml` 也会迁移到 `config/jm/`
+- **默认值只保留一份**：删除 `option_default.py` 与 `Scripts/gen_option.py`，默认配置唯一来源改为 `modules/jm/option.default.yaml`；`option.py` 与 `config.py` 都从它读取
+- `option.default.yml` 重命名为 `option.default.yaml`；首次加载、恢复默认与删除后重建都使用这份模板
+
 ## v6.39.0 (2026-11-10)
 
 ### 变更

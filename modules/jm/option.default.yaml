@@ -1,8 +1,8 @@
-# JMComic 下载参数（jmcomic 原生 option 配置文件）
+# JMComic 下载参数默认模板（唯一默认值来源）
 #
-# 由插件按 Views「JM 下载 → 下载参数」表单生成并维护；表单保存会重写下面这些键，
+# 首次加载时复制为 config/jm/option.yaml；表单保存只改下面这些键，
 # 手工添加的其它配置（plugins 等）会保留。
-# 默认值可用 Scripts/gen_option.py 重新生成。
+# 删除 option.yaml 后重载会按本文件重新生成。
 log: true
 dir_rule:
   rule: Bd/JM{Aid}-P{Pindex:03}-{title}

@@ -119,7 +119,7 @@ class JMModule(ModuleBase):
             download_dir=(self._data_root / download_dir_text).resolve(),
             download_dir_text=download_dir_text,
             legacy_dir=self._data_root / "JMDownload",
-            option_file=self.get_config_path() / "option.yml",
+            option_file=self.get_config_path() / "option.yaml",
         )
         self._semaphore: asyncio.Semaphore | None = None
         self._semaphore_limit = 0
@@ -147,7 +147,7 @@ class JMModule(ModuleBase):
     #  模块配置
 
     def load_module_config(self) -> dict:
-        # 普通字段来自 config.json；下载参数从 option.yml 读入并覆盖同名表单字段
+        # 普通字段来自 config.json；下载参数从 option.yaml 读入并覆盖同名表单字段
         config = super().load_module_config()
         config.update(self._service.read_option_values())
 
@@ -165,7 +165,7 @@ class JMModule(ModuleBase):
         )
 
     def save_module_config(self, config: dict) -> bool:
-        # 下载参数字段写 option.yml，config.json 只存其余字段
+        # 下载参数字段写 option.yaml，config.json 只存其余字段
         option_values = {
             key: config[key] for key in OPTION_FIELDS if key in config
         }
@@ -190,7 +190,7 @@ class JMModule(ModuleBase):
             group = str(payload.get("group") or "").strip()
 
         if group == "option":
-            # 「模块设置」页：option 表单字段写回 option.yml 默认值，其余字段从 config.json 删除
+            # 「模块设置」页：option 表单字段写回 option.yaml 默认值，其余字段从 config.json 删除
             defaults = self._config_store.default_values()
             self._config_store.remove_values(self._group_field_keys("option"))
             self._service.update_option_values(
@@ -237,21 +237,30 @@ class JMModule(ModuleBase):
             )
 
     def _migrate_option_location(self) -> None:
-        # 6.16.x 的 option.yml 在插件数据根；6.17.0 起与 config.json 同目录
-        old = self.get_data_path() / "option.yml"
+        # 6.16.x 的 option 在插件数据根；6.17.0 起与 config.json 同目录
+        # 6.40 起扩展名改为 .yaml：旧 .yml 自动改名
         new = self._service.option_file
-        if old == new or not old.is_file():
-            return
+        candidates = (
+            self.get_data_path() / "option.yaml",
+            self.get_data_path() / "option.yml",
+            self.get_config_path() / "option.yml",
+        )
+        for old in candidates:
+            if old == new or not old.is_file():
+                continue
 
-        try:
-            if not new.is_file():
-                new.parent.mkdir(parents=True, exist_ok=True)
-                shutil.move(str(old), str(new))
-                logger.info(f"已将 option.yml 迁移到 {new.parent.name}/")
-                return
-            old.unlink()
-        except OSError as e:
-            logger.warning(f"迁移 option.yml 失败：{type(e).__name__}: {e}")
+            try:
+                if not new.is_file():
+                    new.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.move(str(old), str(new))
+                    logger.info(
+                        f"已将 {old.name} 迁移到 {new.parent.name}/option.yaml"
+                    )
+                    continue
+                # 新文件已存在：保留旧文件并提示，避免覆盖用户配置
+                logger.warning(f"旧配置文件 {old} 仍存在，请手动确认后删除")
+            except OSError as e:
+                logger.warning(f"迁移 {old.name} 失败：{type(e).__name__}: {e}")
 
     def _cleanup_placeholder_dir(self) -> None:
         # 6.27.0 及更早版本构造服务时没展开 {plugin}，会在 plugin_data 下留
@@ -275,7 +284,7 @@ class JMModule(ModuleBase):
         logger.info("已清理旧版本残留的空目录：plugin_data/{plugin}")
 
     def _migrate_download_params(self) -> None:
-        # 旧版把下载参数存在 config.json；搬到 option.yml 后删除旧键
+        # 旧版把下载参数存在 config.json；搬到 option.yaml 后删除旧键
         user_values = self._config_store.user_values()
         legacy = {
             key: value for key, value in user_values.items() if key in OPTION_FIELDS
@@ -283,7 +292,7 @@ class JMModule(ModuleBase):
         if legacy:
             self._service.update_option_values(legacy)
             self._config_store.remove_values(list(legacy))
-            logger.info(f"已将 {len(legacy)} 个下载参数迁移到 option.yml")
+            logger.info(f"已将 {len(legacy)} 个下载参数迁移到 option.yaml")
 
         # 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
         removed = [

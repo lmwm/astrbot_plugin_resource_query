@@ -4,7 +4,10 @@
 # 这里只提供默认值与界面定义。
 # 消息模板用 {变量} 占位，每个模板可用的变量写在字段的 variables 里（Views 据此过滤标签）。
 
-from .option_default import DEFAULT_OPTION
+from .option import default_option
+
+# 下载参数默认值唯一来源：option.default.yaml
+DEFAULT_OPTION = default_option()
 
 # 插件名占位符：只在拼「相对数据根」的目录文案时使用；落盘前必须展开，
 # 否则会生成字面量 {plugin} 目录
@@ -16,7 +19,7 @@ DEFAULT_DOWNLOAD_DIR_TEMPLATE = f"plugin_data/{PLUGIN_NAME_TOKEN}/JMDownload"
 
 
 def _option_default(*keys: str):
-    # 表单默认值直接取 option.yml 的默认值，避免同一数字在 config.py 再写一遍
+    # 表单默认值直接取 option.yaml 的默认值，避免同一数字在 config.py 再写一遍
     node = DEFAULT_OPTION
     for key in keys:
         if not isinstance(node, dict) or key not in node:
@@ -34,14 +37,14 @@ _MISSING_DEPS_LINES = [
 
 # 配置字段（key -> label / type / hint / group / variables / default）
 CONFIG_FIELDS = {
-    #  下载参数（这些字段写入 config/jm/option.yml，不再存进 config.json）
+    #  下载参数（这些字段写入 config/jm/option.yaml，不再存进 config.json）
     #  下载路径与目录规则不开放配置：固定为「数据根/plugin_data/<插件>/JMDownload」
     #  与「JM{Aid}-P{Pindex:03}-{title}」，避免用户改坏后找不到旧文件
     "jm_download_log": {
         "label": "输出下载日志",
         "type": "bool",
         "group": "option",
-        "hint": "开启 jmcomic 的下载日志（写入 AstrBot 日志，内容较多）；对应 option.yml 的 log",
+        "hint": "开启 jmcomic 的下载日志（写入 AstrBot 日志，内容较多）；对应 option.yaml 的 log",
         "default": _option_default("log"),
     },
     "jm_normalize_zh": {
@@ -50,7 +53,7 @@ CONFIG_FIELDS = {
         "group": "option",
         "hint": (
             "把目录名统一为 zh-cn（简体，默认）或 zh-tw（繁体）；留空不转换；"
-            "依赖 zhconv；对应 option.yml 的 dir_rule.normalize_zh"
+            "依赖 zhconv；对应 option.yaml 的 dir_rule.normalize_zh"
         ),
         "default": _option_default("dir_rule", "normalize_zh"),
     },
@@ -58,28 +61,28 @@ CONFIG_FIELDS = {
         "label": "图片并发数",
         "type": "int",
         "group": "option",
-        "hint": "单章节内的图片下载并发；对应 option.yml 的 download.threading.image",
+        "hint": "单章节内的图片下载并发；对应 option.yaml 的 download.threading.image",
         "default": _option_default("download", "threading", "image"),
     },
     "jm_photo_threads": {
         "label": "章节并发数",
         "type": "int",
         "group": "option",
-        "hint": "章节之间的下载并发；对应 option.yml 的 download.threading.photo",
+        "hint": "章节之间的下载并发；对应 option.yaml 的 download.threading.photo",
         "default": _option_default("download", "threading", "photo"),
     },
     "jm_download_cache": {
         "label": "使用下载缓存",
         "type": "bool",
         "group": "option",
-        "hint": "图片文件已存在时跳过重新下载；对应 option.yml 的 download.cache",
+        "hint": "图片文件已存在时跳过重新下载；对应 option.yaml 的 download.cache",
         "default": _option_default("download", "cache"),
     },
     "jm_image_decode": {
         "label": "还原混淆图",
         "type": "bool",
         "group": "option",
-        "hint": "按站点规则还原被打乱的图片；对应 option.yml 的 download.image.decode",
+        "hint": "按站点规则还原被打乱的图片；对应 option.yaml 的 download.image.decode",
         "default": _option_default("download", "image", "decode"),
     },
     "jm_image_suffix": {
@@ -88,7 +91,7 @@ CONFIG_FIELDS = {
         "group": "option",
         "hint": (
             "留空按站点原格式保存（多为 webp，保留原图存档）；"
-            "填 .jpg 则在下载时转成 JPEG；对应 option.yml 的 download.image.suffix"
+            "填 .jpg 则在下载时转成 JPEG；对应 option.yaml 的 download.image.suffix"
         ),
         "default": _option_default("download", "image", "suffix"),
     },
@@ -96,21 +99,21 @@ CONFIG_FIELDS = {
         "label": "客户端类型",
         "type": "text",
         "group": "option",
-        "hint": "api 为 APP 端（默认，限 IP 少），html 为网页端；对应 option.yml 的 client.impl",
+        "hint": "api 为 APP 端（默认，限 IP 少），html 为网页端；对应 option.yaml 的 client.impl",
         "default": _option_default("client", "impl"),
     },
     "jm_retry_times": {
         "label": "重试次数",
         "type": "int",
         "group": "option",
-        "hint": "网络请求失败后的重试次数；对应 option.yml 的 client.retry_times",
+        "hint": "网络请求失败后的重试次数；对应 option.yaml 的 client.retry_times",
         "default": _option_default("client", "retry_times"),
     },
     "jm_timeout": {
         "label": "请求超时（秒）",
         "type": "int",
         "group": "option",
-        "hint": "单次网络请求的超时时间；对应 option.yml 的 client.timeout",
+        "hint": "单次网络请求的超时时间；对应 option.yaml 的 client.timeout",
         "default": _option_default("client", "timeout"),
     },
     "jm_proxy": {
@@ -119,7 +122,7 @@ CONFIG_FIELDS = {
         "group": "option",
         "hint": (
             "如 127.0.0.1:7890 或 http://127.0.0.1:7890；未写协议时自动补 http://，"
-            "留空使用系统代理；对应 option.yml 的 client.postman.meta_data.proxies"
+            "留空使用系统代理；对应 option.yaml 的 client.postman.meta_data.proxies"
         ),
         "default": _option_default("client", "postman", "meta_data", "proxies"),
     },
@@ -129,7 +132,7 @@ CONFIG_FIELDS = {
         "group": "option",
         "hint": (
             "格式 k=v; k2=v2（也可换行分隔），用于访问登录可见内容；"
-            "对应 option.yml 的 client.postman.meta_data.cookies"
+            "对应 option.yaml 的 client.postman.meta_data.cookies"
         ),
         "default": _option_default("client", "postman", "meta_data", "cookies"),
     },
@@ -137,7 +140,7 @@ CONFIG_FIELDS = {
         "label": "同时下载任务数",
         "type": "int",
         "group": "option",
-        "hint": "插件同时运行的漫画下载数，属于插件调度，不写入 option.yml",
+        "hint": "插件同时运行的漫画下载数，属于插件调度，不写入 option.yaml",
         "default": 2,
     },
     #  消息模板
@@ -196,8 +199,8 @@ CONFIG_FIELDS = {
     },
 }
 
-# 下载参数的字段映射：表单字段 → option.yml 的键
-# 这些字段只存 option.yml，不写 config.json；kind 决定表单值与 option 值的转换
+# 下载参数的字段映射：表单字段 → option.yaml 的键
+# 这些字段只存 option.yaml，不写 config.json；kind 决定表单值与 option 值的转换
 OPTION_FIELDS = {
     "jm_download_log": {"path": "log", "kind": "bool"},
     "jm_normalize_zh": {"path": "dir_rule.normalize_zh", "kind": "zh"},

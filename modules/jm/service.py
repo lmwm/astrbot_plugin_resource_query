@@ -6,7 +6,7 @@
 # 发给用户的消息由模块按模板渲染。
 #
 # 与 2.7.10 源码对齐的几点：
-# - 下载参数写在原生 option.yml 里（见 option.py），不再用代码拼字典；
+# - 下载参数写在原生 option.yaml 里（见 option.py），不再用代码拼字典；
 # - 图片目录按章节分子目录，避免多章节图片同名（都是 00001.jpg）互相覆盖；
 # - 用 DownloadResult.manifest.image_filepath_list 拿按章节/页码排好序的图片，
 #   旧版无 manifest 的兜底已删除（依赖固定 2.7.10）；
@@ -30,7 +30,6 @@ from .models import (
     JMError,
     ProgressCallback,
 )
-from .option_default import DIR_RULE as DEFAULT_DIR_RULE
 from .paths import AlbumPaths
 
 logger = module_logger("jm")
@@ -64,9 +63,9 @@ class JMService:
         self._option_file = (
             Path(option_file)
             if option_file
-            else self.paths.root.parent / "option.yml"
+            else self.paths.root.parent / "option.yaml"
         )
-        # 写进 option.yml 的下载根文案（相对数据根，已展开插件名）；不传时退回绝对路径
+        # 写进 option.yaml 的下载根文案（相对数据根，已展开插件名）；不传时退回绝对路径
         self._download_dir_text = str(download_dir_text or download_dir)
         self._ready = False
         self._ready_lock: asyncio.Lock | None = None
@@ -81,7 +80,7 @@ class JMService:
 
     @property
     def option_file(self) -> Path:
-        # option.yml 的位置（与 config.json 同目录，由 Views 表单维护）
+        # option.yaml 的位置（与 config.json 同目录，由 Views 表单维护）
         return self._option_file
 
     def bind_config(self, config: dict) -> None:
@@ -89,17 +88,17 @@ class JMService:
         # 下载根在构造时已固定（plugin_data/<插件>/JMDownload），这里只同步繁简设置
         self.paths.set_normalize_zh(self._config.get("jm_normalize_zh"))
 
-    #  下载参数（option.yml）
+    #  下载参数（option.yaml）
 
     def ensure_option_file(self) -> None:
-        # 首次加载时生成默认 option.yml；已存在不覆盖
+        # 首次加载时生成默认 option.yaml；已存在不覆盖
         try:
             jm_option.ensure_file(self._option_file, self._download_dir_text)
         except ImportError as e:
             logger.warning(f"生成 option 配置文件失败（缺依赖）：{e}")
 
     def read_option_values(self) -> dict:
-        # 从 option.yml 读出表单字段的值；缺文件时返回空字典，由字段默认值兜底
+        # 从 option.yaml 读出表单字段的值；缺文件时返回空字典，由字段默认值兜底
         try:
             return jm_option.read_values(self._option_file, OPTION_FIELDS)
         except ImportError as e:
@@ -107,7 +106,7 @@ class JMService:
             return {}
 
     def update_option_values(self, values: dict) -> None:
-        # 把 Views 保存的下载参数写回 option.yml
+        # 把 Views 保存的下载参数写回 option.yaml
         if not values:
             return
         try:
@@ -128,7 +127,7 @@ class JMService:
         # 下载路径与目录规则不再开放配置：文件里被改过就强制写回固定值
         try:
             changed = jm_option.enforce_fixed_dir(
-                self._option_file, self._download_dir_text, DEFAULT_DIR_RULE
+                self._option_file, self._download_dir_text, jm_option.fixed_rule()
             )
         except ImportError as e:
             logger.warning(f"校正目录配置失败（缺依赖）：{e}")
@@ -263,7 +262,7 @@ class JMService:
         # 固定规则：JM<ID>-P<章节序号:03>-<标题>
         # {title} 由模块解析（优先含中文的 oname + 繁简转换），其余 {Xxx} 交给 jmcomic
         title = self.paths.display_title(info)
-        return DEFAULT_DIR_RULE.replace(
+        return jm_option.fixed_rule().replace(
             "{title}", title.replace("{", "{{").replace("}", "}}")
         )
 
