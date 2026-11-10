@@ -328,8 +328,13 @@ class JMModule(ModuleBase):
             return
 
         replacements = (
-            ("{chapter_pages}", "{chapter_1}"),
-            ("{chapter_list}", "{chapter_1}"),
+            ("{chapter_pages}", "{chapter}"),
+            ("{chapter_list}", "{chapter}"),
+            ("{chapter_1}", "{chapter}"),
+            ("{chapter_2}", ""),
+            ("{chapter_3}", ""),
+            ("{chapter_4}", ""),
+            ("{chapter_5}", ""),
             ("{authors}", "{author}"),
             ("{pages}", ""),
             ("{chapters}", ""),
@@ -342,7 +347,7 @@ class JMModule(ModuleBase):
             return
 
         self._config_store.save_values({"message_info": updated})
-        logger.info("已将旧的漫画信息模板变量迁移为逐章变量")
+        logger.info("已将旧的漫画信息模板变量迁移为单一 chapter 变量")
 
     #  指令
 
@@ -607,15 +612,9 @@ class JMModule(ModuleBase):
         chapter_items = [
             chapter for chapter in (info.chapters or []) if isinstance(chapter, dict)
         ]
-        # 一章一个变量：用户在模板里按需添加 chapter_1…chapter_5
-        chapter_vars: dict[str, str] = {}
-        for position in range(5):
-            key = f"chapter_{position + 1}"
-            if position >= len(chapter_items):
-                chapter_vars[key] = ""
-                continue
-
-            chapter = chapter_items[position]
+        # 所有章节合并到 {chapter}：有几章就输出几行，不写死前 5 章
+        chapter_lines: list[str] = []
+        for chapter in chapter_items:
             index = str(chapter.get("index") or "").strip()
             pages = int(chapter.get("pages", 0) or 0)
             # 页数固定 3 位，不足补 0（第001章 - 010页）
@@ -626,7 +625,7 @@ class JMModule(ModuleBase):
             chapter_id = str(chapter.get("id") or "").strip()
             title = f" {name}" if name else ""
             id_text = f"（id: {chapter_id}）" if chapter_id else ""
-            chapter_vars[key] = (
+            chapter_lines.append(
                 f"第{index}章 - {page_text} 【{mark}】{title}{id_text}"
             )
 
@@ -635,7 +634,7 @@ class JMModule(ModuleBase):
             "id": str(info.id or album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
-            **chapter_vars,
+            "chapter": "\n".join(chapter_lines),
             "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
             "url": text(info.url),
             "pub_date": date_text(info.pub_date),

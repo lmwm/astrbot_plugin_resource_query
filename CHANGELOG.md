@@ -1,3 +1,11 @@
+## v6.43.0 (2026-11-10)
+
+### 变更
+
+- **章节改为单一 `{chapter}` 变量**：删除 `chapter_1`…`chapter_5`，一个 `{chapter}` 按实际章节数自动展开，每章一行（含标题/ID/页数/下载标记），不再写死前 5 章
+- 默认模板改为 `ID JM{id}\n{chapter}\n{chapter_summary}`
+- 旧模板迁移：`{chapter_pages}` / `{chapter_list}` / `{chapter_1}` → `{chapter}`，`{chapter_2}`…`{chapter_5}` 删除；`{authors}` → `{author}`，`{pages}` / `{chapters}` / `{cover}` 删除
+
 ## v6.42.0 (2026-11-10)
 
 ### 变更
