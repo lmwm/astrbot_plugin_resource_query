@@ -1,3 +1,12 @@
+## v6.42.0 (2026-11-10)
+
+### 变更
+
+- **章节改为逐章变量**：删除 `chapter_pages` / `chapter_list`，改为 `chapter_1`…`chapter_5`，每个变量显示一章：`第001章 - 010页 【√】 标题（id: 123）`；不足的变量为空字符串
+- **默认模板只显示第一章**：`message_info` 默认 `ID JM{id}\n{chapter_1}\n{chapter_summary}`；需要多章时在模板里自行添加 `{chapter_2}`…`{chapter_5}`，不再一次输出 5 章
+- **精简变量**：删除重复或仅 URL 的变量 `authors` / `pages` / `chapters` / `cover`；`title` / `author` / `url` / 日期 / 计数 / 标签 / 人物 / 作品 / 简介仍保留
+- 旧模板里的 `{chapter_pages}` / `{chapter_list}` 加载时替换为 `{chapter_1}`，`{authors}` 替换为 `{author}`，`{pages}` / `{chapters}` / `{cover}` 删除
+
 ## v6.41.0 (2026-11-10)
 
 ### 变更

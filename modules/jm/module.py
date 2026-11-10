@@ -227,6 +227,7 @@ class JMModule(ModuleBase):
         self._service.ensure_option_file()
         self._migrate_download_params()
         self._migrate_info_template()
+        self._migrate_info_variables()
         self._service.bind_config(self.load_module_config())
         missing = dependencies.missing(self.required_packages)
         if missing:
@@ -318,7 +319,30 @@ class JMModule(ModuleBase):
         self._config_store.save_values(
             {"message_info": CONFIG_FIELDS["message_info"]["default"]}
         )
-        logger.info("已将旧的漫画信息模板迁移为分章页数格式")
+        logger.info("已将旧的漫画信息模板迁移为逐章变量格式")
+
+    def _migrate_info_variables(self) -> None:
+        # 6.42.0 删除旧模板变量：把用户模板里的旧变量换成当前可用的
+        saved = self._config_store.user_values().get("message_info")
+        if not isinstance(saved, str):
+            return
+
+        replacements = (
+            ("{chapter_pages}", "{chapter_1}"),
+            ("{chapter_list}", "{chapter_1}"),
+            ("{authors}", "{author}"),
+            ("{pages}", ""),
+            ("{chapters}", ""),
+            ("{cover}", ""),
+        )
+        updated = saved
+        for old, new in replacements:
+            updated = updated.replace(old, new)
+        if updated == saved:
+            return
+
+        self._config_store.save_values({"message_info": updated})
+        logger.info("已将旧的漫画信息模板变量迁移为逐章变量")
 
     #  指令
 
@@ -505,7 +529,6 @@ class JMModule(ModuleBase):
                     album_id, result.album_info, all_downloaded=True
                 )
             )
-        variables["pages"] = f"{result.image_count:03d}"
 
         # 5 完成：复用同一条漫画信息，章节行尾变为【√】
         yield event.plain_result(self._render_message("message_info", variables))
@@ -581,83 +604,40 @@ class JMModule(ModuleBase):
                 return "、".join(items[:limit]) + f" …等{len(items)}个"
             return "、".join(items)
 
-        def chapter_text(lines, limit: int = 20) -> str:
-            if not lines:
-                return "无"
-            if len(lines) > limit:
-                return (
-                    "\n".join(lines[:limit])
-                    + f"\n…其余 {len(lines) - limit} 章"
-                )
-            return "\n".join(lines)
-
-        authors = list(info.authors) or (
-            [info.author] if info.author.strip() and info.author != "未知" else []
-        )
-        legacy_lines = [
-            str(item).strip()
-            for item in (info.chapter_lines or [])
-            if str(item).strip()
+        chapter_items = [
+            chapter for chapter in (info.chapters or []) if isinstance(chapter, dict)
         ]
-        # 章节信息优先用 chapters（每章带 downloaded 标记）；旧缓存回退 chapter_pages
-        chapter_items = info.chapters or []
-        page_lines: list[str] = []
-        list_lines: list[str] = []
-        if chapter_items:
-            for chapter in chapter_items:
-                if not isinstance(chapter, dict):
-                    continue
-                index = str(chapter.get("index") or "").strip()
-                pages = int(chapter.get("pages", 0) or 0)
-                # 页数固定 3 位，不足补 0（第001章 - 010页）
-                page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
-                flag = all_downloaded or chapter.get("downloaded") is True
-                mark = "√" if flag else "×"
-                # chapter_list：标题、章节 ID、页数与下载标记合并成一行
-                name = str(chapter.get("name") or "").strip()
-                chapter_id = str(chapter.get("id") or "").strip()
-                title = f" {name}" if name else ""
-                id_text = f"（id: {chapter_id}）" if chapter_id else ""
-                list_lines.append(
-                    f"第{index}章 - {page_text} 【{mark}】{title}{id_text}"
-                )
-                if len(page_lines) < 5:
-                    page_lines.append(f"第{index}章 - {page_text} 【{mark}】")
-        else:
-            list_lines = list(legacy_lines)
-            for item in info.chapter_pages or []:
-                if not isinstance(item, dict):
-                    continue
-                index = str(item.get("index") or "").strip()
-                pages = int(item.get("pages", 0) or 0)
-                page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
-                mark = "√" if all_downloaded else "×"
-                page_lines.append(f"第{index}章 - {page_text} 【{mark}】")
-            if not page_lines:
-                if info.chapter_count == 1 and info.page_count > 0:
-                    mark = "√" if all_downloaded else "×"
-                    page_lines = [
-                        f"第001章 - {info.page_count:03d}页 【{mark}】"
-                    ]
-                else:
-                    page_lines = ["章节页数未知"]
+        # 一章一个变量：用户在模板里按需添加 chapter_1…chapter_5
+        chapter_vars: dict[str, str] = {}
+        for position in range(5):
+            key = f"chapter_{position + 1}"
+            if position >= len(chapter_items):
+                chapter_vars[key] = ""
+                continue
 
-        total_chapters = info.chapter_count or len(chapter_items)
-        if total_chapters > 5:
-            page_lines.append("…")
+            chapter = chapter_items[position]
+            index = str(chapter.get("index") or "").strip()
+            pages = int(chapter.get("pages", 0) or 0)
+            # 页数固定 3 位，不足补 0（第001章 - 010页）
+            page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
+            flag = all_downloaded or chapter.get("downloaded") is True
+            mark = "√" if flag else "×"
+            name = str(chapter.get("name") or "").strip()
+            chapter_id = str(chapter.get("id") or "").strip()
+            title = f" {name}" if name else ""
+            id_text = f"（id: {chapter_id}）" if chapter_id else ""
+            chapter_vars[key] = (
+                f"第{index}章 - {page_text} 【{mark}】{title}{id_text}"
+            )
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
         return {
             "id": str(info.id or album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
-            "authors": join_list(authors),
-            "pages": total_pages,
-            "chapters": str(info.chapter_count),
-            "chapter_pages": "\n".join(page_lines),
+            **chapter_vars,
             "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
             "url": text(info.url),
-            "cover": text(info.cover, ""),
             "pub_date": date_text(info.pub_date),
             "update_date": date_text(info.update_date),
             "views": text(info.views),
@@ -667,7 +647,6 @@ class JMModule(ModuleBase):
             "actors": join_list(info.actors),
             "works": join_list(info.works),
             "description": text(info.description, "无"),
-            "chapter_list": chapter_text(list_lines),
         }
 
     @staticmethod
