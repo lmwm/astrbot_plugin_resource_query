@@ -65,6 +65,7 @@ _REMOVED_CONFIG_KEYS = (
     "message_start",
     "message_cached",
     "message_downloaded",
+    "message_done",
     "message_too_large",
     "message_send_failed",
     "message_no_pdf",
@@ -448,15 +449,17 @@ class JMModule(ModuleBase):
             album_id = int(info.id)
         task["id"] = album_id
         task["title"] = self._message_title(info)
-        variables.update(self._info_variables(album_id, info))
 
-        # 2 已下载判定：已下载时章节行尾带【√】，未下载时不带
+        # 2 已下载判定：漫画信息里每章行尾显示【√】或【×】
         downloaded = not force and self._service.is_downloaded(
             str(album_id), info.page_count
         )
         task["status"] = "已下载" if downloaded else "待下载"
+        variables.update(
+            self._info_variables(album_id, info, all_downloaded=downloaded)
+        )
 
-        # 3 发送漫画信息；已下载时这条就是本次流程的最后一条
+        # 3 发送漫画信息（下载前后共用这一条）；已下载时这条就是最后一条
         yield event.plain_result(self._render_message("message_info", variables))
         if downloaded:
             return
@@ -488,11 +491,15 @@ class JMModule(ModuleBase):
 
         # 服务侧会用实际下载数与接口详情修正信息，这里同步到模板变量
         if result.album_info is not None:
-            variables.update(self._info_variables(album_id, result.album_info))
+            variables.update(
+                self._info_variables(
+                    album_id, result.album_info, all_downloaded=True
+                )
+            )
         variables["pages"] = f"{result.image_count:03d}"
 
-        # 5 完成
-        yield event.plain_result(self._render_message("message_done", variables))
+        # 5 完成：复用同一条漫画信息，章节行尾变为【√】
+        yield event.plain_result(self._render_message("message_info", variables))
 
     #  任务查询（/jm LS）
 
@@ -543,7 +550,12 @@ class JMModule(ModuleBase):
         config = self._service.config or self.load_module_config()
         return render_template(config.get(key), variables)
 
-    def _info_variables(self, album_id: int, info: AlbumInfo) -> dict:
+    def _info_variables(
+        self,
+        album_id: int,
+        info: AlbumInfo,
+        all_downloaded: bool = False,
+    ) -> dict:
         def text(value, default: str = "未知") -> str:
             raw = str(value or "").strip()
             return raw or default
@@ -580,8 +592,7 @@ class JMModule(ModuleBase):
         ]
         # 章节信息优先用 chapters（每章带 downloaded 标记）；旧缓存回退 chapter_pages
         chapter_items = info.chapters or []
-        base_lines: list[str] = []
-        downloaded_flags: list[bool] = []
+        page_lines: list[str] = []
         if chapter_items:
             for chapter in chapter_items[:5]:
                 if not isinstance(chapter, dict):
@@ -590,8 +601,9 @@ class JMModule(ModuleBase):
                 pages = int(chapter.get("pages", 0) or 0)
                 # 页数固定 3 位，不足补 0（第001章 - 010页）
                 page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
-                base_lines.append(f"第{index}章 - {page_text}")
-                downloaded_flags.append(chapter.get("downloaded") is True)
+                flag = all_downloaded or chapter.get("downloaded") is True
+                mark = "√" if flag else "×"
+                page_lines.append(f"第{index}章 - {page_text} 【{mark}】")
         else:
             for item in info.chapter_pages or []:
                 if not isinstance(item, dict):
@@ -599,26 +611,20 @@ class JMModule(ModuleBase):
                 index = str(item.get("index") or "").strip()
                 pages = int(item.get("pages", 0) or 0)
                 page_text = f"{pages:03d}页" if pages > 0 else "页数未知"
-                base_lines.append(f"第{index}章 - {page_text}")
-                downloaded_flags.append(False)
-            if not base_lines:
+                mark = "√" if all_downloaded else "×"
+                page_lines.append(f"第{index}章 - {page_text} 【{mark}】")
+            if not page_lines:
                 if info.chapter_count == 1 and info.page_count > 0:
-                    base_lines = [f"第001章 - {info.page_count:03d}页"]
+                    mark = "√" if all_downloaded else "×"
+                    page_lines = [
+                        f"第001章 - {info.page_count:03d}页 【{mark}】"
+                    ]
                 else:
-                    base_lines = ["章节页数未知"]
-                downloaded_flags = [False]
-
-        # 信息消息按每章 downloaded 加【√】；完成消息所有章节都加
-        page_lines = [
-            f"{line} 【√】" if flag else line
-            for line, flag in zip(base_lines, downloaded_flags)
-        ]
-        done_lines = [f"{line} 【√】" for line in base_lines]
+                    page_lines = ["章节页数未知"]
 
         total_chapters = info.chapter_count or len(chapter_items)
         if total_chapters > 5:
             page_lines.append("…")
-            done_lines.append("…")
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
         return {
@@ -629,7 +635,6 @@ class JMModule(ModuleBase):
             "pages": total_pages,
             "chapters": str(info.chapter_count),
             "chapter_pages": "\n".join(page_lines),
-            "chapter_pages_done": "\n".join(done_lines),
             "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
             "url": text(info.url),
             "cover": text(info.cover, ""),
