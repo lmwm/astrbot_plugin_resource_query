@@ -39,7 +39,7 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
-_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID[/漫画ID…]>；/jm LS；/jm -c [漫画ID[/漫画ID…]]"
+_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID[/漫画ID…]>；/jm LS；/jm -c [漫画ID[/漫画ID…]]；/jm help"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
     "例如：/jm 123456、/jm 123456/789012、/jm -F 123456、/jm -y 123456、/jm LS、/jm -c 123456\n"
@@ -47,7 +47,8 @@ _USAGE_TEXT = (
     "-F（不区分大小写）表示忽略已下载内容，全部重新下载\n"
     "-y（或 yes，不区分大小写）确认下载超过 10 章的漫画\n"
     "-c（或 cancel/stop）清除指定任务；不带 ID 时清除全部，当前图片完成后停止\n"
-    "LS（不区分大小写）列出当前下载任务与进度"
+    "LS（不区分大小写）列出当前下载任务与进度\n"
+    "help（或 -h）显示本帮助"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
@@ -373,7 +374,7 @@ class JMModule(ModuleBase):
         return [
             {
                 "name": "jm",
-                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID[/ID…]>；/jm LS；/jm -c [ID]",
+                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID[/ID…]>；/jm LS；/jm -c [ID]；/jm help",
             }
         ]
 
@@ -386,6 +387,10 @@ class JMModule(ModuleBase):
             return
 
         if not args:
+            yield event.plain_result(_USAGE_TEXT)
+            return
+
+        if args[0].lower() in ("help", "-h", "--help"):
             yield event.plain_result(_USAGE_TEXT)
             return
 
