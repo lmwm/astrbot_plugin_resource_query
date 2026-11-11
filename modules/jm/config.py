@@ -31,8 +31,6 @@ def _option_default(*keys: str):
 # 多行模板默认内容（单行模板直接写在字段里）
 _MISSING_DEPS_LINES = [
     "缺少运行依赖：{deps}",
-    "插件初始化时已尝试自动补装但未成功，请在 AstrBot 插件管理中重装插件；",
-    "仍失败时可在 AstrBot 的 Python 环境里手动安装",
 ]
 
 # 配置字段（key -> label / type / hint / group / variables / default）
@@ -149,7 +147,7 @@ CONFIG_FIELDS = {
         "type": "template",
         "group": "messages",
         "hint": "ID 行（ID 后用全角空格）、章节（{chapter} 每出现一次输出下一章，模板里写几个就显示几章，含标题/页数/下载标记）、全角空格缩进的章节汇总；下载前后共用这一条消息",
-        "default": "ID　JM{id}\n{chapter}\n　　{chapter_summary}",
+        "default": "ID　JM{id}\n{chapter}\n{chapter}\n{chapter}\n　　{chapter_summary}",
         "variables": [
             "id",
             "chapter",

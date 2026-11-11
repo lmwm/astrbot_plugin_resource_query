@@ -3,7 +3,7 @@
 # 首次加载时复制为 config/jm/option.yaml；表单保存只改下面这些键，
 # 手工添加的其它配置（plugins 等）会保留。
 # 删除 option.yaml 后重载会按本文件重新生成。
-log: true
+log: false
 dir_rule:
   rule: Bd/JM{Aid}-P{Pindex:03}-{title}
   base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload
@@ -14,7 +14,7 @@ download:
     decode: true
     suffix: null
   threading:
-    image: 10
+    image: 20
     photo: 2
 client:
   impl: api

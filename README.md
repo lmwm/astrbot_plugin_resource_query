@@ -193,7 +193,7 @@ JM 的下载参数写进 jmcomic 原生的 `option.yaml`，由库自己解释全
 `config.json` 不再保存这些下载参数；「同时下载任务数」属插件调度，仍存在 `config.json`。
 
 ```yaml
-log: true                     # 输出 jmcomic 下载日志（写入 AstrBot 日志）
+log: false                    # 输出 jmcomic 下载日志（默认关闭，写入 AstrBot 日志）
 dir_rule:
   rule: Bd/JM{Aid}-P{Pindex:03}-{title}   # 固定值，加载时强制写回
   base_dir: plugin_data/astrbot_plugin_resource_query/JMDownload   # 固定值，相对 AstrBot 数据根
@@ -201,7 +201,7 @@ dir_rule:
 download:
   cache: true
   image: {decode: true, suffix: null}   # suffix 为 null 时保留站点原图（webp/jpg）
-  threading: {image: 10, photo: 2}
+  threading: {image: 20, photo: 2}
 client:
   impl: api
   retry_times: 3
