@@ -177,6 +177,14 @@ CONFIG_FIELDS = {
         "default": "该漫画共 {chapters} 章，确认下载请回复：{command}",
         "variables": ["id", "title", "chapters", "command"],
     },
+    "message_cancelled": {
+        "label": "已取消下载",
+        "type": "template",
+        "group": "messages",
+        "hint": "任务被取消时发送；带漫画 ID，多任务并行时用于区分",
+        "default": "已取消下载：JM{id}",
+        "variables": ["id", "title"],
+    },
     "message_received": {
         "label": "收到指令",
         "type": "template",

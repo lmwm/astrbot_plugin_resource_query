@@ -39,14 +39,15 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
-_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID>；/jm LS；/jm cancel [漫画ID]"
+_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID[/漫画ID…]>；/jm LS；/jm -c [漫画ID[/漫画ID…]]"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
-    "例如：/jm 123456、/jm -F 123456、/jm -y 123456、/jm LS、/jm cancel 123456\n"
+    "例如：/jm 123456、/jm 123456/789012、/jm -F 123456、/jm -y 123456、/jm LS、/jm -c 123456\n"
+    "多个 ID 用 / 分隔，或直接用空格分隔；会各自建立下载任务并按并发上限排队\n"
     "-F（不区分大小写）表示忽略已下载内容，全部重新下载\n"
     "-y（或 yes，不区分大小写）确认下载超过 10 章的漫画\n"
-    "LS（不区分大小写）列出当前下载任务与进度\n"
-    "cancel（或 stop）取消指定漫画的下载；不带 ID 时取消全部任务，当前图片完成后停止"
+    "-c（或 cancel/stop）清除指定任务；不带 ID 时清除全部，当前图片完成后停止\n"
+    "LS（不区分大小写）列出当前下载任务与进度"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
@@ -55,6 +56,9 @@ _MESSAGE_INTERVAL = 1.0
 
 # 章节数超过该值时先要求二次确认
 _CONFIRM_CHAPTER_THRESHOLD = 10
+
+# 多任务队列的「worker 结束」哨兵
+_WORKER_DONE = object()
 
 # 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
 _REMOVED_CONFIG_KEYS = (
@@ -369,7 +373,7 @@ class JMModule(ModuleBase):
         return [
             {
                 "name": "jm",
-                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID>；/jm LS；/jm cancel [ID]",
+                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID[/ID…]>；/jm LS；/jm -c [ID]",
             }
         ]
 
@@ -389,25 +393,26 @@ class JMModule(ModuleBase):
             yield event.plain_result(self._format_tasks())
             return
 
-        if args[0].lower() in ("cancel", "stop"):
+        if args[0].lower() in ("-c", "cancel", "stop"):
             yield event.plain_result(self._cancel_tasks(args[1:]))
             return
 
-        album_text, force, confirmed = self._split_options(args)
-        if not album_text:
-            yield event.plain_result(_USAGE_TEXT)
+        album_texts, force, confirmed = self._split_options(args)
+        album_ids, invalid = self._parse_album_ids(album_texts)
+        if invalid:
+            yield event.plain_result(
+                f"无效的漫画 ID：{'、'.join(invalid)}\n{_USAGE_SHORT}"
+            )
             return
-
-        album_id = normalize_album_id(album_text)
-        if album_id is None:
-            yield event.plain_result(_INVALID_ID_TEXT)
+        if not album_ids:
+            yield event.plain_result(_USAGE_TEXT)
             return
 
         # 依赖由插件初始化时统一检查与补装；这里只复查，仍缺就提示，不抛 ModuleNotFoundError
         missing = dependencies.missing(self.required_packages)
         if missing:
             logger.error(
-                f"拒绝下载 JM{album_id}：缺少运行依赖 "
+                f"拒绝下载：缺少运行依赖 "
                 f"{'、'.join(missing)}"
                 f"（模块 {'、'.join(dependencies.missing_modules(self.required_packages))}）"
             )
@@ -422,29 +427,94 @@ class JMModule(ModuleBase):
 
         # 逐条发送，条与条之间留 1 秒，避免消息扎堆
         sent = False
-        async for r in self._download_and_send(album_id, event, force, confirmed):
+        async for r in self._dispatch_downloads(
+            album_ids, event, force, confirmed
+        ):
             if sent:
                 await asyncio.sleep(_MESSAGE_INTERVAL)
             yield r
             sent = True
 
     @staticmethod
-    def _split_options(args: list[str]) -> tuple[str, bool, bool]:
-        # -F 强制全量重下；-y / yes 确认大章节下载；第一个非开关参数为 ID
+    def _split_options(args: list[str]) -> tuple[list[str], bool, bool]:
+        # -F 强制全量重下；-y / yes 确认大章节下载；其余参数是 ID（可多个）
         force = False
         confirmed = False
-        album_text = ""
+        album_texts: list[str] = []
         for item in args:
             lowered = item.lower()
             if lowered == "-f":
                 force = True
             elif lowered in ("-y", "yes"):
                 confirmed = True
-            elif not album_text:
-                album_text = item
-        return album_text, force, confirmed
+            elif lowered == "-c":
+                continue
+            else:
+                album_texts.append(item)
+        return album_texts, force, confirmed
+
+    @staticmethod
+    def _album_id_texts(args: list[str]) -> list[str]:
+        # URL 整体保留；其余按 / 拆分（1200169/125603），空格分隔的多个参数已在调用方收集
+        result: list[str] = []
+        for item in args:
+            if "://" in item or "/album/" in item or "/photo/" in item:
+                result.append(item)
+            else:
+                result.extend(part for part in item.split("/") if part.strip())
+        return result
+
+    @classmethod
+    def _parse_album_ids(cls, texts: list[str]) -> tuple[list[int], list[str]]:
+        album_ids: list[int] = []
+        invalid: list[str] = []
+        for text in cls._album_id_texts(texts):
+            album_id = normalize_album_id(text)
+            if album_id is None:
+                invalid.append(text)
+                continue
+            if album_id not in album_ids:
+                album_ids.append(album_id)
+        return album_ids, invalid
 
     #  流程编排
+
+    async def _dispatch_downloads(
+        self, album_ids: list[int], event, force: bool, confirmed: bool
+    ):
+        # 单个任务直接执行；多个任务并发启动，消息经队列汇总后由调用方逐条发送
+        if len(album_ids) == 1:
+            async for result in self._download_and_send(
+                album_ids[0], event, force, confirmed
+            ):
+                yield result
+            return
+
+        queue: asyncio.Queue = asyncio.Queue()
+
+        async def worker(album_id: int) -> None:
+            try:
+                async for result in self._download_and_send(
+                    album_id, event, force, confirmed
+                ):
+                    await queue.put(result)
+            finally:
+                await queue.put(_WORKER_DONE)
+
+        tasks = [asyncio.create_task(worker(album_id)) for album_id in album_ids]
+        try:
+            remaining = len(tasks)
+            while remaining:
+                item = await queue.get()
+                if item is _WORKER_DONE:
+                    remaining -= 1
+                    continue
+                yield item
+        finally:
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _download_and_send(
         self, album_id: int, event, force: bool, confirmed: bool
@@ -555,9 +625,7 @@ class JMModule(ModuleBase):
             if task.get("cancelled"):
                 task["status"] = "已取消"
                 yield event.plain_result(
-                    self._render_message(
-                        "message_error", {**variables, "error": "下载已取消"}
-                    )
+                    self._render_message("message_cancelled", variables)
                 )
                 return
             task["status"] = "下载中"
@@ -573,9 +641,7 @@ class JMModule(ModuleBase):
         if task.get("cancelled") and not result.success:
             task["status"] = "已取消"
             yield event.plain_result(
-                self._render_message(
-                    "message_error", {**variables, "error": "下载已取消"}
-                )
+                self._render_message("message_cancelled", variables)
             )
             return
 
@@ -602,29 +668,28 @@ class JMModule(ModuleBase):
     #  任务查询（/jm LS）
 
     def _cancel_tasks(self, args: list[str]) -> str:
-        # 取消指定漫画（不带 ID 则取消全部）；在新图片回调时中断，避免线程强杀
+        # 清除指定漫画（不带 ID 则全部）；在新图片回调时中断，避免线程强杀
         if not self._tasks:
             return "当前没有下载任务"
 
-        target = None
-        if args:
-            target = normalize_album_id(args[0])
-            if target is None:
-                return "无效的漫画 ID\n用法：/jm cancel [漫画ID]"
+        album_ids, invalid = self._parse_album_ids(args)
+        if invalid:
+            return f"无效的漫画 ID：{'、'.join(invalid)}\n用法：/jm -c [漫画ID]"
 
         targets = [
             task
             for task in self._tasks
-            if target is None or task.get("id") == target
+            if not album_ids or task.get("id") in album_ids
         ]
         if not targets:
-            return f"没有正在下载的 JM{target}"
+            ids = "、".join(f"JM{album_id}" for album_id in album_ids)
+            return f"没有正在下载的 {ids}"
 
         for task in targets:
             task["cancelled"] = True
             task["status"] = "取消中"
         ids = "、".join(f"JM{task.get('id')}" for task in targets)
-        return f"已请求取消：{ids}\n当前图片完成后停止"
+        return f"已请求清除：{ids}\n当前图片完成后停止"
 
     def _format_tasks(self) -> str:
         if not self._tasks:
