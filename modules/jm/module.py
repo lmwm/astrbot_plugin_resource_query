@@ -39,17 +39,21 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
-_USAGE_SHORT = "用法：/jm [-F] <漫画ID>；/jm LS 查看当前任务"
+_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID>；/jm LS 查看当前任务"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
-    "例如：/jm 123456、/jm -F 123456、/jm LS\n"
+    "例如：/jm 123456、/jm -F 123456、/jm -y 123456、/jm LS\n"
     "-F（不区分大小写）表示忽略已下载内容，全部重新下载\n"
+    "-y（或 yes，不区分大小写）确认下载超过 10 章的漫画\n"
     "LS（不区分大小写）列出当前下载任务与进度"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
 # 相邻两条消息之间的固定间隔，避免一次请求的消息扎堆
 _MESSAGE_INTERVAL = 1.0
+
+# 章节数超过该值时先要求二次确认
+_CONFIRM_CHAPTER_THRESHOLD = 10
 
 # 已删除的配置项；旧 config.json 里可能还留着，加载时清掉
 _REMOVED_CONFIG_KEYS = (
@@ -338,7 +342,6 @@ class JMModule(ModuleBase):
             ("{chapter_5}", ""),
             ("{authors}", "{author}"),
             ("{pages}", ""),
-            ("{chapters}", ""),
             ("{cover}", ""),
             # 半角连续空格会被聊天客户端折叠；统一换成全角空格（宽度等于一个汉字）
             ("ID   JM{id}", "ID　JM{id}"),
@@ -365,7 +368,7 @@ class JMModule(ModuleBase):
         return [
             {
                 "name": "jm",
-                "desc": "下载 JMComic 漫画：/jm [-F] <ID>；/jm LS 查看当前任务",
+                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID>；/jm LS 查看当前任务",
             }
         ]
 
@@ -385,7 +388,7 @@ class JMModule(ModuleBase):
             yield event.plain_result(self._format_tasks())
             return
 
-        album_text, force = self._split_force(args)
+        album_text, force, confirmed = self._split_options(args)
         if not album_text:
             yield event.plain_result(_USAGE_TEXT)
             return
@@ -414,22 +417,33 @@ class JMModule(ModuleBase):
 
         # 逐条发送，条与条之间留 1 秒，避免消息扎堆
         sent = False
-        async for r in self._download_and_send(album_id, event, force):
+        async for r in self._download_and_send(album_id, event, force, confirmed):
             if sent:
                 await asyncio.sleep(_MESSAGE_INTERVAL)
             yield r
             sent = True
 
     @staticmethod
-    def _split_force(args: list[str]) -> tuple[str, bool]:
-        # -F（不区分大小写）写在 ID 前；返回（ID 文本, 是否强制全量重下）
-        if args and args[0].lower() == "-f":
-            return (args[1] if len(args) > 1 else ""), True
-        return (args[0] if args else ""), False
+    def _split_options(args: list[str]) -> tuple[str, bool, bool]:
+        # -F 强制全量重下；-y / yes 确认大章节下载；第一个非开关参数为 ID
+        force = False
+        confirmed = False
+        album_text = ""
+        for item in args:
+            lowered = item.lower()
+            if lowered == "-f":
+                force = True
+            elif lowered in ("-y", "yes"):
+                confirmed = True
+            elif not album_text:
+                album_text = item
+        return album_text, force, confirmed
 
     #  流程编排
 
-    async def _download_and_send(self, album_id: int, event, force: bool):
+    async def _download_and_send(
+        self, album_id: int, event, force: bool, confirmed: bool
+    ):
         # 一次下载的完整流程；异常兜底成模板消息，并记录开始/结束分割线
         label = "强制重下" if force else "按需下载"
         log_separator(logger, f"JM 下载开始：ID {album_id}（{label}）")
@@ -451,7 +465,7 @@ class JMModule(ModuleBase):
                 self._render_message("message_received", variables)
             )
             async for result in self._run_flow(
-                album_id, event, force, variables, task
+                album_id, event, force, confirmed, variables, task
             ):
                 yield result
         except JMError as e:
@@ -477,6 +491,7 @@ class JMModule(ModuleBase):
         album_id: int,
         event,
         force: bool,
+        confirmed: bool,
         variables: dict,
         task: dict,
     ):
@@ -510,6 +525,17 @@ class JMModule(ModuleBase):
         # 3 发送漫画信息（下载前后共用这一条）；已下载时这条就是最后一条
         yield event.plain_result(self._render_message("message_info", variables))
         if downloaded:
+            return
+
+        # 4 超过 10 章且未带 -y：先要求确认，不下载
+        if not confirmed and info.chapter_count > _CONFIRM_CHAPTER_THRESHOLD:
+            task["status"] = "等待确认"
+            variables["command"] = (
+                f"/jm -F -y {album_id}" if force else f"/jm -y {album_id}"
+            )
+            yield event.plain_result(
+                self._render_message("message_confirm", variables)
+            )
             return
 
         # 4 下载；进度只写任务表，供 /jm LS 查询
@@ -677,12 +703,14 @@ class JMModule(ModuleBase):
             )
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
+        chapter_count = f"{info.chapter_count:03d}"
         return {
             "id": str(info.id or album_id),
             "title": self._message_title(info),
             "author": info.author.strip() or "未知",
             "chapter": chapter_lines,
-            "chapter_summary": f"共 {info.chapter_count} 章 · {total_pages} 页",
+            "chapters": chapter_count,
+            "chapter_summary": f"共 {chapter_count} 章 - {total_pages} 页",
             "url": text(info.url),
             "pub_date": date_text(info.pub_date),
             "update_date": date_text(info.update_date),
