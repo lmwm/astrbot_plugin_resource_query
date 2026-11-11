@@ -247,7 +247,7 @@ VARIABLES = {
 # 变量示例值，供模板预览使用
 VAR_SAMPLES = {
     "id": "181251",
-    "chapter": "[√] 第001章 - 010页 上",
+    "chapter": "[√]第001章 - 010页 上",
     "chapter_summary": "共 3 章 · 022 页",
     "title": "示例漫画",
     "author": "示例作者",

@@ -671,9 +671,9 @@ class JMModule(ModuleBase):
             if single_chapter:
                 name = brief_title
             title = f" {name}" if name else ""
-            # [√]/[×] 用半角括号、后留一个空格，宽度与 ID 行对齐；章节 ID 不再显示
+            # [√]/[×] 紧贴章节文字：宽度与 ID+全角空格、汇总两全角空格一致
             chapter_lines.append(
-                f"[{mark}] 第{index}章 - {page_text}{title}"
+                f"[{mark}]第{index}章 - {page_text}{title}"
             )
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
