@@ -148,8 +148,8 @@ CONFIG_FIELDS = {
         "label": "漫画信息",
         "type": "template",
         "group": "messages",
-        "hint": "ID 行（ID 后三格）、章节（{chapter} 每出现一次输出下一章，模板里写几个就显示几章，含标题/页数/下载标记）、缩进的章节汇总；下载前后共用这一条消息",
-        "default": "ID   JM{id}\n{chapter}\n     {chapter_summary}",
+        "hint": "ID 行（ID 后用全角空格）、章节（{chapter} 每出现一次输出下一章，模板里写几个就显示几章，含标题/页数/下载标记）、全角空格缩进的章节汇总；下载前后共用这一条消息",
+        "default": "ID　JM{id}\n{chapter}\n　　{chapter_summary}",
         "variables": [
             "id",
             "chapter",

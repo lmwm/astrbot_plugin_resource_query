@@ -340,11 +340,15 @@ class JMModule(ModuleBase):
             ("{pages}", ""),
             ("{chapters}", ""),
             ("{cover}", ""),
-            # ID 后补三格，与 [√] + 空格的宽度对齐
-            ("ID  JM{id}", "ID   JM{id}"),
-            ("ID JM{id}", "ID   JM{id}"),
-            # 汇总行缩进到章节内容下方
-            ("\n{chapter_summary}", "\n     {chapter_summary}"),
+            # 半角连续空格会被聊天客户端折叠；统一换成全角空格（宽度等于一个汉字）
+            ("ID   JM{id}", "ID　JM{id}"),
+            ("ID  JM{id}", "ID　JM{id}"),
+            ("ID JM{id}", "ID　JM{id}"),
+            ("I D JM{id}", "ID　JM{id}"),
+            # 汇总行缩进到章节内容下方（全角空格）
+            ("\n     {chapter_summary}", "\n　　{chapter_summary}"),
+            ("\n    {chapter_summary}", "\n　　{chapter_summary}"),
+            ("\n{chapter_summary}", "\n　　{chapter_summary}"),
         )
         updated = saved
         for old, new in replacements:
