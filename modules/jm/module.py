@@ -39,13 +39,14 @@ logger = module_logger("jm")
 
 # 指令提示：属于用法说明，不随模板变化
 _PRIVATE_ONLY_TEXT = "JM 下载仅支持私聊使用，请私聊发送指令"
-_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID>；/jm LS 查看当前任务"
+_USAGE_SHORT = "用法：/jm [-F] [-y] <漫画ID>；/jm LS；/jm cancel [漫画ID]"
 _USAGE_TEXT = (
     f"{_USAGE_SHORT}\n"
-    "例如：/jm 123456、/jm -F 123456、/jm -y 123456、/jm LS\n"
+    "例如：/jm 123456、/jm -F 123456、/jm -y 123456、/jm LS、/jm cancel 123456\n"
     "-F（不区分大小写）表示忽略已下载内容，全部重新下载\n"
     "-y（或 yes，不区分大小写）确认下载超过 10 章的漫画\n"
-    "LS（不区分大小写）列出当前下载任务与进度"
+    "LS（不区分大小写）列出当前下载任务与进度\n"
+    "cancel（或 stop）取消指定漫画的下载；不带 ID 时取消全部任务，当前图片完成后停止"
 )
 _INVALID_ID_TEXT = f"无效的漫画 ID\n{_USAGE_SHORT}"
 
@@ -368,7 +369,7 @@ class JMModule(ModuleBase):
         return [
             {
                 "name": "jm",
-                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID>；/jm LS 查看当前任务",
+                "desc": "下载 JMComic 漫画：/jm [-F] [-y] <ID>；/jm LS；/jm cancel [ID]",
             }
         ]
 
@@ -386,6 +387,10 @@ class JMModule(ModuleBase):
 
         if args[0].lower() == "ls":
             yield event.plain_result(self._format_tasks())
+            return
+
+        if args[0].lower() in ("cancel", "stop"):
+            yield event.plain_result(self._cancel_tasks(args[1:]))
             return
 
         album_text, force, confirmed = self._split_options(args)
@@ -541,10 +546,20 @@ class JMModule(ModuleBase):
         # 4 下载；进度只写任务表，供 /jm LS 查询
         async def record(progress: DownloadProgress) -> None:
             task["progress"] = progress
+            if task.get("cancelled"):
+                raise RuntimeError("下载已取消")
 
         config = self._service.config or self.load_module_config()
         task["status"] = "等待下载槽"
         async with self._get_semaphore(config):
+            if task.get("cancelled"):
+                task["status"] = "已取消"
+                yield event.plain_result(
+                    self._render_message(
+                        "message_error", {**variables, "error": "下载已取消"}
+                    )
+                )
+                return
             task["status"] = "下载中"
             result = await self._service.download(
                 album_id,
@@ -553,6 +568,16 @@ class JMModule(ModuleBase):
                 info=info,
             )
         task["status"] = "收尾中"
+
+        # 取消请求优先于库返回的错误；取消晚于完成时按完成处理
+        if task.get("cancelled") and not result.success:
+            task["status"] = "已取消"
+            yield event.plain_result(
+                self._render_message(
+                    "message_error", {**variables, "error": "下载已取消"}
+                )
+            )
+            return
 
         if not result.success:
             yield event.plain_result(
@@ -575,6 +600,31 @@ class JMModule(ModuleBase):
         yield event.plain_result(self._render_message("message_info", variables))
 
     #  任务查询（/jm LS）
+
+    def _cancel_tasks(self, args: list[str]) -> str:
+        # 取消指定漫画（不带 ID 则取消全部）；在新图片回调时中断，避免线程强杀
+        if not self._tasks:
+            return "当前没有下载任务"
+
+        target = None
+        if args:
+            target = normalize_album_id(args[0])
+            if target is None:
+                return "无效的漫画 ID\n用法：/jm cancel [漫画ID]"
+
+        targets = [
+            task
+            for task in self._tasks
+            if target is None or task.get("id") == target
+        ]
+        if not targets:
+            return f"没有正在下载的 JM{target}"
+
+        for task in targets:
+            task["cancelled"] = True
+            task["status"] = "取消中"
+        ids = "、".join(f"JM{task.get('id')}" for task in targets)
+        return f"已请求取消：{ids}\n当前图片完成后停止"
 
     def _format_tasks(self) -> str:
         if not self._tasks:
