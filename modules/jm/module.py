@@ -339,6 +339,8 @@ class JMModule(ModuleBase):
             ("{pages}", ""),
             ("{chapters}", ""),
             ("{cover}", ""),
+            # ID 后补两格，与 [√]/[×] 的宽度对齐
+            ("ID JM{id}", "ID  JM{id}"),
         )
         updated = saved
         for old, new in replacements:
@@ -347,7 +349,7 @@ class JMModule(ModuleBase):
             return
 
         self._config_store.save_values({"message_info": updated})
-        logger.info("已将旧的漫画信息模板变量迁移为单一 chapter 变量")
+        logger.info("已更新漫画信息模板的旧变量与 ID 对齐空格")
 
     #  指令
 
