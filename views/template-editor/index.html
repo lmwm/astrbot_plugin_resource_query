@@ -97,18 +97,23 @@
   //  模板框高度同步
   // ══════════════════════════════════════════
 
-  /** 元素当前的行高（px），用于在内容下方预留一行空行 */
+  /** 元素当前的行高（px）与下内边距（px），用于在内容之后留出一行的空行 */
   function lineHeightOf(el) {
     if (!el) return 0;
     const value = parseFloat(window.getComputedStyle(el).lineHeight);
     return Number.isFinite(value) ? value : 0;
   }
 
+  function paddingBottomOf(el) {
+    if (!el) return 0;
+    const value = parseFloat(window.getComputedStyle(el).paddingBottom);
+    return Number.isFinite(value) ? value : 0;
+  }
+
   /**
-   * 量内容本身需要的高度（不含额外留白）。
+   * 量内容本身需要的高度（含内边距、不含边框）。
    * 先把高度收到 0：textarea 有默认 rows，不收起的话 scrollHeight 会被垫高一行以上；
    * 再读 scrollHeight（含内边距，不含边框，故 +2）。
-   * 横向滚动条会压掉底部空间，它的占位单独补。
    */
   function contentHeight(el) {
     if (!el) return 0;
@@ -128,7 +133,8 @@
 
   /**
    * 让「模板编辑」与「预览效果」等高，且两框高度都由各自内容行数自动撑开：
-   * 高度 = 两框中较高的内容高度 + 一行空行，内容之后留白、文字不贴底。
+   * 高度 = 内容 + 一行空行。空行从「最后一个字到边框」整段算起，
+   * 因此要扣掉已有的下内边距，否则文字下方会多出「一行 + 内边距」，看着像两行。
    */
   function syncTemplateHeights(container) {
     if (!container) return;
@@ -138,8 +144,11 @@
     if (!textarea && !preview) return;
 
     const lineHeight = Math.max(lineHeightOf(textarea), lineHeightOf(preview));
+    const bottomPadding = Math.max(paddingBottomOf(textarea), paddingBottomOf(preview));
     const content = Math.max(contentHeight(textarea), contentHeight(preview), lineHeight);
-    const height = content + lineHeight;
+
+    // 空行高度扣掉下内边距：文字距底边框净空 = 一行行高
+    const height = content + Math.max(0, lineHeight - bottomPadding);
 
     const apply = (value) => {
       if (textarea) textarea.style.height = value + 'px';
