@@ -206,10 +206,15 @@ def _dir_rule_instance(jmcomic, rule: str, image_dir: Path, normalize_zh):
 
 def load_option(path: Path, image_dir: Path, rule: str | None = None, force: bool = False):
     # 读取 option 文件；每本漫画的目录在运行时替换，不写回文件
+    # 用 construct(dict) 而不是 from_file：后者按后缀只认 .yml/.json/.pickle，
+    # 不接受 .yaml（会抛 AssertionError: unknown mode）
     import jmcomic
 
     data = _read(path)
-    option = jmcomic.JmOption.from_file(str(path))
+    if not data:
+        raise RuntimeError(f"下载失败：option 配置文件为空或无法解析：{path}")
+    data.setdefault("filepath", str(path))
+    option = jmcomic.JmOption.construct(data)
 
     # 单章节：JM<ID>-<标题>/；多章节：JM<ID>-<序号:03>-<标题>/
     if rule:

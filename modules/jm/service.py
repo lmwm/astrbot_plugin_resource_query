@@ -5,11 +5,11 @@
 # 不再需要线程池与跨线程调度。本层只产出数据（进度、结果、错误原因），
 # 发给用户的消息由模块按模板渲染。
 #
-# 与 2.7.10 源码对齐的几点：
+# 与 2.7.11 源码对齐的几点：
 # - 下载参数写在原生 option.yaml 里（见 option.py），不再用代码拼字典；
 # - 图片目录按章节分子目录，避免多章节图片同名（都是 00001.jpg）互相覆盖；
 # - 用 DownloadResult.manifest.image_filepath_list 拿按章节/页码排好序的图片，
-#   旧版无 manifest 的兜底已删除（依赖固定 2.7.10）；
+#   旧版无 manifest 的兜底已删除（依赖固定 2.7.11）；
 # - check_exception=True 让库抛 PartialDownloadFailedException，不再自己拼错误；
 # - 下载阶段保留站点原图（webp/jpg 原样落盘），插件不再生成 PDF。
 

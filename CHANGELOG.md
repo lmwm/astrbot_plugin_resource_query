@@ -1,3 +1,14 @@
+## v6.45.0 (2026-11-11)
+
+### 修复
+
+- **`.yaml` 配置读取报错**：jmcomic 的 `JmOption.from_file` 按后缀只接受 `.yml` / `.json` / `.pickle`，`option.yaml` 会抛 `AssertionError: unknown mode: 'yaml'`；改为先读取 YAML 内容，再用 `JmOption.construct(dict)` 构造，不再依赖文件后缀
+
+### 变更
+
+- **jmcomic 升级到 2.7.11**：`requirements.txt` 锁定 2.7.11；参考仓库 `References/JMComic-Crawler-Python` 检出 `v2.7.11`。2.7.11 移除 `commonX` 依赖、新增异步网页客户端与 `auth` 登录，本插件使用的接口不变
+- 已在 2.7.11 上验证 `option.yaml` 读取与真实下载（1200169，26 张）
+
 ## v6.44.0 (2026-11-10)
 
 ### 变更
