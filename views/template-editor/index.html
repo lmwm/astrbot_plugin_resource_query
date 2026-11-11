@@ -94,6 +94,56 @@
   }
 
   // ══════════════════════════════════════════
+  //  模板框高度同步
+  // ══════════════════════════════════════════
+
+  /** 模板框最小高度（px），与 CSS 的 min-height 保持一致 */
+  const TEMPLATE_MIN_HEIGHT = 88;
+
+  /**
+   * 量某个框按内容自然展开时需要的高度（弹掉行内高度后量）。
+   * 横向滚动条会吃掉底部空间，因此把它的占位一并算进去，避免最后一行被压掉。
+   */
+  function naturalHeight(el) {
+    if (!el) return 0;
+
+    el.style.height = 'auto';
+    const scrollbarGap = Math.max(0, el.offsetHeight - el.clientHeight - 2); // -2 扣掉上下边框
+    return Math.max(el.scrollHeight + 2, el.offsetHeight, TEMPLATE_MIN_HEIGHT) + scrollbarGap;
+  }
+
+  /**
+   * 让「模板编辑」与「预览效果」等高，且两框高度都由各自内容行数自动撑开。
+   * 两边各量自然高度，取较高者同时套给两边；textarea 不会随内容撑高，
+   * 所以每次都先重置为 auto 再读 scrollHeight，模拟它按行数展开后的高度。
+   */
+  function syncTemplateHeights(container) {
+    if (!container) return;
+
+    const textarea = container.querySelector('.template-editor > .form-textarea');
+    const preview = container.querySelector('.template-preview-box > .template-preview');
+    if (!textarea && !preview) return;
+
+    const height = Math.max(naturalHeight(textarea), naturalHeight(preview)) + 'px';
+    if (textarea) textarea.style.height = height;
+    if (preview) preview.style.height = height;
+  }
+
+  /** 刷新页面内所有模板框的高度 */
+  function syncAllTemplateHeights() {
+    document.querySelectorAll('.template-layout').forEach(syncTemplateHeights);
+  }
+
+  /** 切换标签或改变窗口尺寸后重算：隐藏元素量出来是 0，须等浏览器绘制后再量 */
+  function scheduleSyncHeights() {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(syncAllTemplateHeights);
+    } else {
+      syncAllTemplateHeights();
+    }
+  }
+
+  // ══════════════════════════════════════════
   //  API
   // ══════════════════════════════════════════
 
@@ -234,6 +284,8 @@
     document.querySelectorAll('.page').forEach((page) => {
       page.classList.toggle('active', page.id === 'page-' + name);
     });
+
+    scheduleSyncHeights();
   }
 
   // ══════════════════════════════════════════
@@ -298,6 +350,8 @@
         renderConfigVarTags(mod, field);
       });
     });
+
+    syncAllTemplateHeights();
   }
 
   function buildPageHtml(mod) {
@@ -410,6 +464,8 @@
       const pane = $('sub-' + moduleName + '-' + t.key);
       if (pane) pane.classList.toggle('active', t.key === tabKey);
     });
+
+    scheduleSyncHeights();
   }
 
   function buildConfigFieldsHtml(mod, groupKey) {
@@ -587,6 +643,7 @@
     });
 
     preview.textContent = text || '（请输入模板）';
+    syncTemplateHeights(textarea.closest('.template-layout'));
   }
 
   function insertConfigVariable(moduleName, fieldKey, name) {
@@ -786,6 +843,7 @@
       $('account-template').value = editing.account.template || defaultTemplate(mod.name);
       renderTemplateTags(mod.name);
       updateTemplatePreview(mod.name);
+      scheduleSyncHeights();
     }
   }
 
@@ -1070,6 +1128,7 @@
     });
 
     preview.textContent = text || '（请在左侧输入模板）';
+    syncTemplateHeights(textarea.closest('.template-layout'));
   }
 
   function insertVariable(name) {
@@ -1409,6 +1468,9 @@
     document.addEventListener('click', onClick);
     document.addEventListener('input', onInput);
 
+    // 窗口尺寸变化后重新量高度（列宽变了，行数与换行都会变）
+    window.addEventListener('resize', scheduleSyncHeights);
+
     // 点击遮罩关闭
     document.querySelectorAll('.modal-overlay').forEach((overlay) => {
       overlay.addEventListener('click', (e) => {
@@ -1577,15 +1639,18 @@
     .pw-toggle { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 12px; line-height: 1; color: var(--text-muted); padding: 6px 4px; }
     .pw-toggle:hover { color: var(--primary); }
 
-    /* 模板编辑器 */
+    /* 模板编辑器：编辑框与预览框高度都由内容行数决定，并排时取较高者保持一致 */
     .template-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-    .template-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; overflow: hidden; }
+    .template-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; overflow: hidden; align-items: stretch; }
     .template-editor, .template-preview-box { display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
     .template-label { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-bottom: 8px; }
     .form-textarea { width: 100%; min-height: 220px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); font-size: 13px; font-family: 'SF Mono', Monaco, monospace; outline: none; resize: vertical; line-height: 1.6; white-space: pre; overflow-x: auto; box-sizing: border-box; }
     .form-textarea:focus { border-color: var(--primary); }
     .config-textarea { min-height: 88px; font-family: inherit; white-space: pre-wrap; }
-    .template-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; white-space: pre; min-height: 220px; line-height: 1.6; overflow: auto; box-sizing: border-box; }
+    .template-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; white-space: pre; min-height: 88px; line-height: 1.6; overflow: auto; box-sizing: border-box; }
+    /* 模板框内部：高度由脚本按内容同步，禁用纵向拖拽（拖了也会被下次同步覆盖） */
+    .template-editor > .form-textarea { min-height: 88px; resize: none; overflow-y: auto; }
+    .template-preview-box > .template-preview { min-height: 88px; }
 
     /* 变量标签 */
     .variable-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
