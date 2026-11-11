@@ -6,15 +6,20 @@
 # 消息模板的默认内容（按行拼接，便于阅读）
 _CHECKING_LINES = [
     "正在检查更新...",
+    "  当前版本: v{current}",
 ]
 _FOUND_LINES = [
-    "版本: v{current} → v{latest}\n  commit: {latest_sha7}",
+    "版本: v{current} → v{latest}",
+    "commit: {latest_sha7}",
 ]
 _DONE_LINES = [
-    "更新完成...\n  当前版本 v{current}",
+    "更新完成...",
+    "  当前版本 v{current}",
+    "  commit: {latest_sha7}",
 ]
 _ERROR_LINES = [
-    "更新失败: \n  {error}",
+    "更新失败: ",
+    "  {error}",
 ]
 
 # 配置字段（key -> label / type / hint / group / variables / default）
