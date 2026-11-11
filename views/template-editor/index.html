@@ -97,25 +97,38 @@
   //  模板框高度同步
   // ══════════════════════════════════════════
 
-  /** 模板框最小高度（px），与 CSS 的 min-height 保持一致 */
-  const TEMPLATE_MIN_HEIGHT = 88;
-
-  /**
-   * 量某个框按内容自然展开时需要的高度（弹掉行内高度后量）。
-   * 横向滚动条会吃掉底部空间，因此把它的占位一并算进去，避免最后一行被压掉。
-   */
-  function naturalHeight(el) {
+  /** 元素当前的行高（px），用于在内容下方预留一行空行 */
+  function lineHeightOf(el) {
     if (!el) return 0;
-
-    el.style.height = 'auto';
-    const scrollbarGap = Math.max(0, el.offsetHeight - el.clientHeight - 2); // -2 扣掉上下边框
-    return Math.max(el.scrollHeight + 2, el.offsetHeight, TEMPLATE_MIN_HEIGHT) + scrollbarGap;
+    const value = parseFloat(window.getComputedStyle(el).lineHeight);
+    return Number.isFinite(value) ? value : 0;
   }
 
   /**
-   * 让「模板编辑」与「预览效果」等高，且两框高度都由各自内容行数自动撑开。
-   * 两边各量自然高度，取较高者同时套给两边；textarea 不会随内容撑高，
-   * 所以每次都先重置为 auto 再读 scrollHeight，模拟它按行数展开后的高度。
+   * 量内容本身需要的高度（不含额外留白）。
+   * 先把高度收到 0：textarea 有默认 rows，不收起的话 scrollHeight 会被垫高一行以上；
+   * 再读 scrollHeight（含内边距，不含边框，故 +2）。
+   * 横向滚动条会压掉底部空间，它的占位单独补。
+   */
+  function contentHeight(el) {
+    if (!el) return 0;
+
+    const previous = el.style.height;
+    el.style.height = '0px';
+    const height = el.scrollHeight + 2;
+    el.style.height = previous;
+    return height;
+  }
+
+  /** 横向滚动条占掉的垂直空间（竖直滚动条只影响 clientWidth，不计入） */
+  function horizontalScrollbarGap(el) {
+    if (!el) return 0;
+    return Math.max(0, el.offsetHeight - el.clientHeight - 2);
+  }
+
+  /**
+   * 让「模板编辑」与「预览效果」等高，且两框高度都由各自内容行数自动撑开：
+   * 高度 = 两框中较高的内容高度 + 一行空行，内容之后留白、文字不贴底。
    */
   function syncTemplateHeights(container) {
     if (!container) return;
@@ -124,9 +137,20 @@
     const preview = container.querySelector('.template-preview-box > .template-preview');
     if (!textarea && !preview) return;
 
-    const height = Math.max(naturalHeight(textarea), naturalHeight(preview)) + 'px';
-    if (textarea) textarea.style.height = height;
-    if (preview) preview.style.height = height;
+    const lineHeight = Math.max(lineHeightOf(textarea), lineHeightOf(preview));
+    const content = Math.max(contentHeight(textarea), contentHeight(preview), lineHeight);
+    const height = content + lineHeight;
+
+    const apply = (value) => {
+      if (textarea) textarea.style.height = value + 'px';
+      if (preview) preview.style.height = value + 'px';
+    };
+
+    apply(height);
+
+    // 出现横向滚动条后底部会被压掉一行，按实际占位补足
+    const gap = Math.max(horizontalScrollbarGap(textarea), horizontalScrollbarGap(preview));
+    if (gap > 0) apply(height + gap);
   }
 
   /** 刷新页面内所有模板框的高度 */
@@ -1648,9 +1672,9 @@
     .form-textarea:focus { border-color: var(--primary); }
     .config-textarea { min-height: 88px; font-family: inherit; white-space: pre-wrap; }
     .template-preview { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 13px; font-family: 'SF Mono', Monaco, monospace; white-space: pre; min-height: 88px; line-height: 1.6; overflow: auto; box-sizing: border-box; }
-    /* 模板框内部：高度由脚本按内容同步，禁用纵向拖拽（拖了也会被下次同步覆盖） */
-    .template-editor > .form-textarea { min-height: 88px; resize: none; overflow-y: auto; white-space: pre; }
-    .template-preview-box > .template-preview { min-height: 88px; }
+    /* 模板框内部：高度由脚本按「内容 + 一行空行」同步，禁用纵向拖拽；min-height 只作脚本未生效时的兜底 */
+    .template-editor > .form-textarea { min-height: 44px; resize: none; overflow-y: auto; white-space: pre; }
+    .template-preview-box > .template-preview { min-height: 44px; }
 
     /* 变量标签 */
     .variable-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border); }
