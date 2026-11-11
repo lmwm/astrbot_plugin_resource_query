@@ -339,8 +339,11 @@ class JMModule(ModuleBase):
             ("{pages}", ""),
             ("{chapters}", ""),
             ("{cover}", ""),
-            # ID 后补两格，与 [√]/[×] 的宽度对齐
-            ("ID JM{id}", "ID  JM{id}"),
+            # ID 后补三格，与 [√] + 空格的宽度对齐
+            ("ID  JM{id}", "ID   JM{id}"),
+            ("ID JM{id}", "ID   JM{id}"),
+            # 汇总行缩进到章节内容下方
+            ("\n{chapter_summary}", "\n     {chapter_summary}"),
         )
         updated = saved
         for old, new in replacements:
@@ -349,7 +352,7 @@ class JMModule(ModuleBase):
             return
 
         self._config_store.save_values({"message_info": updated})
-        logger.info("已更新漫画信息模板的旧变量与 ID 对齐空格")
+        logger.info("已更新漫画信息模板的旧变量、ID 与汇总行格式")
 
     #  指令
 
@@ -648,11 +651,9 @@ class JMModule(ModuleBase):
             if single_chapter:
                 name = brief_title
             title = f" {name}" if name else ""
-            chapter_id = str(chapter.get("id") or "").strip()
-            id_text = f"（id: {chapter_id}）" if chapter_id else ""
-            # [√]/[×] 用半角括号，宽度接近 ID，行首更整齐
+            # [√]/[×] 用半角括号、后留一个空格，宽度与 ID 行对齐；章节 ID 不再显示
             chapter_lines.append(
-                f"[{mark}]第{index}章 - {page_text}{title}{id_text}"
+                f"[{mark}] 第{index}章 - {page_text}{title}"
             )
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
