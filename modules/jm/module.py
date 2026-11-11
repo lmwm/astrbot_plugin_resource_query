@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import shutil
 import time
 from pathlib import Path
@@ -606,6 +607,21 @@ class JMModule(ModuleBase):
             render_vars[f"chapter_{index + 1}"] = (
                 str(chapter_lines[index]) if index < len(chapter_lines) else ""
             )
+
+        # 超出实际章节数的槽位：整行删除，避免消息里留下空行
+        empty_slots = {
+            str(index + 1)
+            for index in range(slot_count)
+            if index >= len(chapter_lines)
+        }
+        if empty_slots:
+            kept_lines: list[str] = []
+            for line in template.split("\n"):
+                slots = re.findall(r"\{chapter_(\d+)\}", line)
+                if slots and all(slot in empty_slots for slot in slots):
+                    continue
+                kept_lines.append(line)
+            template = "\n".join(kept_lines)
 
         return render_template(template, render_vars)
 
