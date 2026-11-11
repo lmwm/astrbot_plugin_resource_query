@@ -648,9 +648,9 @@ class JMModule(ModuleBase):
             title = f" {name}" if name else ""
             chapter_id = str(chapter.get("id") or "").strip()
             id_text = f"（id: {chapter_id}）" if chapter_id else ""
-            # 【√】/【×】放行首，与 ID 行左对齐
+            # [√]/[×] 用半角括号，宽度接近 ID，行首更整齐
             chapter_lines.append(
-                f"【{mark}】第{index}章 - {page_text}{title}{id_text}"
+                f"[{mark}]第{index}章 - {page_text}{title}{id_text}"
             )
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
