@@ -629,6 +629,10 @@ class JMModule(ModuleBase):
         chapter_items = [
             chapter for chapter in (info.chapters or []) if isinstance(chapter, dict)
         ]
+        # 单章节本子的 pname 往往等于完整本子标题，消息里改用简短名（oname 优先），
+        # 与下载目录名保持一致；多章节仍用每章自己的标题
+        single_chapter = len(chapter_items) == 1
+        brief_title = self._message_title(info)
         # 所有章节合并到 {chapter}：有几章就输出几行，不写死前 5 章
         chapter_lines: list[str] = []
         for chapter in chapter_items:
@@ -639,11 +643,14 @@ class JMModule(ModuleBase):
             flag = all_downloaded or chapter.get("downloaded") is True
             mark = "√" if flag else "×"
             name = str(chapter.get("name") or "").strip()
-            chapter_id = str(chapter.get("id") or "").strip()
+            if single_chapter:
+                name = brief_title
             title = f" {name}" if name else ""
+            chapter_id = str(chapter.get("id") or "").strip()
             id_text = f"（id: {chapter_id}）" if chapter_id else ""
+            # 【√】/【×】放行首，与 ID 行左对齐
             chapter_lines.append(
-                f"第{index}章 - {page_text} 【{mark}】{title}{id_text}"
+                f"【{mark}】第{index}章 - {page_text}{title}{id_text}"
             )
 
         total_pages = f"{info.page_count:03d}" if info.page_count > 0 else "未知"
